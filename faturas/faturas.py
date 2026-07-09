@@ -86,6 +86,36 @@ def listar_faturas():
     return faturas
 
 
+def buscar_fatura_por_id(fatura_id):
+    conexao = conectar()
+    cursor = conexao.cursor()
+
+    cursor.execute("""
+        SELECT
+            faturas.id,
+            apartamentos.numero,
+            apartamentos.bloco,
+            faturas.mes,
+            faturas.ano,
+            faturas.consumo_agua,
+            faturas.consumo_gas,
+            faturas.valor_agua,
+            faturas.valor_gas,
+            faturas.valor_total,
+            faturas.status
+        FROM faturas
+        JOIN apartamentos
+            ON apartamentos.id = faturas.apartamento_id
+        WHERE faturas.id = ?
+    """, (fatura_id,))
+
+    fatura = cursor.fetchone()
+
+    conexao.close()
+
+    return fatura
+
+
 if __name__ == "__main__":
     fatura_id = cadastrar_fatura(
         apartamento_id=1,
