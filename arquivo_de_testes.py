@@ -1,5 +1,6 @@
-from faturas.pdf_service import gerar_pdf_fatura
+from faturas.services import gerar_pdf_fatura
 
-caminho = gerar_pdf_fatura(8)
 
-print("PDF gerado em:", caminho)
+if __name__ == "__main__":
+    caminho = gerar_pdf_fatura(8)
+    print("PDF gerado em:", caminho)

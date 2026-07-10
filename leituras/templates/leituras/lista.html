@@ -1,0 +1,8 @@
+<h1>Leituras</h1>
+<ul>
+  {% for leitura in leituras %}
+    <li>{{ leitura }}</li>
+  {% empty %}
+    <li>Nenhuma leitura cadastrada.</li>
+  {% endfor %}
+</ul>

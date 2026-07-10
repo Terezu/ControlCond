@@ -1,0 +1,8 @@
+<h1>Faturas</h1>
+<ul>
+  {% for fatura in faturas %}
+    <li>{{ fatura }}</li>
+  {% empty %}
+    <li>Nenhuma fatura cadastrada.</li>
+  {% endfor %}
+</ul>
