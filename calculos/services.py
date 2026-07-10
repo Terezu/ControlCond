@@ -1,9 +1,15 @@
+from decimal import Decimal, ROUND_HALF_UP
+
+
 VALORES_AGUA = {
-    0: 101.99, 1: 101.99, 2: 101.99, 3: 101.99, 4: 101.99, 5: 101.99,
-    6: 105.05, 7: 108.20, 8: 111.34, 9: 114.49, 10: 117.63, 11: 135.18,
-    12: 152.74, 13: 170.29, 14: None, 15: 205.41, 16: None, 17: 240.70,
+    0: Decimal("101.99"), 1: Decimal("101.99"), 2: Decimal("101.99"),
+    3: Decimal("101.99"), 4: Decimal("101.99"), 5: Decimal("101.99"),
+    6: Decimal("105.05"), 7: Decimal("108.20"), 8: Decimal("111.34"),
+    9: Decimal("114.49"), 10: Decimal("117.63"), 11: Decimal("135.18"),
+    12: Decimal("152.74"), 13: Decimal("170.29"), 14: None,
+    15: Decimal("205.41"), 16: None, 17: Decimal("240.70"),
 }
-VALOR_M3_GAS = 21.02
+VALOR_M3_GAS = Decimal("21.02")
 
 
 def _calcular_consumo(leitura_anterior, leitura_atual, recurso):
@@ -47,7 +53,9 @@ def calcular_consumo_gas(leitura_anterior, leitura_atual):
 
 
 def calcular_valor_gas(consumo_gas):
-    return round(consumo_gas * VALOR_M3_GAS, 2)
+    return (Decimal(str(consumo_gas)) * VALOR_M3_GAS).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP
+    )
 
 
 def calcular_gas(leitura_anterior, leitura_atual):

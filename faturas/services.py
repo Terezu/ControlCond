@@ -1,4 +1,5 @@
 from pathlib import Path
+from decimal import Decimal
 
 from django.db import transaction
 
@@ -12,7 +13,21 @@ from .models import Fatura
 def cadastrar_fatura(apartamento_id, mes, ano, consumo_agua, consumo_gas,
                      valor_agua=0, valor_gas=0, leitura_id=None, status="pendente"):
     apartamento = consultar_apartamento(apartamento_id)
+
+    fatura_existente = Fatura.objects.filter(
+        apartamento=apartamento,
+        mes=mes,
+        ano=ano
+    ).exists()
+
+    if fatura_existente:
+        raise ValueError("Já existe uma fatura para este apartamento neste mês e ano.")
+
     leitura = consultar_leitura(leitura_id) if leitura_id is not None else None
+
+    valor_agua = Decimal(str(valor_agua))
+    valor_gas = Decimal(str(valor_gas))
+
     return Fatura.objects.create(
         apartamento=apartamento,
         leitura=leitura,
@@ -25,7 +40,6 @@ def cadastrar_fatura(apartamento_id, mes, ano, consumo_agua, consumo_gas,
         valor_total=valor_agua + valor_gas,
         status=status,
     )
-
 
 def consultar_fatura(fatura_id):
     try:
@@ -54,6 +68,16 @@ def excluir_fatura(fatura_id):
 @transaction.atomic
 def gerar_fatura_mensal(apartamento_id, mes, ano, leitura_agua_anterior,
                         leitura_agua_atual, leitura_gas_anterior, leitura_gas_atual):
+    if leitura_agua_atual < leitura_agua_anterior:
+        raise ValueError(
+            "A leitura atual da água não pode ser menor que a leitura anterior."
+        )
+
+    if leitura_gas_atual < leitura_gas_anterior:
+        raise ValueError(
+            "A leitura atual do gás não pode ser menor que a leitura anterior."
+        )
+
     resultado_agua = calcular_agua(leitura_agua_anterior, leitura_agua_atual)
     resultado_gas = calcular_gas(leitura_gas_anterior, leitura_gas_atual)
     leitura = cadastrar_leitura(

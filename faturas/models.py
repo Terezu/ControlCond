@@ -15,9 +15,9 @@ class Fatura(models.Model):
     ano = models.IntegerField()
     consumo_agua = models.FloatField()
     consumo_gas = models.FloatField()
-    valor_agua = models.FloatField(blank=True, null=True)
-    valor_gas = models.FloatField(blank=True, null=True)
-    valor_total = models.FloatField(blank=True, null=True)
+    valor_agua = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+    valor_gas = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+    valor_total = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
     status = models.TextField(blank=True, null=True)
     data_geracao = models.TextField(blank=True, null=True)
 
