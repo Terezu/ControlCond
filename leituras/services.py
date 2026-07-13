@@ -32,7 +32,9 @@ def editar_leitura(leitura_id, mes, ano, leitura_agua=None, leitura_gas=None):
 
 
 def listar_leituras():
-    return Leitura.objects.select_related("apartamento").order_by("-ano", "-mes", "-id")
+    return Leitura.objects.select_related("apartamento").order_by(
+        "-ano", "-mes", "-id"
+    )
 
 
 def buscar_ultimas_leituras(apartamento_id, limite=12):
@@ -46,4 +48,3 @@ def buscar_ultimas_leituras(apartamento_id, limite=12):
 def excluir_leitura(leitura_id):
     leitura = consultar_leitura(leitura_id)
     leitura.delete()
-

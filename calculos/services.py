@@ -2,29 +2,41 @@ from decimal import Decimal, ROUND_HALF_UP
 
 
 VALORES_AGUA = {
-    0: Decimal("101.99"), 1: Decimal("101.99"), 2: Decimal("101.99"),
-    3: Decimal("101.99"), 4: Decimal("101.99"), 5: Decimal("101.99"),
-    6: Decimal("105.05"), 7: Decimal("108.20"), 8: Decimal("111.34"),
-    9: Decimal("114.49"), 10: Decimal("117.63"), 11: Decimal("135.18"),
-    12: Decimal("152.74"), 13: Decimal("170.29"), 14: None,
-    15: Decimal("205.41"), 16: None, 17: Decimal("240.70"),
+    0: Decimal("101.99"),
+    1: Decimal("101.99"),
+    2: Decimal("101.99"),
+    3: Decimal("101.99"),
+    4: Decimal("101.99"),
+    5: Decimal("101.99"),
+    6: Decimal("105.05"),
+    7: Decimal("108.20"),
+    8: Decimal("111.34"),
+    9: Decimal("114.49"),
+    10: Decimal("117.63"),
+    11: Decimal("135.18"),
+    12: Decimal("152.74"),
+    13: Decimal("170.29"),
+    14: None,
+    15: Decimal("205.41"),
+    16: None,
+    17: Decimal("240.70"),
 }
 VALOR_M3_GAS = Decimal("21.02")
 
 
-def _calcular_consumo(leitura_anterior, leitura_atual, recurso):
+def _calcular_consumo(leitura_anterior, leitura_atual, nome_recurso):
     if leitura_anterior is None:
         return 0
     consumo = leitura_atual - leitura_anterior
     if consumo < 0:
         raise ValueError(
-            f"A leitura atual d{recurso} não pode ser menor que a leitura anterior."
+            f"A leitura atual de {nome_recurso} não pode ser menor que a anterior."
         )
     return consumo
 
 
 def calcular_consumo_agua(leitura_anterior, leitura_atual):
-    return _calcular_consumo(leitura_anterior, leitura_atual, "a água")
+    return _calcular_consumo(leitura_anterior, leitura_atual, "água")
 
 
 def calcular_valor_agua(consumo):
@@ -49,7 +61,7 @@ def calcular_agua(leitura_anterior, leitura_atual):
 
 
 def calcular_consumo_gas(leitura_anterior, leitura_atual):
-    return _calcular_consumo(leitura_anterior, leitura_atual, "o gás")
+    return _calcular_consumo(leitura_anterior, leitura_atual, "gás")
 
 
 def calcular_valor_gas(consumo_gas):

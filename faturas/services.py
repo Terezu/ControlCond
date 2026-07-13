@@ -1,5 +1,5 @@
-from pathlib import Path
 from decimal import Decimal
+from pathlib import Path
 
 from django.db import transaction
 
@@ -10,14 +10,23 @@ from leituras.services import cadastrar_leitura, consultar_leitura
 from .models import Fatura
 
 
-def cadastrar_fatura(apartamento_id, mes, ano, consumo_agua, consumo_gas,
-                     valor_agua=0, valor_gas=0, leitura_id=None, status="pendente"):
+def cadastrar_fatura(
+    apartamento_id,
+    mes,
+    ano,
+    consumo_agua,
+    consumo_gas,
+    valor_agua=0,
+    valor_gas=0,
+    leitura_id=None,
+    status="pendente",
+):
     apartamento = consultar_apartamento(apartamento_id)
 
     fatura_existente = Fatura.objects.filter(
         apartamento=apartamento,
         mes=mes,
-        ano=ano
+        ano=ano,
     ).exists()
 
     if fatura_existente:
@@ -41,6 +50,7 @@ def cadastrar_fatura(apartamento_id, mes, ano, consumo_agua, consumo_gas,
         status=status,
     )
 
+
 def consultar_fatura(fatura_id):
     try:
         return Fatura.objects.select_related("apartamento", "leitura").get(pk=fatura_id)
@@ -49,7 +59,9 @@ def consultar_fatura(fatura_id):
 
 
 def listar_faturas():
-    return Fatura.objects.select_related("apartamento", "leitura").order_by("-ano", "-mes", "-id")
+    return Fatura.objects.select_related("apartamento", "leitura").order_by(
+        "-ano", "-mes", "-id"
+    )
 
 
 def editar_fatura(fatura_id, *, status=None):
@@ -66,18 +78,15 @@ def excluir_fatura(fatura_id):
 
 
 @transaction.atomic
-def gerar_fatura_mensal(apartamento_id, mes, ano, leitura_agua_anterior,
-                        leitura_agua_atual, leitura_gas_anterior, leitura_gas_atual):
-    if leitura_agua_atual < leitura_agua_anterior:
-        raise ValueError(
-            "A leitura atual da água não pode ser menor que a leitura anterior."
-        )
-
-    if leitura_gas_atual < leitura_gas_anterior:
-        raise ValueError(
-            "A leitura atual do gás não pode ser menor que a leitura anterior."
-        )
-
+def gerar_fatura_mensal(
+    apartamento_id,
+    mes,
+    ano,
+    leitura_agua_anterior,
+    leitura_agua_atual,
+    leitura_gas_anterior,
+    leitura_gas_atual,
+):
     resultado_agua = calcular_agua(leitura_agua_anterior, leitura_agua_atual)
     resultado_gas = calcular_gas(leitura_gas_anterior, leitura_gas_atual)
     leitura = cadastrar_leitura(
