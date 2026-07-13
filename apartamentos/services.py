@@ -1,3 +1,8 @@
+from django.db.models import Prefetch
+
+from faturas.models import Fatura
+from leituras.models import Leitura
+
 from .models import Apartamento
 
 
@@ -30,6 +35,27 @@ def consultar_apartamento(apartamento_id):
         return Apartamento.objects.get(pk=apartamento_id)
     except Apartamento.DoesNotExist as exc:
         raise ValueError("Apartamento não encontrado.") from exc
+    
+
+def consultar_detalhes_apartamento(apartamento_id):
+    try:
+        return (
+            Apartamento.objects
+            .prefetch_related(
+                Prefetch(
+                    "leituras",
+                    queryset=Leitura.objects.order_by("-ano", "-mes", "-id")
+                ),
+                Prefetch(
+                    "faturas",
+                    queryset=Fatura.objects.order_by("-ano", "-mes", "-id")
+                ),
+            )
+            .get(pk=apartamento_id)
+        )
+    except Apartamento.DoesNotExist as exc:
+        raise ValueError("Apartamento não encontrado.") from exc
+
 
 
 def listar_apartamentos():
