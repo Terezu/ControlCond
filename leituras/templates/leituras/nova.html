@@ -1,0 +1,61 @@
+<h1>Nova leitura</h1>
+
+<h2>{{ apartamento }}</h2>
+
+<p>
+  <a href="{% url 'apartamentos:detalhes' apartamento.id %}">
+    Voltar para o apartamento
+  </a>
+</p>
+
+<form method="post">
+  {% csrf_token %}
+
+  {% if form.non_field_errors %}
+    <div>
+      {% for erro in form.non_field_errors %}
+        <p>{{ erro }}</p>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <p>
+    {{ form.mes.label_tag }}
+    {{ form.mes }}
+
+    {% for erro in form.mes.errors %}
+      <span>{{ erro }}</span>
+    {% endfor %}
+  </p>
+
+  <p>
+    {{ form.ano.label_tag }}
+    {{ form.ano }}
+
+    {% for erro in form.ano.errors %}
+      <span>{{ erro }}</span>
+    {% endfor %}
+  </p>
+
+  <p>
+    {{ form.leitura_agua.label_tag }}
+    {{ form.leitura_agua }}
+
+    {% for erro in form.leitura_agua.errors %}
+      <span>{{ erro }}</span>
+    {% endfor %}
+  </p>
+
+  <p>
+    {{ form.leitura_gas.label_tag }}
+    {{ form.leitura_gas }}
+
+    {% for erro in form.leitura_gas.errors %}
+      <span>{{ erro }}</span>
+    {% endfor %}
+  </p>
+
+  <button type="submit">
+    Salvar leitura
+  </button>
+</form>

@@ -1,5 +1,13 @@
 <h1>{{ apartamento }}</h1>
 
+{% if messages %}
+  <div>
+    {% for message in messages %}
+      <p>{{ message }}</p>
+    {% endfor %}
+  </div>
+{% endif %}
+
 <p>
   <a href="{% url 'apartamentos:lista' %}">
     Voltar para apartamentos
@@ -35,7 +43,7 @@
 {% endif %}
 
 <p>
-  <a href="#">
+  <a href="{% url 'leituras:nova' apartamento.id %}">
     Nova leitura
   </a>
 </p>

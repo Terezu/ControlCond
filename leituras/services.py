@@ -1,17 +1,41 @@
-from apartamentos.services import consultar_apartamento
+from django.db import IntegrityError
+
+from apartamentos.models import Apartamento
 
 from .models import Leitura
 
 
-def cadastrar_leitura(apartamento_id, mes, ano, leitura_agua=None, leitura_gas=None):
-    apartamento = consultar_apartamento(apartamento_id)
-    return Leitura.objects.create(
-        apartamento=apartamento,
-        mes=mes,
-        ano=ano,
-        leitura_agua=leitura_agua,
-        leitura_gas=leitura_gas,
-    )
+def cadastrar_leitura(
+    apartamento,
+    mes,
+    ano,
+    leitura_agua=None,
+    leitura_gas=None,
+):
+    if not isinstance(apartamento, Apartamento):
+        raise ValueError("Apartamento inválido.")
+
+    if mes < 1 or mes > 12:
+        raise ValueError("O mês deve estar entre 1 e 12.")
+
+    if leitura_agua is None and leitura_gas is None:
+        raise ValueError(
+            "Informe pelo menos uma leitura: água ou gás."
+        )
+
+    try:
+        return Leitura.objects.create(
+            apartamento=apartamento,
+            mes=mes,
+            ano=ano,
+            leitura_agua=leitura_agua,
+            leitura_gas=leitura_gas,
+        )
+    except IntegrityError as exc:
+        raise ValueError(
+            "Já existe uma leitura para este apartamento "
+            "no mês e ano informados."
+        ) from exc
 
 
 def consultar_leitura(leitura_id):
