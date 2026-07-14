@@ -55,10 +55,23 @@ def editar_leitura(leitura_id, mes, ano, leitura_agua=None, leitura_gas=None):
     return leitura
 
 
-def listar_leituras():
-    return Leitura.objects.select_related("apartamento").order_by(
-        "-ano", "-mes", "-id"
+def listar_leituras(apartamento):
+    """
+    Retorna todas as leituras do apartamento,
+    da mais recente para a mais antiga.
+    """
+    return (
+        Leitura.objects
+        .filter(apartamento=apartamento)
+        .order_by("-ano", "-mes")
     )
+
+
+def obter_ultima_leitura(apartamento):
+    """
+    Retorna a leitura mais recente do apartamento.
+    """
+    return listar_leituras(apartamento).first()
 
 
 def buscar_ultimas_leituras(apartamento_id, limite=12):

@@ -131,3 +131,41 @@
     {% endfor %}
   </tbody>
 </table>
+
+<h2>Última leitura</h2>
+
+{% if ultima_leitura %}
+    <ul>
+        <li>Mês: {{ ultima_leitura.mes }}/{{ ultima_leitura.ano }}</li>
+        <li>Água: {{ ultima_leitura.leitura_agua }}</li>
+        <li>Gás: {{ ultima_leitura.leitura_gas }}</li>
+    </ul>
+{% else %}
+    <p>Nenhuma leitura cadastrada.</p>
+{% endif %}
+
+<h2>Histórico de Leituras</h2>
+
+{% if leituras %}
+    <table>
+        <thead>
+            <tr>
+                <th>Mês/Ano</th>
+                <th>Água</th>
+                <th>Gás</th>
+            </tr>
+        </thead>
+
+        <tbody>
+            {% for leitura in leituras %}
+                <tr>
+                    <td>{{ leitura.mes }}/{{ leitura.ano }}</td>
+                    <td>{{ leitura.leitura_agua }}</td>
+                    <td>{{ leitura.leitura_gas }}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% else %}
+    <p>Nenhuma leitura cadastrada.</p>
+{% endif %}

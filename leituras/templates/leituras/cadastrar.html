@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}
+    Nova leitura
+{% endblock %}
+
+{% block content %}
+    <h1>Nova leitura</h1>
+
+    <p>
+        Apartamento:
+        <strong>
+            {{ apartamento.numero }}
+            {% if apartamento.bloco %}
+                - Bloco {{ apartamento.bloco }}
+            {% endif %}
+        </strong>
+    </p>
+
+    <form method="post">
+        {% csrf_token %}
+
+        {{ form.non_field_errors }}
+
+        {% for field in form %}
+            <div>
+                <label for="{{ field.id_for_label }}">
+                    {{ field.label }}
+                </label>
+
+                {{ field }}
+
+                {% if field.errors %}
+                    <div>
+                        {{ field.errors }}
+                    </div>
+                {% endif %}
+            </div>
+        {% endfor %}
+
+        <button type="submit">
+            Salvar leitura
+        </button>
+
+        <a href="{% url 'apartamentos:detalhes' apartamento.id %}">
+            Cancelar
+        </a>
+    </form>
+{% endblock %}

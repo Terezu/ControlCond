@@ -6,6 +6,11 @@ from .services import (
     listar_apartamentos,
 )
 
+from leituras.services import (
+    listar_leituras,
+    obter_ultima_leitura,
+)
+
 
 def lista_apartamentos(request):
     return render(
@@ -35,6 +40,8 @@ def detalhes_apartamento(request, apartamento_id):
             "apartamento": apartamento,
             "leituras": leituras,
             "faturas": faturas,
-            "ultima_leitura": ultima_leitura,
+            "apartamento": apartamento,
+            "ultima_leitura": obter_ultima_leitura(apartamento),
+            "leituras": listar_leituras(apartamento),
         }
     )

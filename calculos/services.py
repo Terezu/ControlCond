@@ -1,4 +1,4 @@
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, ROUND_DOWN, ROUND_HALF_UP
 
 
 VALORES_AGUA = {
@@ -27,12 +27,23 @@ VALOR_M3_GAS = Decimal("21.02")
 def _calcular_consumo(leitura_anterior, leitura_atual, nome_recurso):
     if leitura_anterior is None:
         return 0
-    consumo = leitura_atual - leitura_anterior
+
+    consumo = (
+        Decimal(str(leitura_atual))
+        - Decimal(str(leitura_anterior))
+    )
+
     if consumo < 0:
         raise ValueError(
             f"A leitura atual de {nome_recurso} não pode ser menor que a anterior."
         )
-    return consumo
+
+    return int(
+        consumo.quantize(
+            Decimal("1"),
+            rounding=ROUND_DOWN,
+        )
+    )
 
 
 def calcular_consumo_agua(leitura_anterior, leitura_atual):

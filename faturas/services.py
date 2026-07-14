@@ -1,11 +1,12 @@
 from decimal import Decimal
 from pathlib import Path
 
-from django.db import transaction
+from django.db import models, transaction
 
 from apartamentos.services import consultar_apartamento
 from calculos.services import calcular_agua, calcular_gas
-from leituras.services import cadastrar_leitura, consultar_leitura
+from leituras.models import Leitura
+from leituras.services import consultar_leitura
 
 from .models import Fatura
 
@@ -77,32 +78,88 @@ def excluir_fatura(fatura_id):
     fatura.delete()
 
 
-@transaction.atomic
-def gerar_fatura_mensal(
-    apartamento_id,
-    mes,
-    ano,
-    leitura_agua_anterior,
-    leitura_agua_atual,
-    leitura_gas_anterior,
-    leitura_gas_atual,
-):
-    resultado_agua = calcular_agua(leitura_agua_anterior, leitura_agua_atual)
-    resultado_gas = calcular_gas(leitura_gas_anterior, leitura_gas_atual)
-    leitura = cadastrar_leitura(
-        apartamento_id, mes, ano, leitura_agua_atual, leitura_gas_atual
+def buscar_leitura_anterior(leitura_atual):
+    return (
+        Leitura.objects
+        .filter(
+            apartamento_id=leitura_atual.apartamento_id,
+        )
+        .exclude(pk=leitura_atual.pk)
+        .filter(
+            models.Q(ano__lt=leitura_atual.ano)
+            | models.Q(
+                ano=leitura_atual.ano,
+                mes__lt=leitura_atual.mes,
+            )
+        )
+        .order_by("-ano", "-mes")
+        .first()
     )
-    fatura = cadastrar_fatura(
-        apartamento_id=apartamento_id,
-        leitura_id=leitura.id,
-        mes=mes,
-        ano=ano,
+
+
+@transaction.atomic
+def gerar_fatura_mensal(leitura_id):
+    leitura_atual = consultar_leitura(leitura_id)
+
+    if Fatura.objects.filter(
+        apartamento=leitura_atual.apartamento,
+        mes=leitura_atual.mes,
+        ano=leitura_atual.ano,
+    ).exists():
+        raise ValueError(
+            "Já existe uma fatura para este apartamento neste mês e ano."
+        )
+
+    if (
+        leitura_atual.leitura_agua is None
+        or leitura_atual.leitura_gas is None
+    ):
+        raise ValueError(
+            "A leitura precisa possuir valores de água e gás "
+            "para gerar uma fatura."
+        )
+
+    leitura_anterior = buscar_leitura_anterior(leitura_atual)
+
+    if leitura_anterior is not None:
+        leitura_agua_anterior = leitura_anterior.leitura_agua
+        leitura_gas_anterior = leitura_anterior.leitura_gas
+    else:
+        apartamento = leitura_atual.apartamento
+
+        if (
+            apartamento.leitura_base_agua is None
+            or apartamento.leitura_base_gas is None
+        ):
+            raise ValueError(
+                "O apartamento não possui leituras-base configuradas. "
+                "Informe as medições anteriores de água e gás antes de gerar "
+                "a primeira fatura."
+            )
+
+        leitura_agua_anterior = apartamento.leitura_base_agua
+        leitura_gas_anterior = apartamento.leitura_base_gas
+
+    resultado_agua = calcular_agua(
+        leitura_agua_anterior,
+        leitura_atual.leitura_agua,
+    )
+
+    resultado_gas = calcular_gas(
+        leitura_gas_anterior,
+        leitura_atual.leitura_gas,
+    )
+
+    return cadastrar_fatura(
+        apartamento_id=leitura_atual.apartamento_id,
+        leitura_id=leitura_atual.id,
+        mes=leitura_atual.mes,
+        ano=leitura_atual.ano,
         consumo_agua=resultado_agua["consumo"],
         consumo_gas=resultado_gas["consumo"],
         valor_agua=resultado_agua["valor"],
         valor_gas=resultado_gas["valor"],
     )
-    return fatura
 
 
 def gerar_pdf_fatura(fatura_id, pasta_pdfs=Path("faturas_geradas")):
@@ -110,7 +167,7 @@ def gerar_pdf_fatura(fatura_id, pasta_pdfs=Path("faturas_geradas")):
     from reportlab.pdfgen import canvas
 
     fatura = consultar_fatura(fatura_id)
-    pasta_pdfs.mkdir(exist_ok=True)
+    pasta_pdfs.mkdir(parents=True, exist_ok=True)
     caminho_pdf = pasta_pdfs / (
         f"fatura_{fatura.id}_apto_{fatura.apartamento.numero}_{fatura.mes}_{fatura.ano}.pdf"
     )

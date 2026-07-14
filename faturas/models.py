@@ -29,8 +29,8 @@ class Fatura(models.Model):
     mes = models.IntegerField()
     ano = models.IntegerField()
 
-    consumo_agua = models.FloatField()
-    consumo_gas = models.FloatField()
+    consumo_agua = models.PositiveIntegerField()
+    consumo_gas = models.PositiveIntegerField()
 
     valor_agua = models.DecimalField(
         max_digits=10,
