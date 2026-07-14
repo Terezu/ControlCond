@@ -29,19 +29,25 @@ class CalculosConsumoTests(SimpleTestCase):
 
         self.assertEqual(consumo, 3)
 
-    def test_primeira_leitura_retorna_consumo_zero(self):
-        consumo_agua = calcular_consumo_agua(
-            leitura_anterior=None,
-            leitura_atual=100,
-        )
+    def test_primeira_leitura_de_agua_exige_valor_anterior(self):
+        with self.assertRaisesMessage(
+            ValueError,
+            "Informe a leitura anterior de água, inclusive para a primeira medição",
+        ):
+            calcular_consumo_agua(
+                leitura_anterior=None,
+                leitura_atual=100,
+            )
 
-        consumo_gas = calcular_consumo_gas(
-            leitura_anterior=None,
-            leitura_atual=20,
-        )
-
-        self.assertEqual(consumo_agua, 0)
-        self.assertEqual(consumo_gas, 0)
+    def test_primeira_leitura_de_gas_exige_valor_anterior(self):
+        with self.assertRaisesMessage(
+            ValueError,
+            "Informe a leitura anterior de gás, inclusive para a primeira medição",
+        ):
+            calcular_consumo_gas(
+                leitura_anterior=None,
+                leitura_atual=20,
+            )
 
     def test_leitura_agua_menor_que_anterior_gera_erro(self):
         with self.assertRaisesMessage(

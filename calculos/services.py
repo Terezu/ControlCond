@@ -26,7 +26,10 @@ VALOR_M3_GAS = Decimal("21.02")
 
 def _calcular_consumo(leitura_anterior, leitura_atual, nome_recurso):
     if leitura_anterior is None:
-        return 0
+        raise ValueError(
+            f"Informe a leitura anterior de {nome_recurso}, inclusive para "
+            "a primeira medição do apartamento."
+        )
 
     consumo = (
         Decimal(str(leitura_atual))
