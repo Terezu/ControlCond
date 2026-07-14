@@ -9,14 +9,12 @@ class Apartamento(models.Model):
     leitura_base_agua = models.DecimalField(
         max_digits=10,
         decimal_places=2,
-        blank=True,
         null=True,
     )
 
     leitura_base_gas = models.DecimalField(
         max_digits=10,
         decimal_places=2,
-        blank=True,
         null=True,
     )
 

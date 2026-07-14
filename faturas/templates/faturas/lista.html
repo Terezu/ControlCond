@@ -1,8 +1,11 @@
 <h1>Faturas</h1>
-<ul>
-  {% for fatura in faturas %}
-    <li>{{ fatura }}</li>
-  {% empty %}
-    <li>Nenhuma fatura cadastrada.</li>
-  {% endfor %}
-</ul>
+
+<a href="{% url 'faturas:gerar' %}">
+    Gerar nova fatura
+</a>
+
+{% if messages %}
+    {% for message in messages %}
+        <p>{{ message }}</p>
+    {% endfor %}
+{% endif %}

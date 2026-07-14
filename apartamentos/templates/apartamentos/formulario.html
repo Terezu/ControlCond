@@ -1,0 +1,30 @@
+<h1>{{ titulo }}</h1>
+
+<p>
+  Informe as leituras anteriores dos medidores. Elas serão usadas como base
+  para calcular o consumo da primeira medição mensal.
+</p>
+
+<form method="post">
+  {% csrf_token %}
+  {{ form.non_field_errors }}
+
+  {% for campo in form %}
+    <p>
+      {{ campo.label_tag }}<br>
+      {{ campo }}
+      {% if campo.help_text %}<small>{{ campo.help_text }}</small>{% endif %}
+      {% for erro in campo.errors %}<br><strong>{{ erro }}</strong>{% endfor %}
+    </p>
+  {% endfor %}
+
+  <button type="submit">Salvar apartamento</button>
+</form>
+
+<p>
+  {% if apartamento %}
+    <a href="{% url 'apartamentos:detalhes' apartamento.id %}">Cancelar</a>
+  {% else %}
+    <a href="{% url 'apartamentos:lista' %}">Cancelar</a>
+  {% endif %}
+</p>

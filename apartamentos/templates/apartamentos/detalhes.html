@@ -1,5 +1,11 @@
 <h1>{{ apartamento }}</h1>
 
+<p>
+  <a href="{% url 'apartamentos:editar' apartamento.id %}">
+    Editar apartamento e leituras-base
+  </a>
+</p>
+
 {% if messages %}
   <div>
     {% for message in messages %}
@@ -7,6 +13,10 @@
     {% endfor %}
   </div>
 {% endif %}
+
+<h2>Leituras-base</h2>
+<p><strong>Água:</strong> {{ apartamento.leitura_base_agua|default_if_none:"Não informada" }}</p>
+<p><strong>Gás:</strong> {{ apartamento.leitura_base_gas|default_if_none:"Não informada" }}</p>
 
 <p>
   <a href="{% url 'apartamentos:lista' %}">
