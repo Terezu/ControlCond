@@ -15,8 +15,16 @@
 {% endif %}
 
 <h2>Leituras-base</h2>
-<p><strong>Água:</strong> {{ apartamento.leitura_base_agua|default_if_none:"Não informada" }}</p>
-<p><strong>Gás:</strong> {{ apartamento.leitura_base_gas|default_if_none:"Não informada" }}</p>
+
+<p>
+  <strong>Água:</strong>
+  {{ apartamento.leitura_base_agua|default_if_none:"Não informada" }}
+</p>
+
+<p>
+  <strong>Gás:</strong>
+  {{ apartamento.leitura_base_gas|default_if_none:"Não informada" }}
+</p>
 
 <p>
   <a href="{% url 'apartamentos:lista' %}">
@@ -113,6 +121,7 @@
       <th>Consumo de gás</th>
       <th>Valor total</th>
       <th>Status</th>
+      <th>Ações</th>
     </tr>
   </thead>
 
@@ -124,58 +133,29 @@
         </td>
 
         <td>{{ fatura.consumo_agua }}</td>
+
         <td>{{ fatura.consumo_gas }}</td>
 
         <td>
           R$ {{ fatura.valor_total|floatformat:2 }}
         </td>
 
-        <td>{{ fatura.get_status_display }}</td>
+        <td>
+          {{ fatura.get_status_display }}
+        </td>
+
+        <td>
+          <a href="{% url 'faturas:detalhes' fatura.id %}">
+            Ver fatura
+          </a>
+        </td>
       </tr>
     {% empty %}
       <tr>
-        <td colspan="5">
+        <td colspan="6">
           Nenhuma fatura cadastrada.
         </td>
       </tr>
     {% endfor %}
   </tbody>
 </table>
-
-<h2>Última leitura</h2>
-
-{% if ultima_leitura %}
-    <ul>
-        <li>Mês: {{ ultima_leitura.mes }}/{{ ultima_leitura.ano }}</li>
-        <li>Água: {{ ultima_leitura.leitura_agua }}</li>
-        <li>Gás: {{ ultima_leitura.leitura_gas }}</li>
-    </ul>
-{% else %}
-    <p>Nenhuma leitura cadastrada.</p>
-{% endif %}
-
-<h2>Histórico de Leituras</h2>
-
-{% if leituras %}
-    <table>
-        <thead>
-            <tr>
-                <th>Mês/Ano</th>
-                <th>Água</th>
-                <th>Gás</th>
-            </tr>
-        </thead>
-
-        <tbody>
-            {% for leitura in leituras %}
-                <tr>
-                    <td>{{ leitura.mes }}/{{ leitura.ano }}</td>
-                    <td>{{ leitura.leitura_agua }}</td>
-                    <td>{{ leitura.leitura_gas }}</td>
-                </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-{% else %}
-    <p>Nenhuma leitura cadastrada.</p>
-{% endif %}
