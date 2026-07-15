@@ -18,6 +18,22 @@
 
         {{ form.as_p }}
 
+        {% if apartamento_sem_leitura_base %}
+            <section>
+                <p>
+                    Para gerar a primeira fatura do apartamento
+                    <strong>{{ apartamento_sem_leitura_base.numero }}</strong>,
+                    cadastre as medições anteriores de água e gás.
+                </p>
+
+                <a
+                    href="{% url 'apartamentos:editar' apartamento_sem_leitura_base.id %}?next={% url 'faturas:gerar' %}"
+                >
+                    Cadastrar primeiras medições
+                </a>
+            </section>
+        {% endif %}
+
         <button type="submit">
             Gerar fatura
         </button>

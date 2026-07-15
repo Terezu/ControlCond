@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Detalhes da Fatura</title>
+</head>
+
+<body>
+    <header>
+        <h1>Detalhes da Fatura</h1>
+
+        <a href="{% url 'faturas:lista' %}">
+            Voltar para a lista
+        </a>
+    </header>
+
+    <main>
+        <section>
+            <h2>Informações gerais</h2>
+
+            <p>
+                <strong>Apartamento:</strong>
+                {{ fatura.apartamento }}
+            </p>
+
+            <p>
+                <strong>Referência:</strong>
+                {{ fatura.mes|stringformat:"02d" }}/{{ fatura.ano }}
+            </p>
+
+            <p>
+                <strong>Status:</strong>
+                {{ fatura.get_status_display }}
+            </p>
+        </section>
+
+        <section>
+            <h2>Consumo</h2>
+
+            <p>
+                <strong>Consumo de água:</strong>
+                {{ fatura.consumo_agua }} m³
+            </p>
+
+            <p>
+                <strong>Consumo de gás:</strong>
+                {{ fatura.consumo_gas }} m³
+            </p>
+        </section>
+
+        <section>
+            <h2>Valores</h2>
+
+            <p>
+                <strong>Valor da água:</strong>
+                R$ {{ fatura.valor_agua|floatformat:2 }}
+            </p>
+
+            <p>
+                <strong>Valor do gás:</strong>
+                R$ {{ fatura.valor_gas|floatformat:2 }}
+            </p>
+
+            <p>
+                <strong>Valor total:</strong>
+                R$ {{ fatura.valor_total|floatformat:2 }}
+            </p>
+        </section>
+
+        <section>
+            <h2>Leitura vinculada</h2>
+
+            {% if fatura.leitura %}
+                <p>
+                    <strong>Leitura de água:</strong>
+                    {{ fatura.leitura.leitura_agua }}
+                </p>
+
+                <p>
+                    <strong>Leitura de gás:</strong>
+                    {{ fatura.leitura.leitura_gas }}
+                </p>
+            {% else %}
+                <p>Esta fatura não possui uma leitura vinculada.</p>
+            {% endif %}
+        </section>
+    </main>
+</body>
+</html>

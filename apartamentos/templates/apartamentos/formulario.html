@@ -7,24 +7,46 @@
 
 <form method="post">
   {% csrf_token %}
+
+  {% if next %}
+    <input type="hidden" name="next" value="{{ next }}">
+  {% endif %}
+
   {{ form.non_field_errors }}
 
   {% for campo in form %}
     <p>
       {{ campo.label_tag }}<br>
       {{ campo }}
-      {% if campo.help_text %}<small>{{ campo.help_text }}</small>{% endif %}
-      {% for erro in campo.errors %}<br><strong>{{ erro }}</strong>{% endfor %}
+
+      {% if campo.help_text %}
+        <small>{{ campo.help_text }}</small>
+      {% endif %}
+
+      {% for erro in campo.errors %}
+        <br>
+        <strong>{{ erro }}</strong>
+      {% endfor %}
     </p>
   {% endfor %}
 
-  <button type="submit">Salvar apartamento</button>
+  <button type="submit">
+    Salvar apartamento
+  </button>
 </form>
 
 <p>
-  {% if apartamento %}
-    <a href="{% url 'apartamentos:detalhes' apartamento.id %}">Cancelar</a>
+  {% if next %}
+    <a href="{{ next }}">
+      Cancelar
+    </a>
+  {% elif apartamento %}
+    <a href="{% url 'apartamentos:detalhes' apartamento.id %}">
+      Cancelar
+    </a>
   {% else %}
-    <a href="{% url 'apartamentos:lista' %}">Cancelar</a>
+    <a href="{% url 'apartamentos:lista' %}">
+      Cancelar
+    </a>
   {% endif %}
 </p>

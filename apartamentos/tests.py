@@ -38,6 +38,19 @@ class ApartamentoFormTests(TestCase):
 
         self.assertTrue(form.is_valid(), form.errors)
 
+    def test_rejeita_leituras_base_acima_do_limite(self):
+        form = ApartamentoForm(
+            data={
+                "numero": "101",
+                "leitura_base_agua": "1000000.00",
+                "leitura_base_gas": "1000000.00",
+            }
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("leitura_base_agua", form.errors)
+        self.assertIn("leitura_base_gas", form.errors)
+
 
 class FluxoApartamentoTests(TestCase):
     def test_cadastra_apartamento_com_leituras_base(self):
@@ -77,6 +90,36 @@ class FluxoApartamentoTests(TestCase):
         apartamento.refresh_from_db()
         self.assertEqual(apartamento.leitura_base_agua, Decimal("101.00"))
         self.assertEqual(apartamento.leitura_base_gas, Decimal("21.00"))
+
+    def test_nao_edita_bases_acima_da_primeira_leitura(self):
+        apartamento = cadastrar_apartamento(
+            numero="202",
+            leitura_base_agua=Decimal("100.00"),
+            leitura_base_gas=Decimal("20.00"),
+        )
+        Leitura.objects.create(
+            apartamento=apartamento,
+            mes=1,
+            ano=2026,
+            leitura_agua=Decimal("110.00"),
+            leitura_gas=Decimal("25.00"),
+        )
+
+        with self.assertRaisesRegex(ValueError, "água"):
+            editar_apartamento(
+                apartamento.id,
+                numero="202",
+                leitura_base_agua=Decimal("110.01"),
+                leitura_base_gas=Decimal("25.00"),
+            )
+
+        with self.assertRaisesRegex(ValueError, "gás"):
+            editar_apartamento(
+                apartamento.id,
+                numero="202",
+                leitura_base_agua=Decimal("110.00"),
+                leitura_base_gas=Decimal("25.01"),
+            )
 
 
 class ProtecaoApartamentoTest(TestCase):

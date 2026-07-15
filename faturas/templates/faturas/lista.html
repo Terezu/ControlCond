@@ -4,8 +4,26 @@
     Gerar nova fatura
 </a>
 
-{% if messages %}
-    {% for message in messages %}
-        <p>{{ message }}</p>
-    {% endfor %}
-{% endif %}
+{% for fatura in faturas %}
+    <div>
+        <p>
+            Apartamento: {{ fatura.apartamento }}
+        </p>
+
+        <p>
+            Referência:
+            {{ fatura.mes|stringformat:"02d" }}/{{ fatura.ano }}
+        </p>
+
+        <p>
+            Valor total:
+            R$ {{ fatura.valor_total|floatformat:2 }}
+        </p>
+
+        <a href="{% url 'faturas:detalhes' fatura.id %}">
+            Ver detalhes
+        </a>
+    </div>
+{% empty %}
+    <p>Nenhuma fatura cadastrada.</p>
+{% endfor %}

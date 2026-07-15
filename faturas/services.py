@@ -2,6 +2,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from django.db import models, transaction
+from django.core.exceptions import ObjectDoesNotExist
 
 from apartamentos.services import consultar_apartamento
 from calculos.services import calcular_agua, calcular_gas
@@ -54,9 +55,9 @@ def cadastrar_fatura(
 
 def consultar_fatura(fatura_id):
     try:
-        return Fatura.objects.select_related("apartamento", "leitura").get(pk=fatura_id)
-    except Fatura.DoesNotExist as exc:
-        raise ValueError("Fatura não encontrada.") from exc
+        return Fatura.objects.select_related("apartamento", "leitura").get(id=fatura_id)
+    except ObjectDoesNotExist:
+        raise ValueError("Fatura não encontrada.")
 
 
 def listar_faturas():
