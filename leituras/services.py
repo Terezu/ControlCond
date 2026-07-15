@@ -1,6 +1,7 @@
 from django.db import IntegrityError
 
 from apartamentos.models import Apartamento
+from apartamentos.services import consultar_apartamento
 
 from .models import Leitura
 

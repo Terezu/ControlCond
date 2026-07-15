@@ -68,6 +68,10 @@ class Fatura(models.Model):
                 name="fatura_unica_por_apartamento_e_mes",
             )
         ]
+    
+    data_emissao = models.DateTimeField(
+    auto_now_add=True,
+    )
 
     def __str__(self):
         return f"Fatura {self.mes:02d}/{self.ano} - {self.apartamento}"

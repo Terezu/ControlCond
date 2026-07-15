@@ -86,8 +86,22 @@
                     {{ fatura.leitura.leitura_gas }}
                 </p>
             {% else %}
-                <p>Esta fatura não possui uma leitura vinculada.</p>
+                <p>
+                    Esta fatura não possui uma leitura vinculada.
+                </p>
             {% endif %}
+        </section>
+
+        <section>
+            <h2>Ações</h2>
+
+            <a
+                href="{% url 'faturas:pdf' fatura.id %}"
+                target="_blank"
+                rel="noopener noreferrer"
+            >
+                Visualizar PDF
+            </a>
         </section>
     </main>
 </body>

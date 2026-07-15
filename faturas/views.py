@@ -1,9 +1,10 @@
 from django.contrib import messages
-from django.http import Http404
+from django.http import FileResponse, Http404
 from django.shortcuts import redirect, render
 
 from .forms import GerarFaturaForm
 from .services import gerar_fatura_mensal, listar_faturas, consultar_fatura
+from .pdf import gerar_pdf_fatura
 
 
 def lista_faturas(request):
@@ -78,3 +79,23 @@ def gerar_fatura(request):
         },
     )
 
+def visualizar_pdf_fatura(request, fatura_id):
+    try:
+        fatura = consultar_fatura(fatura_id)
+    except ValueError as erro:
+        raise Http404(str(erro)) from erro
+
+    arquivo_pdf = gerar_pdf_fatura(fatura)
+
+    nome_arquivo = (
+        f"fatura_"
+        f"{fatura.apartamento.numero}_"
+        f"{fatura.mes:02d}_"
+        f"{fatura.ano}.pdf"
+    )
+
+    return FileResponse(
+        arquivo_pdf,
+        content_type="application/pdf",
+        filename=nome_arquivo,
+    )
