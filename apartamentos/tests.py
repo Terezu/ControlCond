@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from django.contrib.auth import get_user_model
 from django.db.models.deletion import ProtectedError
 from django.test import TestCase
 from django.urls import reverse
@@ -51,8 +52,50 @@ class ApartamentoFormTests(TestCase):
         self.assertIn("leitura_base_agua", form.errors)
         self.assertIn("leitura_base_gas", form.errors)
 
+    def test_valida_a_primeira_leitura_de_cada_medidor_separadamente(self):
+        apartamento = Apartamento.objects.create(
+            numero="101",
+            leitura_base_agua=Decimal("0.00"),
+            leitura_base_gas=Decimal("0.00"),
+        )
+        Leitura.objects.create(
+            apartamento=apartamento,
+            mes=1,
+            ano=2026,
+            leitura_agua=None,
+            leitura_gas=Decimal("5.00"),
+        )
+        Leitura.objects.create(
+            apartamento=apartamento,
+            mes=2,
+            ano=2026,
+            leitura_agua=Decimal("10.00"),
+            leitura_gas=None,
+        )
+
+        form = ApartamentoForm(
+            instance=apartamento,
+            data={
+                "numero": "101",
+                "leitura_base_agua": "10.01",
+                "leitura_base_gas": "5.01",
+            },
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("leitura_base_agua", form.errors)
+        self.assertIn("leitura_base_gas", form.errors)
+
 
 class FluxoApartamentoTests(TestCase):
+    def setUp(self):
+        usuario = get_user_model().objects.create_user(
+            username="operador",
+            password="senha-de-teste",
+            is_staff=True,
+        )
+        self.client.force_login(usuario)
+
     def test_cadastra_apartamento_com_leituras_base(self):
         resposta = self.client.post(
             reverse("apartamentos:novo"),
@@ -131,6 +174,7 @@ class ProtecaoApartamentoTest(TestCase):
             apartamento=self.apartamento,
             mes=7,
             ano=2026,
+            leitura_agua=Decimal("1.00"),
         )
 
         with self.assertRaises(ProtectedError):
@@ -151,3 +195,101 @@ class ProtecaoApartamentoTest(TestCase):
             self.apartamento.delete()
 
         self.assertTrue(Fatura.objects.filter(pk=fatura.pk).exists())
+
+
+class SegurancaViewsApartamentoTests(TestCase):
+    def setUp(self):
+        self.usuario = get_user_model().objects.create_user(
+            username="operador-seguranca",
+            password="senha-de-teste",
+            is_staff=True,
+        )
+
+    def test_todas_as_telas_operacionais_exigem_autenticacao(self):
+        urls = [
+            reverse("apartamentos:lista"),
+            reverse("apartamentos:novo"),
+            reverse("apartamentos:editar", args=[999]),
+            reverse("apartamentos:detalhes", args=[999]),
+            reverse("leituras:nova", args=[999]),
+            reverse("faturas:lista"),
+            reverse("faturas:gerar"),
+            reverse("faturas:detalhes", args=[999]),
+            reverse("faturas:pdf", args=[999]),
+        ]
+
+        for url in urls:
+            with self.subTest(url=url):
+                resposta = self.client.get(url)
+                self.assertRedirects(
+                    resposta,
+                    f"/admin/login/?next={url}",
+                )
+
+    def test_usuario_sem_perfil_de_equipe_nao_acessa_dados(self):
+        usuario_comum = get_user_model().objects.create_user(
+            username="usuario-comum",
+            password="senha-de-teste",
+        )
+        self.client.force_login(usuario_comum)
+
+        resposta = self.client.get(reverse("faturas:lista"))
+
+        self.assertRedirects(
+            resposta,
+            f"/admin/login/?next={reverse('faturas:lista')}",
+        )
+
+    def test_next_perigoso_nao_e_renderizado(self):
+        self.client.force_login(self.usuario)
+        payload = "javascript:alert(document.domain)"
+
+        resposta = self.client.get(
+            reverse("apartamentos:novo"),
+            {"next": payload},
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertNotContains(resposta, payload)
+        self.assertContains(resposta, reverse("apartamentos:lista"))
+
+    def test_next_interno_continua_funcionando(self):
+        self.client.force_login(self.usuario)
+        destino = reverse("faturas:gerar")
+
+        resposta = self.client.get(
+            reverse("apartamentos:novo"),
+            {"next": destino},
+        )
+
+        self.assertContains(resposta, f'href="{destino}"')
+
+    def test_dados_operacionais_nao_sao_armazenados_em_cache(self):
+        self.client.force_login(self.usuario)
+        apartamento = Apartamento.objects.create(numero="303")
+        fatura = Fatura.objects.create(
+            apartamento=apartamento,
+            mes=7,
+            ano=2026,
+            consumo_agua=0,
+            consumo_gas=0,
+            apartamento_numero_emissao=apartamento.numero,
+        )
+        urls = [
+            reverse("apartamentos:lista"),
+            reverse("apartamentos:novo"),
+            reverse("apartamentos:editar", args=[apartamento.id]),
+            reverse("apartamentos:detalhes", args=[apartamento.id]),
+            reverse("leituras:nova", args=[apartamento.id]),
+            reverse("faturas:lista"),
+            reverse("faturas:gerar"),
+            reverse("faturas:detalhes", args=[fatura.id]),
+            reverse("faturas:pdf", args=[fatura.id]),
+        ]
+
+        for url in urls:
+            with self.subTest(url=url):
+                resposta = self.client.get(url)
+                self.assertEqual(resposta.status_code, 200)
+                self.assertIn("no-store", resposta["Cache-Control"])
+                self.assertIn("private", resposta["Cache-Control"])

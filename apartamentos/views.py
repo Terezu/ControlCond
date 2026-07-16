@@ -1,7 +1,9 @@
 from django.contrib import messages
+from django.contrib.admin.views.decorators import staff_member_required
 from django.http import Http404
 from django.shortcuts import redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.views.decorators.cache import never_cache
 
 from leituras.services import listar_leituras, obter_ultima_leitura
 
@@ -35,7 +37,7 @@ def _salvar_formulario(form, apartamento_id=None):
     )
 
 
-def _redirecionar_para_next(request):
+def _obter_next_seguro(request):
     proxima_pagina = (
         request.POST.get("next")
         or request.GET.get("next")
@@ -49,11 +51,18 @@ def _redirecionar_para_next(request):
             require_https=request.is_secure(),
         )
     ):
-        return redirect(proxima_pagina)
+        return proxima_pagina
 
     return None
 
 
+def _redirecionar_para_next(request):
+    proxima_pagina = _obter_next_seguro(request)
+    return redirect(proxima_pagina) if proxima_pagina else None
+
+
+@staff_member_required
+@never_cache
 def novo_apartamento(request):
     form = ApartamentoForm(request.POST or None)
 
@@ -81,11 +90,13 @@ def novo_apartamento(request):
         {
             "form": form,
             "titulo": "Cadastrar apartamento",
-            "next": request.GET.get("next") or request.POST.get("next"),
+            "next": _obter_next_seguro(request),
         },
     )
 
 
+@staff_member_required
+@never_cache
 def editar_dados_apartamento(request, apartamento_id):
     try:
         apartamento = consultar_apartamento(apartamento_id)
@@ -125,11 +136,13 @@ def editar_dados_apartamento(request, apartamento_id):
             "form": form,
             "titulo": "Editar apartamento",
             "apartamento": apartamento,
-            "next": request.GET.get("next") or request.POST.get("next"),
+            "next": _obter_next_seguro(request),
         },
     )
 
 
+@staff_member_required
+@never_cache
 def lista_apartamentos(request):
     return render(
         request,
@@ -140,6 +153,8 @@ def lista_apartamentos(request):
     )
 
 
+@staff_member_required
+@never_cache
 def detalhes_apartamento(request, apartamento_id):
     try:
         apartamento = consultar_detalhes_apartamento(

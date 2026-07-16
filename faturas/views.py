@@ -1,12 +1,17 @@
 from django.contrib import messages
+from django.contrib.admin.views.decorators import staff_member_required
 from django.http import FileResponse, Http404
 from django.shortcuts import redirect, render
+from django.utils.text import slugify
+from django.views.decorators.cache import never_cache
 
 from .forms import GerarFaturaForm
 from .services import gerar_fatura_mensal, listar_faturas, consultar_fatura
 from .pdf import gerar_pdf_fatura
 
 
+@staff_member_required
+@never_cache
 def lista_faturas(request):
     return render(
         request,
@@ -17,6 +22,8 @@ def lista_faturas(request):
     )
 
 
+@staff_member_required
+@never_cache
 def detalhes_fatura(request, fatura_id):
     try:
         fatura = consultar_fatura(fatura_id)
@@ -32,6 +39,8 @@ def detalhes_fatura(request, fatura_id):
     )
 
 
+@staff_member_required
+@never_cache
 def gerar_fatura(request):
     apartamento_sem_leitura_base = None
 
@@ -79,6 +88,8 @@ def gerar_fatura(request):
         },
     )
 
+@staff_member_required
+@never_cache
 def visualizar_pdf_fatura(request, fatura_id):
     try:
         fatura = consultar_fatura(fatura_id)
@@ -89,7 +100,7 @@ def visualizar_pdf_fatura(request, fatura_id):
 
     nome_arquivo = (
         f"fatura_"
-        f"{fatura.apartamento.numero}_"
+        f"{slugify(fatura.apartamento_numero_emissao) or fatura.id}_"
         f"{fatura.mes:02d}_"
         f"{fatura.ano}.pdf"
     )

@@ -1,9 +1,10 @@
-from django.db import IntegrityError
+from django.core.exceptions import ValidationError
+from django.db import IntegrityError, transaction
 
 from apartamentos.models import Apartamento
 from apartamentos.services import consultar_apartamento
 
-from .models import Leitura
+from .models import ANO_MAXIMO, Leitura
 
 
 def cadastrar_leitura(
@@ -16,27 +17,43 @@ def cadastrar_leitura(
     if not isinstance(apartamento, Apartamento):
         raise ValueError("Apartamento inválido.")
 
-    if mes < 1 or mes > 12:
-        raise ValueError("O mês deve estar entre 1 e 12.")
+    _validar_periodo(mes, ano)
 
     if leitura_agua is None and leitura_gas is None:
         raise ValueError(
             "Informe pelo menos uma leitura: água ou gás."
         )
 
-    try:
-        return Leitura.objects.create(
-            apartamento=apartamento,
-            mes=mes,
-            ano=ano,
-            leitura_agua=leitura_agua,
-            leitura_gas=leitura_gas,
+    leitura = Leitura(
+        apartamento=apartamento,
+        mes=mes,
+        ano=ano,
+        leitura_agua=leitura_agua,
+        leitura_gas=leitura_gas,
+    )
+    _validar_leitura(leitura)
+
+    if Leitura.objects.filter(
+        apartamento=apartamento,
+        mes=leitura.mes,
+        ano=leitura.ano,
+    ).exists():
+        raise ValueError(
+            "Já existe uma leitura para este apartamento "
+            "no mês e ano informados."
         )
+
+    try:
+        # O savepoint permite converter também uma colisão concorrente em
+        # erro de domínio sem deixar a transação externa inutilizável.
+        with transaction.atomic():
+            leitura.save(force_insert=True)
     except IntegrityError as exc:
         raise ValueError(
             "Já existe uma leitura para este apartamento "
             "no mês e ano informados."
         ) from exc
+    return leitura
 
 
 def consultar_leitura(leitura_id):
@@ -48,12 +65,61 @@ def consultar_leitura(leitura_id):
 
 def editar_leitura(leitura_id, mes, ano, leitura_agua=None, leitura_gas=None):
     leitura = consultar_leitura(leitura_id)
+    _validar_periodo(mes, ano)
     leitura.mes = mes
     leitura.ano = ano
     leitura.leitura_agua = leitura_agua
     leitura.leitura_gas = leitura_gas
-    leitura.save(update_fields=["mes", "ano", "leitura_agua", "leitura_gas"])
+    _validar_leitura(leitura)
+
+    if Leitura.objects.filter(
+        apartamento=leitura.apartamento,
+        mes=leitura.mes,
+        ano=leitura.ano,
+    ).exclude(pk=leitura.pk).exists():
+        raise ValueError(
+            "Já existe uma leitura para este apartamento "
+            "no mês e ano informados."
+        )
+
+    try:
+        with transaction.atomic():
+            leitura.save(
+                update_fields=["mes", "ano", "leitura_agua", "leitura_gas"]
+            )
+    except IntegrityError as exc:
+        raise ValueError(
+            "Já existe uma leitura para este apartamento "
+            "no mês e ano informados."
+        ) from exc
     return leitura
+
+
+def _validar_periodo(mes, ano):
+    if (
+        isinstance(mes, bool)
+        or not isinstance(mes, int)
+        or mes < 1
+        or mes > 12
+    ):
+        raise ValueError("O mês deve estar entre 1 e 12.")
+    if (
+        isinstance(ano, bool)
+        or not isinstance(ano, int)
+        or ano < 2000
+        or ano > ANO_MAXIMO
+    ):
+        raise ValueError("Informe um ano válido.")
+
+
+def _validar_leitura(leitura):
+    try:
+        leitura.full_clean(
+            validate_unique=False,
+            validate_constraints=False,
+        )
+    except ValidationError as exc:
+        raise ValueError(" ".join(exc.messages)) from exc
 
 
 def listar_leituras(apartamento):
@@ -85,4 +151,8 @@ def buscar_ultimas_leituras(apartamento_id, limite=12):
 
 def excluir_leitura(leitura_id):
     leitura = consultar_leitura(leitura_id)
+    if leitura.faturas.exists():
+        raise ValueError(
+            "A leitura não pode ser excluída porque está vinculada a uma fatura."
+        )
     leitura.delete()

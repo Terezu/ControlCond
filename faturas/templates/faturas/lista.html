@@ -7,7 +7,10 @@
 {% for fatura in faturas %}
     <div>
         <p>
-            Apartamento: {{ fatura.apartamento }}
+            Apartamento: {{ fatura.apartamento_numero_emissao }}
+            {% if fatura.apartamento_bloco_emissao %}
+                - Bloco {{ fatura.apartamento_bloco_emissao }}
+            {% endif %}
         </p>
 
         <p>

@@ -15,6 +15,14 @@ env/
 # VS Code
 .vscode/
 
+# PyCharm
+.idea/
+
+# Variáveis locais e segredos
+.env
+.env.*
+!.env.example
+
 # macOS
 .DS_Store
 

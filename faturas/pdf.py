@@ -3,9 +3,6 @@ from io import BytesIO
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
-from .services import buscar_leitura_anterior
-
-
 MARGEM_ESQUERDA = 50
 ESPACO_PADRAO = 20
 
@@ -22,30 +19,11 @@ def formatar_valor_monetario(valor):
 
 
 def obter_leituras_fatura(fatura):
-    leitura_atual = fatura.leitura
-
-    if leitura_atual is None:
-        return {
-            "agua_anterior": None,
-            "agua_atual": None,
-            "gas_anterior": None,
-            "gas_atual": None,
-        }
-
-    leitura_anterior = buscar_leitura_anterior(leitura_atual)
-
-    if leitura_anterior is not None:
-        agua_anterior = leitura_anterior.leitura_agua
-        gas_anterior = leitura_anterior.leitura_gas
-    else:
-        agua_anterior = fatura.apartamento.leitura_base_agua
-        gas_anterior = fatura.apartamento.leitura_base_gas
-
     return {
-        "agua_anterior": agua_anterior,
-        "agua_atual": leitura_atual.leitura_agua,
-        "gas_anterior": gas_anterior,
-        "gas_atual": leitura_atual.leitura_gas,
+        "agua_anterior": fatura.leitura_agua_anterior,
+        "agua_atual": fatura.leitura_agua_atual,
+        "gas_anterior": fatura.leitura_gas_anterior,
+        "gas_atual": fatura.leitura_gas_atual,
     }
 
 
@@ -84,12 +62,12 @@ def desenhar_dados_apartamento(pdf, fatura, y):
     pdf.drawString(
         MARGEM_ESQUERDA,
         y,
-        f"Apartamento: {fatura.apartamento.numero}",
+        f"Apartamento: {fatura.apartamento_numero_emissao}",
     )
 
     y -= ESPACO_PADRAO
 
-    bloco = fatura.apartamento.bloco or "Não informado"
+    bloco = fatura.apartamento_bloco_emissao or "Não informado"
 
     pdf.drawString(
         MARGEM_ESQUERDA,
@@ -303,7 +281,7 @@ def gerar_pdf_fatura(fatura):
 
     pdf.setTitle(
         f"Fatura {fatura.mes:02d}-{fatura.ano} "
-        f"Apartamento {fatura.apartamento.numero}"
+        f"Apartamento {fatura.apartamento_numero_emissao}"
     )
 
     leituras = obter_leituras_fatura(fatura)

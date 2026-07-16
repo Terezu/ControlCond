@@ -10,7 +10,10 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+import os
 from pathlib import Path
+
+from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -19,13 +22,41 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-unp9e4_iur&p16#p-7o-_c%b1i)@yevd5j%ms1_0%zhd7)n%m_'
+def _env_bool(nome, padrao=False):
+    return os.environ.get(nome, str(padrao)).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
 
-ALLOWED_HOSTS = []
+# O modo de desenvolvimento permanece como padrão para facilitar a execução
+# local. Em produção, defina DJANGO_DEBUG=False e forneça DJANGO_SECRET_KEY.
+DEBUG = _env_bool("DJANGO_DEBUG", True)
+
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
+if not SECRET_KEY:
+    if not DEBUG:
+        raise ImproperlyConfigured(
+            "Defina DJANGO_SECRET_KEY ao executar o sistema em produção."
+        )
+    SECRET_KEY = "controlcond-chave-exclusiva-para-desenvolvimento-local-2026"
+
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.environ.get(
+        "DJANGO_ALLOWED_HOSTS",
+        "localhost,127.0.0.1,[::1]",
+    ).split(",")
+    if host.strip()
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    origem.strip()
+    for origem in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",")
+    if origem.strip()
+]
 
 
 # Application definition
@@ -118,3 +149,22 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+
+# As telas operacionais usam o login já fornecido pelo painel administrativo.
+LOGIN_URL = "/admin/login/"
+
+# Em produção, os cookies e todo o tráfego ficam restritos a HTTPS. Os valores
+# podem ser ajustados por ambiente sem manter segredos no repositório.
+SECURE_SSL_REDIRECT = _env_bool("DJANGO_SECURE_SSL_REDIRECT", not DEBUG)
+SESSION_COOKIE_SECURE = _env_bool("DJANGO_SESSION_COOKIE_SECURE", not DEBUG)
+CSRF_COOKIE_SECURE = _env_bool("DJANGO_CSRF_COOKIE_SECURE", not DEBUG)
+SECURE_HSTS_SECONDS = int(
+    os.environ.get("DJANGO_SECURE_HSTS_SECONDS", "0" if DEBUG else "31536000")
+)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = _env_bool(
+    "DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS",
+    not DEBUG,
+)
+SECURE_HSTS_PRELOAD = _env_bool("DJANGO_SECURE_HSTS_PRELOAD", not DEBUG)
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = "DENY"

@@ -69,6 +69,20 @@ class CalculosConsumoTests(SimpleTestCase):
                 leitura_atual=25,
             )
 
+    def test_rejeita_leitura_atual_ausente_ou_nao_finita(self):
+        with self.assertRaisesMessage(
+            ValueError,
+            "Informe a leitura atual de água.",
+        ):
+            calcular_consumo_agua(10, None)
+
+        for valor in ("NaN", "Infinity", "-Infinity"):
+            with self.subTest(valor=valor), self.assertRaisesRegex(
+                ValueError,
+                "número finito",
+            ):
+                calcular_consumo_agua(10, valor)
+
 
 class CalculosAguaTests(SimpleTestCase):
     def test_valor_agua_para_consumo_zero(self):
@@ -123,6 +137,13 @@ class CalculosAguaTests(SimpleTestCase):
 
         self.assertEqual(consumo, 9)
 
+    def test_valor_agua_rejeita_consumo_negativo_ou_fracionado(self):
+        with self.assertRaisesRegex(ValueError, "não pode ser negativo"):
+            calcular_valor_agua(-1)
+
+        with self.assertRaisesRegex(ValueError, "número inteiro"):
+            calcular_valor_agua(Decimal("1.5"))
+
 
 class CalculosGasTests(SimpleTestCase):
     def test_valor_gas(self):
@@ -153,3 +174,10 @@ class CalculosGasTests(SimpleTestCase):
         )
 
         self.assertEqual(consumo, 3)
+
+    def test_valor_gas_rejeita_consumo_negativo_ou_nao_finito(self):
+        with self.assertRaisesRegex(ValueError, "não pode ser negativo"):
+            calcular_valor_gas(-1)
+
+        with self.assertRaisesRegex(ValueError, "número finito"):
+            calcular_valor_gas("NaN")

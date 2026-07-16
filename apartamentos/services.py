@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from django.core.exceptions import ValidationError
 from django.db.models import Prefetch
 
 from faturas.models import Fatura
@@ -22,13 +23,16 @@ def cadastrar_apartamento(
         raise ValueError("O número do apartamento é obrigatório.")
     _validar_leituras_base(leitura_base_agua, leitura_base_gas)
 
-    return Apartamento.objects.create(
+    apartamento = Apartamento(
         numero=numero,
         bloco=bloco or None,
         observacoes=observacoes or None,
         leitura_base_agua=leitura_base_agua,
         leitura_base_gas=leitura_base_gas,
     )
+    _validar_modelo(apartamento)
+    apartamento.save(force_insert=True)
+    return apartamento
 
 
 def editar_apartamento(
@@ -45,7 +49,6 @@ def editar_apartamento(
     _validar_leituras_base(
         leitura_base_agua,
         leitura_base_gas,
-        apartamento=apartamento,
     )
 
     apartamento.numero = numero
@@ -53,6 +56,7 @@ def editar_apartamento(
     apartamento.observacoes = observacoes or None
     apartamento.leitura_base_agua = leitura_base_agua
     apartamento.leitura_base_gas = leitura_base_gas
+    _validar_modelo(apartamento)
     apartamento.save(
         update_fields=[
             "numero",
@@ -68,7 +72,6 @@ def editar_apartamento(
 def _validar_leituras_base(
     leitura_base_agua,
     leitura_base_gas,
-    apartamento=None,
 ):
     if leitura_base_agua is None or leitura_base_gas is None:
         raise ValueError(
@@ -85,29 +88,13 @@ def _validar_leituras_base(
             "A leitura-base de gás excede o valor máximo permitido."
         )
 
-    if apartamento is None:
-        return
 
-    primeira_leitura = apartamento.leituras.order_by(
-        "ano", "mes", "id"
-    ).first()
-    if primeira_leitura is None:
-        return
 
-    if (
-        primeira_leitura.leitura_agua is not None
-        and leitura_base_agua > primeira_leitura.leitura_agua
-    ):
-        raise ValueError(
-            "A leitura-base de água não pode ser maior que a primeira leitura cadastrada."
-        )
-    if (
-        primeira_leitura.leitura_gas is not None
-        and leitura_base_gas > primeira_leitura.leitura_gas
-    ):
-        raise ValueError(
-            "A leitura-base de gás não pode ser maior que a primeira leitura cadastrada."
-        )
+def _validar_modelo(apartamento):
+    try:
+        apartamento.full_clean(validate_unique=False, validate_constraints=False)
+    except ValidationError as exc:
+        raise ValueError(" ".join(exc.messages)) from exc
 
 
 def consultar_apartamento(apartamento_id):

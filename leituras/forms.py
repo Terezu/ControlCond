@@ -1,6 +1,6 @@
 from django import forms
 
-from .models import Leitura
+from .models import ANO_MAXIMO, Leitura
 
 
 class LeituraForm(forms.ModelForm):
@@ -30,17 +30,18 @@ class LeituraForm(forms.ModelForm):
             "ano": forms.NumberInput(
                 attrs={
                     "min": 2000,
+                    "max": ANO_MAXIMO,
                 }
             ),
             "leitura_agua": forms.NumberInput(
                 attrs={
-                    "step": "0.001",
+                    "step": "0.01",
                     "min": 0,
                 }
             ),
             "leitura_gas": forms.NumberInput(
                 attrs={
-                    "step": "0.001",
+                    "step": "0.01",
                     "min": 0,
                 }
             ),
@@ -90,4 +91,3 @@ class LeituraForm(forms.ModelForm):
             )
 
         return dados
-    

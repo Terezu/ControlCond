@@ -57,38 +57,3 @@ class ApartamentoForm(forms.ModelForm):
                 "A leitura-base de gás excede o valor máximo permitido."
             )
         return valor
-
-    def clean(self):
-        dados = super().clean()
-        if not self.instance.pk:
-            return dados
-
-        primeira_leitura = self.instance.leituras.order_by(
-            "ano", "mes", "id"
-        ).first()
-        if primeira_leitura is None:
-            return dados
-
-        leitura_base_agua = dados.get("leitura_base_agua")
-        if (
-            leitura_base_agua is not None
-            and primeira_leitura.leitura_agua is not None
-            and leitura_base_agua > primeira_leitura.leitura_agua
-        ):
-            self.add_error(
-                "leitura_base_agua",
-                "A leitura-base de água não pode ser maior que a primeira leitura cadastrada.",
-            )
-
-        leitura_base_gas = dados.get("leitura_base_gas")
-        if (
-            leitura_base_gas is not None
-            and primeira_leitura.leitura_gas is not None
-            and leitura_base_gas > primeira_leitura.leitura_gas
-        ):
-            self.add_error(
-                "leitura_base_gas",
-                "A leitura-base de gás não pode ser maior que a primeira leitura cadastrada.",
-            )
-
-        return dados

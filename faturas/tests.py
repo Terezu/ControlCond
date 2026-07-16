@@ -1,12 +1,14 @@
 from decimal import Decimal
 
+from django.db.models.deletion import ProtectedError
 from django.test import TestCase
 
 from apartamentos.models import Apartamento
 from leituras.models import Leitura
 
 from .models import Fatura
-from .services import gerar_fatura_mensal
+from .pdf import obter_leituras_fatura
+from .services import cadastrar_fatura, gerar_fatura_mensal
 
 
 class GerarFaturaMensalTests(TestCase):
@@ -284,3 +286,127 @@ class GerarFaturaMensalTests(TestCase):
             gerar_fatura_mensal(leitura.id)
 
         self.assertEqual(Fatura.objects.count(), 0)
+
+    def test_busca_ultima_medicao_de_cada_recurso_separadamente(self):
+        self.configurar_leituras_base(
+            agua=Decimal("90.00"),
+            gas=Decimal("10.00"),
+        )
+        self.criar_leitura(
+            mes=1,
+            ano=2026,
+            leitura_agua=Decimal("100.00"),
+            leitura_gas=Decimal("20.00"),
+        )
+        self.criar_leitura(
+            mes=2,
+            ano=2026,
+            leitura_agua=Decimal("105.00"),
+            leitura_gas=None,
+        )
+        leitura_atual = self.criar_leitura(
+            mes=3,
+            ano=2026,
+            leitura_agua=Decimal("111.00"),
+            leitura_gas=Decimal("23.00"),
+        )
+
+        fatura = gerar_fatura_mensal(leitura_atual.id)
+
+        self.assertEqual(fatura.consumo_agua, 6)
+        self.assertEqual(fatura.consumo_gas, 3)
+        self.assertEqual(fatura.leitura_agua_anterior, Decimal("105.00"))
+        self.assertEqual(fatura.leitura_gas_anterior, Decimal("20.00"))
+
+    def test_fatura_rejeita_leitura_de_outro_apartamento_ou_periodo(self):
+        outro = Apartamento.objects.create(
+            numero="202",
+            leitura_base_agua=Decimal("0.00"),
+            leitura_base_gas=Decimal("0.00"),
+        )
+        leitura = self.criar_leitura(
+            mes=1,
+            ano=2026,
+            leitura_agua=Decimal("1.00"),
+            leitura_gas=Decimal("1.00"),
+        )
+
+        with self.assertRaisesMessage(
+            ValueError,
+            "A leitura deve pertencer ao mesmo apartamento, mês e ano da fatura.",
+        ):
+            cadastrar_fatura(
+                apartamento_id=outro.id,
+                leitura_id=leitura.id,
+                mes=2,
+                ano=2026,
+                consumo_agua=0,
+                consumo_gas=0,
+            )
+
+        self.assertEqual(Fatura.objects.count(), 0)
+
+    def test_dados_de_emissao_nao_mudam_com_correcoes_posteriores(self):
+        self.configurar_leituras_base(
+            agua=Decimal("100.00"),
+            gas=Decimal("20.00"),
+        )
+        leitura = self.criar_leitura(
+            mes=1,
+            ano=2026,
+            leitura_agua=Decimal("108.00"),
+            leitura_gas=Decimal("23.00"),
+        )
+        fatura = gerar_fatura_mensal(leitura.id)
+
+        leitura.leitura_agua = Decimal("109.00")
+        leitura.leitura_gas = Decimal("24.00")
+        leitura.save(update_fields=["leitura_agua", "leitura_gas"])
+        self.apartamento.numero = "101-CORRIGIDO"
+        self.apartamento.leitura_base_agua = Decimal("99.00")
+        self.apartamento.save(
+            update_fields=["numero", "leitura_base_agua"]
+        )
+        fatura.refresh_from_db()
+
+        dados = obter_leituras_fatura(fatura)
+        self.assertEqual(dados["agua_anterior"], Decimal("100.00"))
+        self.assertEqual(dados["agua_atual"], Decimal("108.00"))
+        self.assertEqual(dados["gas_anterior"], Decimal("20.00"))
+        self.assertEqual(dados["gas_atual"], Decimal("23.00"))
+        self.assertEqual(fatura.apartamento_numero_emissao, "101")
+
+    def test_leitura_vinculada_a_fatura_nao_pode_ser_excluida(self):
+        self.configurar_leituras_base()
+        leitura = self.criar_leitura(
+            mes=1,
+            ano=2026,
+            leitura_agua=Decimal("1.00"),
+            leitura_gas=Decimal("1.00"),
+        )
+        gerar_fatura_mensal(leitura.id)
+
+        with self.assertRaises(ProtectedError):
+            leitura.delete()
+
+        self.assertTrue(Leitura.objects.filter(pk=leitura.pk).exists())
+
+    def test_cadastro_rejeita_booleano_como_consumo(self):
+        with self.assertRaisesRegex(ValueError, "consumo de água"):
+            cadastrar_fatura(
+                apartamento_id=self.apartamento.id,
+                mes=1,
+                ano=2026,
+                consumo_agua=True,
+                consumo_gas=0,
+            )
+
+    def test_cadastro_rejeita_ano_fora_do_intervalo_de_datas(self):
+        with self.assertRaisesRegex(ValueError, "ano válido"):
+            cadastrar_fatura(
+                apartamento_id=self.apartamento.id,
+                mes=1,
+                ano=10000,
+                consumo_agua=0,
+                consumo_gas=0,
+            )

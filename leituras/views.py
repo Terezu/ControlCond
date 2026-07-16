@@ -1,5 +1,7 @@
 from django.contrib import messages
+from django.contrib.admin.views.decorators import staff_member_required
 from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.cache import never_cache
 
 from apartamentos.models import Apartamento
 
@@ -7,6 +9,8 @@ from .forms import LeituraForm
 from .services import cadastrar_leitura
 
 
+@staff_member_required
+@never_cache
 def nova_leitura(request, apartamento_id):
     apartamento = get_object_or_404(
         Apartamento,

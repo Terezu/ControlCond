@@ -25,7 +25,10 @@
 
             <p>
                 <strong>Apartamento:</strong>
-                {{ fatura.apartamento }}
+                Apartamento {{ fatura.apartamento_numero_emissao }}
+                {% if fatura.apartamento_bloco_emissao %}
+                    - Bloco {{ fatura.apartamento_bloco_emissao }}
+                {% endif %}
             </p>
 
             <p>
@@ -75,15 +78,25 @@
         <section>
             <h2>Leitura vinculada</h2>
 
-            {% if fatura.leitura %}
+            {% if fatura.leitura_agua_atual != None or fatura.leitura_gas_atual != None %}
                 <p>
-                    <strong>Leitura de água:</strong>
-                    {{ fatura.leitura.leitura_agua }}
+                    <strong>Leitura anterior de água:</strong>
+                    {{ fatura.leitura_agua_anterior|default_if_none:"Não informada" }}
                 </p>
 
                 <p>
-                    <strong>Leitura de gás:</strong>
-                    {{ fatura.leitura.leitura_gas }}
+                    <strong>Leitura atual de água:</strong>
+                    {{ fatura.leitura_agua_atual|default_if_none:"Não informada" }}
+                </p>
+
+                <p>
+                    <strong>Leitura anterior de gás:</strong>
+                    {{ fatura.leitura_gas_anterior|default_if_none:"Não informada" }}
+                </p>
+
+                <p>
+                    <strong>Leitura atual de gás:</strong>
+                    {{ fatura.leitura_gas_atual|default_if_none:"Não informada" }}
                 </p>
             {% else %}
                 <p>
