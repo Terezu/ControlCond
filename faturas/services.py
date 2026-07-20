@@ -410,10 +410,39 @@ def consultar_fatura(fatura_id):
         raise ValueError("Fatura não encontrada.") from erro
 
 
-def listar_faturas():
-    return Fatura.objects.select_related("apartamento", "leitura").order_by(
-        "-ano", "-mes", "-id"
+def listar_faturas(
+    *,
+    apartamento_id=None,
+    bloco=None,
+    mes=None,
+    ano=None,
+    status=None,
+):
+    queryset = Fatura.objects.select_related(
+        "apartamento",
+        "leitura",
     )
+
+    if apartamento_id is not None:
+        queryset = queryset.filter(
+            apartamento_id=apartamento_id,
+        )
+
+    if bloco:
+        queryset = queryset.filter(
+            apartamento_bloco_emissao__iexact=bloco.strip(),
+        )
+
+    if mes is not None:
+        queryset = queryset.filter(mes=mes)
+
+    if ano is not None:
+        queryset = queryset.filter(ano=ano)
+
+    if status:
+        queryset = queryset.filter(status=status)
+
+    return queryset.order_by("-ano", "-mes", "-id")
 
 
 def editar_fatura(fatura_id, *, status=None):

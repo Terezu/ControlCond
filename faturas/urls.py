@@ -13,6 +13,11 @@ urlpatterns = [
         name="pdf",
     ),
     path(
+        "<int:fatura_id>/status/",
+        views.alterar_status_fatura,
+        name="alterar_status",
+    ),
+    path(
         "<int:fatura_id>/",
         views.detalhes_fatura,
         name="detalhes",

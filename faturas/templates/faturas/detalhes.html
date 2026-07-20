@@ -19,6 +19,14 @@
         </a>
     </header>
 
+    {% if messages %}
+        <section>
+            {% for message in messages %}
+                <p>{{ message }}</p>
+            {% endfor %}
+        </section>
+    {% endif %}
+
     <main>
         <section>
             <h2>Informações gerais</h2>
@@ -26,6 +34,7 @@
             <p>
                 <strong>Apartamento:</strong>
                 Apartamento {{ fatura.apartamento_numero_emissao }}
+
                 {% if fatura.apartamento_bloco_emissao %}
                     - Bloco {{ fatura.apartamento_bloco_emissao }}
                 {% endif %}
@@ -76,9 +85,9 @@
         </section>
 
         <section>
-            <h2>Leitura vinculada</h2>
+            <h2>Leituras utilizadas</h2>
 
-            {% if fatura.leitura_agua_atual != None or fatura.leitura_gas_atual != None %}
+            {% if fatura.leitura_agua_atual != None %}
                 <p>
                     <strong>Leitura anterior de água:</strong>
                     {{ fatura.leitura_agua_anterior|default_if_none:"Não informada" }}
@@ -100,7 +109,7 @@
                 </p>
             {% else %}
                 <p>
-                    Esta fatura não possui uma leitura vinculada.
+                    Esta fatura não possui informações de leitura registradas.
                 </p>
             {% endif %}
         </section>
@@ -108,13 +117,34 @@
         <section>
             <h2>Ações</h2>
 
-            <a
-                href="{% url 'faturas:pdf' fatura.id %}"
-                target="_blank"
-                rel="noopener noreferrer"
+            <p>
+                <a
+                    href="{% url 'faturas:pdf' fatura.id %}"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                >
+                    Visualizar PDF
+                </a>
+            </p>
+
+            <form
+                method="post"
+                action="{% url 'faturas:alterar_status' fatura.id %}"
             >
-                Visualizar PDF
-            </a>
+                {% csrf_token %}
+
+                {{ form_status.non_field_errors }}
+
+                <p>
+                    {{ form_status.status.label_tag }}
+                    {{ form_status.status }}
+                    {{ form_status.status.errors }}
+                </p>
+
+                <button type="submit">
+                    Atualizar status
+                </button>
+            </form>
         </section>
     </main>
 </body>

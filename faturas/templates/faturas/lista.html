@@ -1,32 +1,201 @@
-<h1>Faturas</h1>
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
 
-<a href="{% url 'faturas:gerar' %}">
-    Gerar nova fatura
-</a>
+    <title>Faturas</title>
+</head>
 
-{% for fatura in faturas %}
-    <div>
-        <p>
-            Apartamento: {{ fatura.apartamento_numero_emissao }}
-            {% if fatura.apartamento_bloco_emissao %}
-                - Bloco {{ fatura.apartamento_bloco_emissao }}
+<body>
+    <header>
+        <h1>Faturas</h1>
+
+        <nav aria-label="Ações da página">
+            <a href="{% url 'faturas:gerar' %}">
+                Gerar nova fatura
+            </a>
+        </nav>
+    </header>
+
+    <main>
+        {% if messages %}
+            <section
+                aria-label="Mensagens do sistema"
+                aria-live="polite"
+            >
+                {% for message in messages %}
+                    <p>{{ message }}</p>
+                {% endfor %}
+            </section>
+        {% endif %}
+
+        <section aria-labelledby="titulo-filtros">
+            <h2 id="titulo-filtros">Filtros</h2>
+
+            <form method="get">
+                {{ form_filtros.non_field_errors }}
+
+                <div>
+                    {{ form_filtros.apartamento.label_tag }}
+                    {{ form_filtros.apartamento }}
+                    {{ form_filtros.apartamento.errors }}
+                </div>
+
+                <div>
+                    {{ form_filtros.bloco.label_tag }}
+                    {{ form_filtros.bloco }}
+                    {{ form_filtros.bloco.errors }}
+                </div>
+
+                <div>
+                    {{ form_filtros.mes.label_tag }}
+                    {{ form_filtros.mes }}
+                    {{ form_filtros.mes.errors }}
+                </div>
+
+                <div>
+                    {{ form_filtros.ano.label_tag }}
+                    {{ form_filtros.ano }}
+                    {{ form_filtros.ano.errors }}
+                </div>
+
+                <div>
+                    {{ form_filtros.status.label_tag }}
+                    {{ form_filtros.status }}
+                    {{ form_filtros.status.errors }}
+                </div>
+
+                <div>
+                    <button type="submit">
+                        Filtrar
+                    </button>
+
+                    <a href="{% url 'faturas:lista' %}">
+                        Limpar filtros
+                    </a>
+                </div>
+            </form>
+        </section>
+
+        <hr>
+
+        <section aria-labelledby="titulo-lista-faturas">
+            <h2 id="titulo-lista-faturas">Faturas cadastradas</h2>
+
+            <p>
+                <strong>{{ pagina_faturas.paginator.count }}</strong>
+
+                {% if pagina_faturas.paginator.count == 1 %}
+                    Fatura encontrada.
+                {% else %}
+                    Faturas encontradas.
+                {% endif %}
+            </p>
+
+            {% for fatura in faturas %}
+                <article>
+                    <h3>
+                        Apartamento {{ fatura.apartamento_numero_emissao }}
+
+                        {% if fatura.apartamento_bloco_emissao %}
+                            - Bloco {{ fatura.apartamento_bloco_emissao }}
+                        {% endif %}
+                    </h3>
+
+                    <p>
+                        <strong>Referência:</strong>
+                        {{ fatura.mes|stringformat:"02d" }}/{{ fatura.ano }}
+                    </p>
+
+                    <p>
+                        <strong>Status:</strong>
+                        {{ fatura.get_status_display }}
+                    </p>
+
+                    <p>
+                        <strong>Valor total:</strong>
+                        R$ {{ fatura.valor_total|floatformat:2 }}
+                    </p>
+
+                    <p>
+                        <a href="{% url 'faturas:detalhes' fatura.id %}">
+                            Ver detalhes
+                        </a>
+
+                        <a
+                            href="{% url 'faturas:pdf' fatura.id %}"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                        >
+                            Visualizar PDF
+                        </a>
+                    </p>
+                </article>
+
+                {% if not forloop.last %}
+                    <hr>
+                {% endif %}
+            {% empty %}
+                <p>Nenhuma fatura encontrada.</p>
+            {% endfor %}
+
+            {% if pagina_faturas.paginator.num_pages > 1 %}
+                <nav aria-label="Paginação de faturas">
+                    <p>
+                        Página
+                        {{ pagina_faturas.number }}
+                        de
+                        {{ pagina_faturas.paginator.num_pages }}
+                    </p>
+
+                    {% if pagina_faturas.has_previous %}
+                        <a
+                            href="?{% if parametros_filtros %}{{ parametros_filtros }}&{% endif %}page=1"
+                        >
+                            Primeira
+                        </a>
+
+                        <a
+                            href="?{% if parametros_filtros %}{{ parametros_filtros }}&{% endif %}page={{ pagina_faturas.previous_page_number }}"
+                        >
+                            Anterior
+                        </a>
+                    {% endif %}
+
+                    {% for numero in pagina_faturas.paginator.page_range %}
+                        {% if numero == pagina_faturas.number %}
+                            <strong>
+                                {{ numero }}
+                            </strong>
+                        {% elif numero >= pagina_faturas.number|add:"-2" and numero <= pagina_faturas.number|add:"2" %}
+                            <a
+                                href="?{% if parametros_filtros %}{{ parametros_filtros }}&{% endif %}page={{ numero }}"
+                            >
+                                {{ numero }}
+                            </a>
+                        {% endif %}
+                    {% endfor %}
+
+                    {% if pagina_faturas.has_next %}
+                        <a
+                            href="?{% if parametros_filtros %}{{ parametros_filtros }}&{% endif %}page={{ pagina_faturas.next_page_number }}"
+                        >
+                            Próxima
+                        </a>
+
+                        <a
+                            href="?{% if parametros_filtros %}{{ parametros_filtros }}&{% endif %}page={{ pagina_faturas.paginator.num_pages }}"
+                        >
+                            Última
+                        </a>
+                    {% endif %}
+                </nav>
             {% endif %}
-        </p>
-
-        <p>
-            Referência:
-            {{ fatura.mes|stringformat:"02d" }}/{{ fatura.ano }}
-        </p>
-
-        <p>
-            Valor total:
-            R$ {{ fatura.valor_total|floatformat:2 }}
-        </p>
-
-        <a href="{% url 'faturas:detalhes' fatura.id %}">
-            Ver detalhes
-        </a>
-    </div>
-{% empty %}
-    <p>Nenhuma fatura cadastrada.</p>
-{% endfor %}
+        </section>
+    </main>
+</body>
+</html>

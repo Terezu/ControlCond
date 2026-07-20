@@ -1,9 +1,10 @@
 from django import forms
 from django.db.models import Exists, OuterRef
 
+from apartamentos.models import Apartamento
 from leituras.models import Leitura
 
-from .models import Fatura
+from .models import Fatura, ANO_MAXIMO
 
 
 class GerarFaturaForm(forms.Form):
@@ -49,4 +50,67 @@ class GerarFaturaForm(forms.Form):
             f"{leitura.mes:02d}/{leitura.ano} | "
             f"Água: {leitura.leitura_agua} | "
             f"Gás: {leitura.leitura_gas}"
+        )
+
+class AlterarStatusFaturaForm(forms.Form):
+    status = forms.ChoiceField(
+        choices=Fatura.Status.choices,
+        label="Novo status",
+    )
+
+    def __init__(self, *args, fatura=None, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if fatura is not None:
+            self.fields["status"].initial = fatura.status
+
+
+class FiltrarFaturasForm(forms.Form):
+    apartamento = forms.ModelChoiceField(
+        queryset=Apartamento.objects.none(),
+        required=False,
+        label="Apartamento",
+        empty_label="Todos os apartamentos",
+    )
+
+    bloco = forms.CharField(
+        required=False,
+        label="Bloco",
+        max_length=50,
+    )
+
+    mes = forms.ChoiceField(
+        required=False,
+        label="Mês",
+        choices=[
+            ("", "Todos os meses"),
+            *[
+                (numero, f"{numero:02d}")
+                for numero in range(1, 13)
+            ],
+        ],
+    )
+
+    ano = forms.IntegerField(
+        required=False,
+        label="Ano",
+        min_value=2000,
+        max_value=ANO_MAXIMO,
+    )
+
+    status = forms.ChoiceField(
+        required=False,
+        label="Status",
+        choices=[
+            ("", "Todos os status"),
+            *Fatura.Status.choices,
+        ],
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.fields["apartamento"].queryset = (
+            Apartamento.objects
+            .order_by("bloco", "numero", "id")
         )
