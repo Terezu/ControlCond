@@ -4,8 +4,7 @@ from django.http import Http404
 from django.shortcuts import redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.cache import never_cache
-
-from leituras.services import listar_leituras, obter_ultima_leitura
+from django.views.decorators.http import require_http_methods, require_safe
 
 from .forms import ApartamentoForm
 from .services import (
@@ -63,26 +62,30 @@ def _redirecionar_para_next(request):
 
 @staff_member_required
 @never_cache
+@require_http_methods(["GET", "POST"])
 def novo_apartamento(request):
     form = ApartamentoForm(request.POST or None)
 
     if request.method == "POST" and form.is_valid():
-        apartamento = _salvar_formulario(form)
+        try:
+            apartamento = _salvar_formulario(form)
+        except ValueError as exc:
+            form.add_error(None, str(exc))
+        else:
+            messages.success(
+                request,
+                "Apartamento cadastrado com sucesso.",
+            )
 
-        messages.success(
-            request,
-            "Apartamento cadastrado com sucesso.",
-        )
+            redirecionamento = _redirecionar_para_next(request)
 
-        redirecionamento = _redirecionar_para_next(request)
+            if redirecionamento:
+                return redirecionamento
 
-        if redirecionamento:
-            return redirecionamento
-
-        return redirect(
-            "apartamentos:detalhes",
-            apartamento_id=apartamento.id,
-        )
+            return redirect(
+                "apartamentos:detalhes",
+                apartamento_id=apartamento.id,
+            )
 
     return render(
         request,
@@ -97,6 +100,7 @@ def novo_apartamento(request):
 
 @staff_member_required
 @never_cache
+@require_http_methods(["GET", "POST"])
 def editar_dados_apartamento(request, apartamento_id):
     try:
         apartamento = consultar_apartamento(apartamento_id)
@@ -109,25 +113,28 @@ def editar_dados_apartamento(request, apartamento_id):
     )
 
     if request.method == "POST" and form.is_valid():
-        apartamento = _salvar_formulario(
-            form,
-            apartamento_id,
-        )
+        try:
+            apartamento = _salvar_formulario(
+                form,
+                apartamento_id,
+            )
+        except ValueError as exc:
+            form.add_error(None, str(exc))
+        else:
+            messages.success(
+                request,
+                "Apartamento atualizado com sucesso.",
+            )
 
-        messages.success(
-            request,
-            "Apartamento atualizado com sucesso.",
-        )
+            redirecionamento = _redirecionar_para_next(request)
 
-        redirecionamento = _redirecionar_para_next(request)
+            if redirecionamento:
+                return redirecionamento
 
-        if redirecionamento:
-            return redirecionamento
-
-        return redirect(
-            "apartamentos:detalhes",
-            apartamento_id=apartamento.id,
-        )
+            return redirect(
+                "apartamentos:detalhes",
+                apartamento_id=apartamento.id,
+            )
 
     return render(
         request,
@@ -143,6 +150,7 @@ def editar_dados_apartamento(request, apartamento_id):
 
 @staff_member_required
 @never_cache
+@require_safe
 def lista_apartamentos(request):
     return render(
         request,
@@ -155,6 +163,7 @@ def lista_apartamentos(request):
 
 @staff_member_required
 @never_cache
+@require_safe
 def detalhes_apartamento(request, apartamento_id):
     try:
         apartamento = consultar_detalhes_apartamento(
@@ -163,13 +172,16 @@ def detalhes_apartamento(request, apartamento_id):
     except ValueError as exc:
         raise Http404(str(exc)) from exc
 
+    leituras = list(apartamento.leituras.all())
+    faturas = list(apartamento.faturas.all())
+
     return render(
         request,
         "apartamentos/detalhes.html",
         {
             "apartamento": apartamento,
-            "ultima_leitura": obter_ultima_leitura(apartamento),
-            "leituras": listar_leituras(apartamento),
-            "faturas": apartamento.faturas.all(),
+            "ultima_leitura": leituras[0] if leituras else None,
+            "leituras": leituras,
+            "faturas": faturas,
         },
     )

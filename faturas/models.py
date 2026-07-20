@@ -1,7 +1,9 @@
 from decimal import Decimal
 
+from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.db.models.functions import Round
 
 from apartamentos.models import Apartamento
 from leituras.models import Leitura
@@ -134,6 +136,15 @@ class Fatura(models.Model):
             ),
             models.CheckConstraint(
                 condition=models.Q(
+                    valor_total=Round(
+                        models.F("valor_agua") + models.F("valor_gas"),
+                        precision=2,
+                    )
+                ),
+                name="fatura_total_igual_a_soma",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(
                     status__in=["pendente", "paga", "cancelada"]
                 ),
                 name="fatura_status_valido",
@@ -142,3 +153,35 @@ class Fatura(models.Model):
     
     def __str__(self):
         return f"Fatura {self.mes:02d}/{self.ano} - {self.apartamento}"
+
+    def clean(self):
+        super().clean()
+
+        erros = {}
+        valores = (self.valor_agua, self.valor_gas, self.valor_total)
+        if all(isinstance(valor, Decimal) for valor in valores):
+            total_esperado = self.valor_agua + self.valor_gas
+            if self.valor_total != total_esperado:
+                erros["valor_total"] = (
+                    "O valor total deve ser igual à soma dos valores de água e gás."
+                )
+
+        if self.leitura_id is not None:
+            dados_leitura = (
+                Leitura.objects
+                .filter(pk=self.leitura_id)
+                .values("apartamento_id", "mes", "ano")
+                .first()
+            )
+            if dados_leitura is not None and (
+                dados_leitura["apartamento_id"] != self.apartamento_id
+                or dados_leitura["mes"] != self.mes
+                or dados_leitura["ano"] != self.ano
+            ):
+                erros["leitura"] = (
+                    "A leitura deve pertencer ao mesmo apartamento, mês e ano "
+                    "da fatura."
+                )
+
+        if erros:
+            raise ValidationError(erros)

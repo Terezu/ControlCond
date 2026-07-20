@@ -88,26 +88,34 @@ class CalculosAguaTests(SimpleTestCase):
     def test_valor_agua_para_consumo_zero(self):
         valor = calcular_valor_agua(0)
 
-        self.assertEqual(valor, Decimal("101.99"))
+        self.assertEqual(valor, Decimal("101.91"))
 
     def test_valor_agua_para_consumo_dez(self):
         valor = calcular_valor_agua(10)
 
-        self.assertEqual(valor, Decimal("117.63"))
+        self.assertEqual(valor, Decimal("117.66"))
 
-    def test_consumo_sem_tarifa_cadastrada_gera_erro(self):
-        with self.assertRaisesMessage(
-            ValueError,
-            "Não existe tarifa cadastrada para 14 m³.",
-        ):
-            calcular_valor_agua(14)
+    def test_calcula_faixas_antes_ausentes(self):
+        self.assertEqual(calcular_valor_agua(14), Decimal("187.90"))
+        self.assertEqual(calcular_valor_agua(16), Decimal("223.11"))
 
-    def test_consumo_acima_do_limite_gera_erro(self):
-        with self.assertRaisesMessage(
-            ValueError,
-            "O consumo informado é superior ao limite cadastrado",
-        ):
-            calcular_valor_agua(18)
+    def test_calcula_consumo_acima_de_trinta(self):
+        self.assertEqual(calcular_valor_agua(31), Decimal("501.83"))
+
+    def test_aplica_corretamente_os_limites_das_faixas(self):
+        valores_esperados = {
+            5: Decimal("101.91"),
+            6: Decimal("105.06"),
+            11: Decimal("135.22"),
+            15: Decimal("205.46"),
+            20: Decimal("293.71"),
+            21: Decimal("311.51"),
+            30: Decimal("471.71"),
+        }
+
+        for consumo, esperado in valores_esperados.items():
+            with self.subTest(consumo=consumo):
+                self.assertEqual(calcular_valor_agua(consumo), esperado)
 
     def test_calcular_agua_retorna_dados_completos(self):
         resultado = calcular_agua(
@@ -118,7 +126,7 @@ class CalculosAguaTests(SimpleTestCase):
         self.assertEqual(resultado["leitura_anterior"], 100)
         self.assertEqual(resultado["leitura_atual"], 108)
         self.assertEqual(resultado["consumo"], 8)
-        self.assertEqual(resultado["valor"], Decimal("111.34"))
+        self.assertEqual(resultado["valor"], Decimal("111.36"))
 
     
     def test_consumo_agua_decimal_ignora_casas_decimais(self):

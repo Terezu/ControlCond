@@ -4,6 +4,7 @@ from django.http import FileResponse, Http404
 from django.shortcuts import redirect, render
 from django.utils.text import slugify
 from django.views.decorators.cache import never_cache
+from django.views.decorators.http import require_http_methods, require_safe
 
 from .forms import GerarFaturaForm
 from .services import gerar_fatura_mensal, listar_faturas, consultar_fatura
@@ -12,6 +13,7 @@ from .pdf import gerar_pdf_fatura
 
 @staff_member_required
 @never_cache
+@require_safe
 def lista_faturas(request):
     return render(
         request,
@@ -24,6 +26,7 @@ def lista_faturas(request):
 
 @staff_member_required
 @never_cache
+@require_safe
 def detalhes_fatura(request, fatura_id):
     try:
         fatura = consultar_fatura(fatura_id)
@@ -41,6 +44,7 @@ def detalhes_fatura(request, fatura_id):
 
 @staff_member_required
 @never_cache
+@require_http_methods(["GET", "POST"])
 def gerar_fatura(request):
     apartamento_sem_leitura_base = None
 
@@ -90,6 +94,7 @@ def gerar_fatura(request):
 
 @staff_member_required
 @never_cache
+@require_safe
 def visualizar_pdf_fatura(request, fatura_id):
     try:
         fatura = consultar_fatura(fatura_id)

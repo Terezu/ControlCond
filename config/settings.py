@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
+from django.utils.csp import CSP
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -23,12 +24,39 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 def _env_bool(nome, padrao=False):
-    return os.environ.get(nome, str(padrao)).strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
+    valor = os.environ.get(nome)
+    if valor is None:
+        return padrao
+
+    valor_normalizado = valor.strip().lower()
+    if valor_normalizado in {"1", "true", "yes", "on"}:
+        return True
+    if valor_normalizado in {"0", "false", "no", "off"}:
+        return False
+
+    raise ImproperlyConfigured(
+        f"{nome} deve usar um valor booleano: "
+        "true/false, yes/no, on/off ou 1/0."
+    )
+
+
+def _env_int(nome, padrao, *, minimo=None):
+    valor = os.environ.get(nome)
+    if valor is None:
+        numero = padrao
+    else:
+        try:
+            numero = int(valor.strip())
+        except (TypeError, ValueError) as exc:
+            raise ImproperlyConfigured(
+                f"{nome} deve ser um número inteiro."
+            ) from exc
+
+    if minimo is not None and numero < minimo:
+        raise ImproperlyConfigured(
+            f"{nome} deve ser maior ou igual a {minimo}."
+        )
+    return numero
 
 
 # O modo de desenvolvimento permanece como padrão para facilitar a execução
@@ -36,7 +64,7 @@ def _env_bool(nome, padrao=False):
 DEBUG = _env_bool("DJANGO_DEBUG", True)
 
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
-if not SECRET_KEY:
+if not SECRET_KEY or not SECRET_KEY.strip():
     if not DEBUG:
         raise ImproperlyConfigured(
             "Defina DJANGO_SECRET_KEY ao executar o sistema em produção."
@@ -75,6 +103,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'django.middleware.csp.ContentSecurityPolicyMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -106,10 +135,23 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
+caminho_banco_configurado = os.environ.get("DJANGO_DATABASE_PATH")
+CAMINHO_BANCO = Path(
+    caminho_banco_configurado
+    if caminho_banco_configurado and caminho_banco_configurado.strip()
+    else BASE_DIR / "controlcond.db"
+)
+if not CAMINHO_BANCO.is_absolute():
+    CAMINHO_BANCO = BASE_DIR / CAMINHO_BANCO
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'controlcond.db',
+        'NAME': CAMINHO_BANCO,
+        'OPTIONS': {
+            'timeout': _env_int("DJANGO_SQLITE_TIMEOUT", 20, minimo=1),
+            'transaction_mode': 'IMMEDIATE',
+        },
     }
 }
 
@@ -158,8 +200,10 @@ LOGIN_URL = "/admin/login/"
 SECURE_SSL_REDIRECT = _env_bool("DJANGO_SECURE_SSL_REDIRECT", not DEBUG)
 SESSION_COOKIE_SECURE = _env_bool("DJANGO_SESSION_COOKIE_SECURE", not DEBUG)
 CSRF_COOKIE_SECURE = _env_bool("DJANGO_CSRF_COOKIE_SECURE", not DEBUG)
-SECURE_HSTS_SECONDS = int(
-    os.environ.get("DJANGO_SECURE_HSTS_SECONDS", "0" if DEBUG else "31536000")
+SECURE_HSTS_SECONDS = _env_int(
+    "DJANGO_SECURE_HSTS_SECONDS",
+    0 if DEBUG else 31536000,
+    minimo=0,
 )
 SECURE_HSTS_INCLUDE_SUBDOMAINS = _env_bool(
     "DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS",
@@ -168,3 +212,22 @@ SECURE_HSTS_INCLUDE_SUBDOMAINS = _env_bool(
 SECURE_HSTS_PRELOAD = _env_bool("DJANGO_SECURE_HSTS_PRELOAD", not DEBUG)
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"
+
+# Ative somente quando o proxy reverso remover qualquer cabeçalho recebido do
+# cliente e definir X-Forwarded-Proto com base na conexão externa real.
+if _env_bool("DJANGO_TRUST_X_FORWARDED_PROTO", False):
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# O sistema não depende de scripts ou recursos de terceiros. A única exceção
+# a conteúdo inline são estilos usados pelo próprio painel administrativo.
+SECURE_CSP = {
+    "default-src": [CSP.SELF],
+    "base-uri": [CSP.SELF],
+    "form-action": [CSP.SELF],
+    "frame-ancestors": [CSP.NONE],
+    "object-src": [CSP.NONE],
+    "script-src": [CSP.SELF],
+    "style-src": [CSP.SELF, CSP.UNSAFE_INLINE],
+    "img-src": [CSP.SELF, "data:"],
+    "font-src": [CSP.SELF],
+}

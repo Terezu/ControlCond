@@ -1,14 +1,13 @@
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.db.models import Prefetch
 
 from faturas.models import Fatura
 from leituras.models import Leitura
 
-from .models import Apartamento
-
-LIMITE_LEITURA = Decimal("999999.99")
+from .models import LIMITE_LEITURA, Apartamento
 
 
 def cadastrar_apartamento(
@@ -19,14 +18,18 @@ def cadastrar_apartamento(
     observacoes=None,
 ):
     """Cria e retorna um apartamento."""
-    if not numero:
-        raise ValueError("O número do apartamento é obrigatório.")
-    _validar_leituras_base(leitura_base_agua, leitura_base_gas)
+    numero = _normalizar_numero(numero)
+    bloco = _normalizar_texto_opcional(bloco)
+    observacoes = _normalizar_texto_opcional(observacoes)
+    leitura_base_agua, leitura_base_gas = _validar_leituras_base(
+        leitura_base_agua,
+        leitura_base_gas,
+    )
 
     apartamento = Apartamento(
         numero=numero,
-        bloco=bloco or None,
-        observacoes=observacoes or None,
+        bloco=bloco,
+        observacoes=observacoes,
         leitura_base_agua=leitura_base_agua,
         leitura_base_gas=leitura_base_gas,
     )
@@ -35,6 +38,7 @@ def cadastrar_apartamento(
     return apartamento
 
 
+@transaction.atomic
 def editar_apartamento(
     apartamento_id,
     numero,
@@ -43,17 +47,25 @@ def editar_apartamento(
     bloco=None,
     observacoes=None,
 ):
-    apartamento = consultar_apartamento(apartamento_id)
-    if not numero:
-        raise ValueError("O número do apartamento é obrigatório.")
-    _validar_leituras_base(
+    try:
+        apartamento = (
+            Apartamento.objects
+            .select_for_update()
+            .get(pk=apartamento_id)
+        )
+    except Apartamento.DoesNotExist as exc:
+        raise ValueError("Apartamento não encontrado.") from exc
+    numero = _normalizar_numero(numero)
+    bloco = _normalizar_texto_opcional(bloco)
+    observacoes = _normalizar_texto_opcional(observacoes)
+    leitura_base_agua, leitura_base_gas = _validar_leituras_base(
         leitura_base_agua,
         leitura_base_gas,
     )
 
     apartamento.numero = numero
-    apartamento.bloco = bloco or None
-    apartamento.observacoes = observacoes or None
+    apartamento.bloco = bloco
+    apartamento.observacoes = observacoes
     apartamento.leitura_base_agua = leitura_base_agua
     apartamento.leitura_base_gas = leitura_base_gas
     _validar_modelo(apartamento)
@@ -77,16 +89,53 @@ def _validar_leituras_base(
         raise ValueError(
             "Informe as leituras-base de água e gás."
         )
-    if leitura_base_agua < 0 or leitura_base_gas < 0:
-        raise ValueError("As leituras-base não podem ser negativas.")
-    if leitura_base_agua > LIMITE_LEITURA:
+    return (
+        _normalizar_leitura_base(leitura_base_agua, "água"),
+        _normalizar_leitura_base(leitura_base_gas, "gás"),
+    )
+
+
+def _normalizar_leitura_base(valor, recurso):
+    if isinstance(valor, bool):
         raise ValueError(
-            "A leitura-base de água excede o valor máximo permitido."
+            f"A leitura-base de {recurso} deve ser um número válido."
         )
-    if leitura_base_gas > LIMITE_LEITURA:
+    try:
+        valor = Decimal(str(valor))
+    except (InvalidOperation, TypeError, ValueError) as exc:
         raise ValueError(
-            "A leitura-base de gás excede o valor máximo permitido."
+            f"A leitura-base de {recurso} deve ser um número válido."
+        ) from exc
+
+    if not valor.is_finite():
+        raise ValueError(
+            f"A leitura-base de {recurso} deve ser um número finito."
         )
+    if valor < 0:
+        raise ValueError(
+            f"A leitura-base de {recurso} não pode ser negativa."
+        )
+    if valor > LIMITE_LEITURA:
+        raise ValueError(
+            f"A leitura-base de {recurso} excede o valor máximo permitido."
+        )
+    return valor
+
+
+def _normalizar_numero(numero):
+    if numero is None or isinstance(numero, bool):
+        raise ValueError("O número do apartamento é obrigatório.")
+    numero = str(numero).strip()
+    if not numero:
+        raise ValueError("O número do apartamento é obrigatório.")
+    return numero
+
+
+def _normalizar_texto_opcional(valor):
+    if valor is None:
+        return None
+    valor = str(valor).strip()
+    return valor or None
 
 
 
@@ -129,6 +178,14 @@ def listar_apartamentos():
     return Apartamento.objects.order_by("bloco", "numero", "id")
 
 
+@transaction.atomic
 def excluir_apartamento(apartamento_id):
-    apartamento = consultar_apartamento(apartamento_id)
+    try:
+        apartamento = (
+            Apartamento.objects
+            .select_for_update()
+            .get(pk=apartamento_id)
+        )
+    except Apartamento.DoesNotExist as exc:
+        raise ValueError("Apartamento não encontrado.") from exc
     apartamento.delete()

@@ -1,14 +1,21 @@
 from decimal import Decimal
+from tempfile import TemporaryDirectory
 
+from django.db import IntegrityError, transaction
 from django.db.models.deletion import ProtectedError
 from django.test import TestCase
 
 from apartamentos.models import Apartamento
 from leituras.models import Leitura
 
+from .forms import GerarFaturaForm
 from .models import Fatura
 from .pdf import obter_leituras_fatura
-from .services import cadastrar_fatura, gerar_fatura_mensal
+from .services import (
+    cadastrar_fatura,
+    gerar_fatura_mensal,
+    gerar_pdf_fatura as salvar_pdf_fatura,
+)
 
 
 class GerarFaturaMensalTests(TestCase):
@@ -72,7 +79,7 @@ class GerarFaturaMensalTests(TestCase):
 
         self.assertEqual(
             fatura.valor_agua,
-            Decimal("108.20"),
+            Decimal("108.21"),
         )
         self.assertEqual(
             fatura.valor_gas,
@@ -80,7 +87,7 @@ class GerarFaturaMensalTests(TestCase):
         )
         self.assertEqual(
             fatura.valor_total,
-            Decimal("171.26"),
+            Decimal("171.27"),
         )
 
     def test_usa_a_leitura_anterior_mais_recente(self):
@@ -232,7 +239,7 @@ class GerarFaturaMensalTests(TestCase):
 
         self.assertEqual(
             fatura.valor_agua,
-            Decimal("108.20"),
+            Decimal("108.21"),
         )
         self.assertEqual(
             fatura.valor_gas,
@@ -240,7 +247,7 @@ class GerarFaturaMensalTests(TestCase):
         )
         self.assertEqual(
             fatura.valor_total,
-            Decimal("171.26"),
+            Decimal("171.27"),
         )
 
     def test_primeira_fatura_pode_usar_leituras_base_zero(self):
@@ -260,7 +267,7 @@ class GerarFaturaMensalTests(TestCase):
 
         self.assertEqual(
             fatura.valor_agua,
-            Decimal("108.20"),
+            Decimal("108.21"),
         )
         self.assertEqual(
             fatura.valor_gas,
@@ -268,7 +275,7 @@ class GerarFaturaMensalTests(TestCase):
         )
         self.assertEqual(
             fatura.valor_total,
-            Decimal("171.26"),
+            Decimal("171.27"),
         )
 
     def test_impede_primeira_fatura_sem_leituras_base(self):
@@ -410,3 +417,117 @@ class GerarFaturaMensalTests(TestCase):
                 consumo_agua=0,
                 consumo_gas=0,
             )
+
+    def test_cadastro_rejeita_dados_divergentes_da_leitura_vinculada(self):
+        self.configurar_leituras_base()
+        leitura = self.criar_leitura(
+            mes=1,
+            ano=2026,
+            leitura_agua=Decimal("1.00"),
+            leitura_gas=Decimal("1.00"),
+        )
+
+        with self.assertRaisesRegex(ValueError, "não correspondem"):
+            cadastrar_fatura(
+                apartamento_id=self.apartamento.id,
+                leitura_id=leitura.id,
+                mes=1,
+                ano=2026,
+                consumo_agua=999,
+                consumo_gas=999,
+                valor_agua=Decimal("1.00"),
+                valor_gas=Decimal("1.00"),
+                leitura_agua_atual=Decimal("999.00"),
+                leitura_gas_atual=Decimal("999.00"),
+            )
+
+        self.assertFalse(Fatura.objects.exists())
+
+    def test_cadastro_deriva_dados_da_leitura_quando_omitidos(self):
+        self.configurar_leituras_base()
+        leitura = self.criar_leitura(
+            mes=1,
+            ano=2026,
+            leitura_agua=Decimal("1.00"),
+            leitura_gas=Decimal("1.00"),
+        )
+
+        fatura = cadastrar_fatura(
+            apartamento_id=self.apartamento.id,
+            leitura_id=leitura.id,
+            mes=1,
+            ano=2026,
+        )
+
+        self.assertEqual(fatura.consumo_agua, 1)
+        self.assertEqual(fatura.consumo_gas, 1)
+        self.assertEqual(fatura.valor_agua, Decimal("101.91"))
+        self.assertEqual(fatura.valor_gas, Decimal("21.02"))
+        self.assertEqual(fatura.leitura_agua_atual, Decimal("1.00"))
+
+    def test_gerador_em_disco_reutiliza_o_pdf_canonico(self):
+        fatura = Fatura.objects.create(
+            apartamento=self.apartamento,
+            mes=1,
+            ano=2026,
+            consumo_agua=0,
+            consumo_gas=0,
+            apartamento_numero_emissao=self.apartamento.numero,
+        )
+
+        with TemporaryDirectory() as pasta:
+            caminho = salvar_pdf_fatura(fatura.id, pasta)
+            conteudo = caminho.read_bytes()
+
+        self.assertTrue(conteudo.startswith(b"%PDF"))
+
+    def test_banco_rejeita_total_diferente_da_soma(self):
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            Fatura.objects.create(
+                apartamento=self.apartamento,
+                mes=1,
+                ano=2026,
+                consumo_agua=1,
+                consumo_gas=1,
+                valor_agua=Decimal("10.00"),
+                valor_gas=Decimal("5.00"),
+                valor_total=Decimal("99.00"),
+            )
+
+    def test_formulario_exibe_apenas_leituras_aptas_a_faturamento(self):
+        incompleta = self.criar_leitura(
+            mes=1,
+            ano=2026,
+            leitura_agua=Decimal("1.00"),
+            leitura_gas=None,
+        )
+        ja_faturada = self.criar_leitura(
+            mes=2,
+            ano=2026,
+            leitura_agua=Decimal("2.00"),
+            leitura_gas=Decimal("2.00"),
+        )
+        Fatura.objects.create(
+            apartamento=self.apartamento,
+            mes=2,
+            ano=2026,
+            consumo_agua=0,
+            consumo_gas=0,
+        )
+        elegivel = self.criar_leitura(
+            mes=3,
+            ano=2026,
+            leitura_agua=Decimal("3.00"),
+            leitura_gas=Decimal("3.00"),
+        )
+
+        ids = set(
+            GerarFaturaForm()
+            .fields["leitura"]
+            .queryset
+            .values_list("id", flat=True)
+        )
+
+        self.assertIn(elegivel.id, ids)
+        self.assertNotIn(incompleta.id, ids)
+        self.assertNotIn(ja_faturada.id, ids)

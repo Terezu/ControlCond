@@ -120,7 +120,7 @@ def desenhar_consumo_agua(pdf, fatura, leituras, y):
     pdf.drawString(
         MARGEM_ESQUERDA,
         y,
-        "Água",
+        "Água e esgoto",
     )
 
     y -= 25

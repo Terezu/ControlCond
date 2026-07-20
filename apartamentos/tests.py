@@ -1,4 +1,5 @@
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.db.models.deletion import ProtectedError
@@ -164,6 +165,43 @@ class FluxoApartamentoTests(TestCase):
                 leitura_base_gas=Decimal("25.01"),
             )
 
+    def test_servico_normaliza_entradas_e_rejeita_valores_nao_finitos(self):
+        apartamento = cadastrar_apartamento(
+            numero=" 202 ",
+            bloco=" B ",
+            leitura_base_agua="100.00",
+            leitura_base_gas="20.00",
+        )
+
+        self.assertEqual(apartamento.numero, "202")
+        self.assertEqual(apartamento.bloco, "B")
+        self.assertEqual(apartamento.leitura_base_agua, Decimal("100.00"))
+
+        for valor in ("NaN", "Infinity", True):
+            with self.subTest(valor=valor), self.assertRaises(ValueError):
+                cadastrar_apartamento(
+                    numero="303",
+                    leitura_base_agua=valor,
+                    leitura_base_gas="0",
+                )
+
+    @patch(
+        "apartamentos.views._salvar_formulario",
+        side_effect=ValueError("Falha concorrente de validação."),
+    )
+    def test_erro_de_dominio_no_salvamento_volta_ao_formulario(self, _salvar):
+        resposta = self.client.post(
+            reverse("apartamentos:novo"),
+            {
+                "numero": "404",
+                "leitura_base_agua": "0",
+                "leitura_base_gas": "0",
+            },
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Falha concorrente de validação.")
+
 
 class ProtecaoApartamentoTest(TestCase):
     def setUp(self):
@@ -293,3 +331,19 @@ class SegurancaViewsApartamentoTests(TestCase):
                 self.assertEqual(resposta.status_code, 200)
                 self.assertIn("no-store", resposta["Cache-Control"])
                 self.assertIn("private", resposta["Cache-Control"])
+                politica = resposta["Content-Security-Policy"]
+                self.assertIn("default-src 'self'", politica)
+                self.assertIn("object-src 'none'", politica)
+
+    def test_endpoints_rejeitam_metodos_http_inesperados(self):
+        self.client.force_login(self.usuario)
+
+        respostas = [
+            self.client.put(reverse("apartamentos:novo")),
+            self.client.delete(reverse("faturas:gerar")),
+            self.client.post(reverse("apartamentos:lista")),
+        ]
+
+        for resposta in respostas:
+            with self.subTest(url=resposta.request["PATH_INFO"]):
+                self.assertEqual(resposta.status_code, 405)

@@ -28,3 +28,6 @@ env/
 
 # Logs
 *.log
+
+# Documentos gerados localmente (podem conter dados do condomínio)
+/faturas_geradas/

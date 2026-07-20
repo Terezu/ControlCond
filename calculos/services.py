@@ -1,26 +1,23 @@
-from decimal import Decimal, InvalidOperation, ROUND_DOWN, ROUND_HALF_UP
+from decimal import (
+    Decimal,
+    DecimalException,
+    InvalidOperation,
+    ROUND_DOWN,
+    ROUND_HALF_UP,
+)
 
 
-VALORES_AGUA = {
-    0: Decimal("101.99"),
-    1: Decimal("101.99"),
-    2: Decimal("101.99"),
-    3: Decimal("101.99"),
-    4: Decimal("101.99"),
-    5: Decimal("101.99"),
-    6: Decimal("105.05"),
-    7: Decimal("108.20"),
-    8: Decimal("111.34"),
-    9: Decimal("114.49"),
-    10: Decimal("117.63"),
-    11: Decimal("135.18"),
-    12: Decimal("152.74"),
-    13: Decimal("170.29"),
-    14: None,
-    15: Decimal("205.41"),
-    16: None,
-    17: Decimal("240.70"),
-}
+# Tarifa residencial normal de água e esgoto de Curitiba, vigente desde
+# 17/05/2026. Fonte: https://www.sanepar.com.br/tarifas. O primeiro valor é a
+# cobrança total até 5 m³; os seguintes são valores por m³ em cada faixa.
+TARIFA_AGUA_ATE_5_M3 = Decimal("101.91")
+FAIXAS_TARIFA_AGUA = (
+    (5, Decimal("3.15")),
+    (5, Decimal("17.56")),
+    (5, Decimal("17.65")),
+    (10, Decimal("17.80")),
+    (None, Decimal("30.12")),
+)
 VALOR_M3_GAS = Decimal("21.02")
 
 
@@ -82,18 +79,27 @@ def calcular_valor_agua(consumo):
     consumo_decimal = _decimal_finito(consumo, "O consumo de água")
     if consumo_decimal < 0:
         raise ValueError("O consumo de água não pode ser negativo.")
-    if consumo_decimal > 17:
-        raise ValueError(
-            "O consumo informado é superior ao limite cadastrado (17 m³). "
-            "Atualize a tabela tarifária da SANEPAR."
-        )
     if consumo_decimal != consumo_decimal.to_integral_value():
         raise ValueError("O consumo de água deve ser um número inteiro.")
 
     consumo = int(consumo_decimal)
-    if consumo not in VALORES_AGUA or VALORES_AGUA[consumo] is None:
-        raise ValueError(f"Não existe tarifa cadastrada para {consumo} m³.")
-    return VALORES_AGUA[consumo]
+    if consumo <= 5:
+        return TARIFA_AGUA_ATE_5_M3
+
+    valor = TARIFA_AGUA_ATE_5_M3
+    restante = consumo - 5
+    try:
+        for largura, tarifa_m3 in FAIXAS_TARIFA_AGUA:
+            quantidade = restante if largura is None else min(restante, largura)
+            valor += tarifa_m3 * quantidade
+            restante -= quantidade
+            if restante == 0:
+                break
+        return valor.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    except DecimalException as exc:
+        raise ValueError(
+            "O consumo de água excede o limite calculável."
+        ) from exc
 
 
 def calcular_agua(leitura_anterior, leitura_atual):

@@ -109,11 +109,39 @@ class Leitura(models.Model):
     def clean(self):
         super().clean()
 
+        erros = {}
+
+        if self.pk:
+            estado_original = (
+                Leitura.objects
+                .filter(pk=self.pk)
+                .values("apartamento_id", "mes", "ano")
+                .first()
+            )
+            esta_faturada = Leitura.objects.filter(
+                pk=self.pk,
+                faturas__isnull=False,
+            ).exists()
+            if estado_original is not None and esta_faturada:
+                campos_imutaveis = (
+                    ("apartamento", "apartamento_id", "apartamento"),
+                    ("mes", "mes", "mês"),
+                    ("ano", "ano", "ano"),
+                )
+                for campo_erro, atributo, descricao in campos_imutaveis:
+                    if getattr(self, atributo) != estado_original[atributo]:
+                        erros.setdefault(campo_erro, []).append(
+                            f"O {descricao} de uma leitura já faturada "
+                            "não pode ser alterado."
+                        )
+
         if (
             self.apartamento_id is None
             or not isinstance(self.mes, int)
             or not isinstance(self.ano, int)
         ):
+            if erros:
+                raise ValidationError(erros)
             return
 
         apartamento = (
@@ -123,6 +151,8 @@ class Leitura(models.Model):
             .first()
         )
         if apartamento is None:
+            if erros:
+                raise ValidationError(erros)
             return
 
         outras_leituras = Leitura.objects.filter(
@@ -140,7 +170,6 @@ class Leitura(models.Model):
             | models.Q(ano=self.ano, mes__gt=self.mes)
         )
 
-        erros = {}
         campos = (
             ("leitura_agua", "leitura_base_agua", "água"),
             ("leitura_gas", "leitura_base_gas", "gás"),
