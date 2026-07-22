@@ -1,8 +1,41 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Leituras | ControlCond</title>
+</head>
+<body>
 <h1>Leituras</h1>
-<ul>
+
+<p><a href="{% url 'dashboard:inicio' %}">Voltar ao dashboard</a></p>
+
+<table border="1">
+  <thead>
+    <tr>
+      <th>Apartamento</th>
+      <th>Período</th>
+      <th>Água</th>
+      <th>Gás</th>
+      <th>Data de registro</th>
+    </tr>
+  </thead>
+  <tbody>
   {% for leitura in leituras %}
-    <li>{{ leitura }}</li>
+    <tr>
+      <td>
+        <a href="{% url 'apartamentos:detalhes' leitura.apartamento_id %}">
+          {{ leitura.apartamento }}
+        </a>
+      </td>
+      <td>{{ leitura.mes|stringformat:"02d" }}/{{ leitura.ano }}</td>
+      <td>{{ leitura.leitura_agua|default_if_none:"Não informada" }}</td>
+      <td>{{ leitura.leitura_gas|default_if_none:"Não informada" }}</td>
+      <td>{{ leitura.data_registro|date:"d/m/Y H:i" }}</td>
+    </tr>
   {% empty %}
-    <li>Nenhuma leitura cadastrada.</li>
+    <tr><td colspan="5">Nenhuma leitura cadastrada.</td></tr>
   {% endfor %}
-</ul>
+  </tbody>
+</table>
+</body>
+</html>

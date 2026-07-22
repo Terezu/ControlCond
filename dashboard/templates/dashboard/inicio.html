@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>ControlCond</title>
+</head>
+<body>
+    <h1>ControlCond</h1>
+
+    <h2>Dashboard</h2>
+
+    <p>Painel principal do sistema.</p>
+
+    <nav>
+        <a href="{% url 'apartamentos:lista' %}">
+            Apartamentos
+        </a>
+
+        <a href="{% url 'leituras:lista' %}">
+            Leituras
+        </a>
+
+        <a href="{% url 'faturas:lista' %}">
+            Faturas
+        </a>
+    </nav>
+</body>
+</html>

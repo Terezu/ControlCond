@@ -182,16 +182,15 @@ def _validar_leitura(leitura):
         raise ValueError(" ".join(exc.messages)) from exc
 
 
-def listar_leituras(apartamento):
+def listar_leituras(apartamento=None):
     """
-    Retorna todas as leituras do apartamento,
+    Retorna as leituras, opcionalmente filtradas por apartamento,
     da mais recente para a mais antiga.
     """
-    return (
-        Leitura.objects
-        .filter(apartamento=apartamento)
-        .order_by("-ano", "-mes")
-    )
+    leituras = Leitura.objects.select_related("apartamento")
+    if apartamento is not None:
+        leituras = leituras.filter(apartamento=apartamento)
+    return leituras.order_by("-ano", "-mes", "-id")
 
 
 def obter_ultima_leitura(apartamento):

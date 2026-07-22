@@ -99,6 +99,7 @@ INSTALLED_APPS = [
     "apartamentos.apps.ApartamentosConfig",
     "leituras.apps.LeiturasConfig",
     "faturas.apps.FaturasConfig",
+    "dashboard",
 ]
 
 MIDDLEWARE = [

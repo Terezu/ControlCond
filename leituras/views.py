@@ -2,12 +2,25 @@ from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.cache import never_cache
-from django.views.decorators.http import require_http_methods
+from django.views.decorators.http import require_http_methods, require_safe
 
 from apartamentos.models import Apartamento
 
 from .forms import LeituraForm
-from .services import cadastrar_leitura
+from .services import cadastrar_leitura, listar_leituras
+
+
+@staff_member_required
+@never_cache
+@require_safe
+def lista_leituras(request):
+    return render(
+        request,
+        "leituras/lista.html",
+        {
+            "leituras": listar_leituras(),
+        },
+    )
 
 
 @staff_member_required
