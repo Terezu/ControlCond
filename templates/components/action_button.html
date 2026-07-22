@@ -1,0 +1,18 @@
+{% if url %}
+    <a
+        href="{{ url }}"
+        class="btn {{ classe|default:'btn-primary' }}"
+    >
+        {{ texto }}
+    </a>
+{% else %}
+    <button
+        type="{{ tipo|default:'button' }}"
+        class="btn {{ classe|default:'btn-primary' }}"
+        {% if nome %}name="{{ nome }}"{% endif %}
+        {% if valor %}value="{{ valor }}"{% endif %}
+        {% if desabilitado %}disabled{% endif %}
+    >
+        {{ texto }}
+    </button>
+{% endif %}
