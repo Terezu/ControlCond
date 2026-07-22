@@ -1,4 +1,5 @@
 from decimal import Decimal
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -15,6 +16,14 @@ from .services import cadastrar_apartamento, editar_apartamento
 
 
 class ApartamentoFormTests(TestCase):
+    def test_widgets_preservam_restricoes_e_recebem_estilo_bootstrap(self):
+        form = ApartamentoForm()
+
+        self.assertEqual(form.fields["leitura_base_agua"].widget.attrs["min"], "0")
+        self.assertEqual(form.fields["leitura_base_agua"].widget.attrs["step"], "0.01")
+        self.assertEqual(form.fields["observacoes"].widget.attrs["rows"], 4)
+        self.assertEqual(form.fields["numero"].widget.attrs["class"], "form-control")
+
     def test_exige_as_duas_leituras_base(self):
         form = ApartamentoForm(
             data={
@@ -201,6 +210,76 @@ class FluxoApartamentoTests(TestCase):
 
         self.assertEqual(resposta.status_code, 200)
         self.assertContains(resposta, "Falha concorrente de validação.")
+
+
+class ApresentacaoApartamentoTests(TestCase):
+    def setUp(self):
+        usuario = get_user_model().objects.create_user(
+            username="operador-apresentacao",
+            password="senha-de-teste",
+            is_staff=True,
+        )
+        self.client.force_login(usuario)
+
+    def test_lista_usa_layout_padrao_e_exibe_estado_vazio(self):
+        resposta = self.client.get(reverse("apartamentos:lista"))
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTemplateUsed(resposta, "apartamentos/lista.html")
+        self.assertTemplateUsed(resposta, "base.html")
+        self.assertContains(resposta, "Nenhum apartamento cadastrado")
+        self.assertContains(resposta, reverse("apartamentos:novo"))
+
+    def test_lista_exibe_apartamento_e_link_de_detalhes(self):
+        apartamento = Apartamento.objects.create(
+            numero="101",
+            bloco="A",
+            leitura_base_agua=Decimal("10.00"),
+            leitura_base_gas=Decimal("5.00"),
+        )
+
+        resposta = self.client.get(reverse("apartamentos:lista"))
+
+        self.assertContains(resposta, "Apartamento 101")
+        self.assertContains(
+            resposta,
+            reverse("apartamentos:detalhes", args=[apartamento.id]),
+        )
+
+    def test_formulario_usa_componente_de_campo_e_mantem_cancelamento(self):
+        resposta = self.client.get(reverse("apartamentos:novo"))
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTemplateUsed(resposta, "apartamentos/formulario.html")
+        self.assertTemplateUsed(resposta, "components/form_field.html")
+        self.assertContains(resposta, "Salvar apartamento")
+        self.assertContains(resposta, reverse("apartamentos:lista"))
+
+    @patch("apartamentos.views.consultar_detalhes_apartamento")
+    def test_detalhes_exibe_secoes_e_estados_vazios(self, consultar):
+        registros_vazios = SimpleNamespace(all=lambda: [])
+        consultar.return_value = SimpleNamespace(
+            id=1,
+            numero="101",
+            bloco="A",
+            leitura_base_agua=Decimal("10.00"),
+            leitura_base_gas=Decimal("5.00"),
+            observacoes="",
+            leituras=registros_vazios,
+            faturas=registros_vazios,
+        )
+
+        resposta = self.client.get(
+            reverse("apartamentos:detalhes", args=[1]),
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTemplateUsed(resposta, "apartamentos/detalhes.html")
+        self.assertContains(resposta, "Histórico de leituras")
+        self.assertContains(resposta, "Histórico de faturas")
+        self.assertContains(resposta, "Nenhuma leitura cadastrada")
+        self.assertContains(resposta, "Nenhuma fatura cadastrada")
+        self.assertContains(resposta, reverse("leituras:nova", args=[1]))
 
 
 class ProtecaoApartamentoTest(TestCase):

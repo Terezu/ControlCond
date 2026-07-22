@@ -1,14 +1,22 @@
 from decimal import Decimal
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
+from unittest.mock import patch
 
+from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
 from django.db.models.deletion import ProtectedError
 from django.test import TestCase
+from django.urls import reverse
 
 from apartamentos.models import Apartamento
 from leituras.models import Leitura
 
-from .forms import GerarFaturaForm
+from .forms import (
+    AlterarStatusFaturaForm,
+    FiltrarFaturasForm,
+    GerarFaturaForm,
+)
 from .models import Fatura
 from .pdf import obter_leituras_fatura
 from .services import (
@@ -531,3 +539,106 @@ class GerarFaturaMensalTests(TestCase):
         self.assertIn(elegivel.id, ids)
         self.assertNotIn(incompleta.id, ids)
         self.assertNotIn(ja_faturada.id, ids)
+
+
+class FaturaFormPresentationTests(TestCase):
+    def test_widgets_preservam_restricoes_e_recebem_estilo_bootstrap(self):
+        filtros = FiltrarFaturasForm()
+        geracao = GerarFaturaForm()
+        status = AlterarStatusFaturaForm()
+
+        self.assertEqual(filtros.fields["ano"].widget.attrs["min"], 2000)
+        self.assertEqual(filtros.fields["ano"].widget.attrs["max"], 9999)
+        self.assertEqual(
+            filtros.fields["apartamento"].widget.attrs["class"],
+            "form-select",
+        )
+        self.assertEqual(
+            geracao.fields["leitura"].widget.attrs["class"],
+            "form-select",
+        )
+        self.assertEqual(
+            status.fields["status"].widget.attrs["class"],
+            "form-select",
+        )
+
+
+class FaturaPresentationTests(TestCase):
+    def setUp(self):
+        usuario = get_user_model().objects.create_user(
+            username="operador-faturas",
+            password="senha-de-teste",
+            is_staff=True,
+        )
+        self.client.force_login(usuario)
+
+    @patch("faturas.views.listar_faturas", return_value=[])
+    def test_lista_usa_layout_padrao_e_exibe_estado_vazio(self, _listar):
+        resposta = self.client.get(reverse("faturas:lista"))
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTemplateUsed(resposta, "faturas/lista.html")
+        self.assertTemplateUsed(resposta, "base.html")
+        self.assertContains(resposta, "Nenhuma fatura encontrada")
+        self.assertContains(resposta, reverse("faturas:gerar"))
+
+    @patch("faturas.views.listar_faturas")
+    def test_lista_exibe_fatura_e_acoes_validas(self, listar):
+        listar.return_value = [
+            SimpleNamespace(
+                id=7,
+                apartamento_numero_emissao="101",
+                apartamento_bloco_emissao="A",
+                mes=7,
+                ano=2026,
+                valor_total=Decimal("144.03"),
+                status="paga",
+                get_status_display=lambda: "Paga",
+            )
+        ]
+
+        resposta = self.client.get(reverse("faturas:lista"))
+
+        self.assertContains(resposta, "Apartamento 101")
+        self.assertContains(resposta, "07/2026")
+        self.assertContains(resposta, reverse("faturas:detalhes", args=[7]))
+        self.assertContains(resposta, reverse("faturas:pdf", args=[7]))
+
+    def test_geracao_usa_formulario_padrao_e_mantem_cancelamento(self):
+        resposta = self.client.get(reverse("faturas:gerar"))
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTemplateUsed(resposta, "faturas/gerar.html")
+        self.assertTemplateUsed(resposta, "components/form_field.html")
+        self.assertContains(resposta, "Gerar fatura")
+        self.assertContains(resposta, reverse("faturas:lista"))
+
+    @patch("faturas.views.consultar_fatura")
+    def test_detalhes_exibe_dados_status_e_acoes(self, consultar):
+        consultar.return_value = SimpleNamespace(
+            id=7,
+            apartamento_numero_emissao="101",
+            apartamento_bloco_emissao="A",
+            mes=7,
+            ano=2026,
+            consumo_agua=10,
+            consumo_gas=4,
+            valor_agua=Decimal("100.00"),
+            valor_gas=Decimal("44.03"),
+            valor_total=Decimal("144.03"),
+            status="paga",
+            get_status_display=lambda: "Paga",
+            leitura_agua_anterior=Decimal("10.00"),
+            leitura_agua_atual=Decimal("20.00"),
+            leitura_gas_anterior=Decimal("5.00"),
+            leitura_gas_atual=Decimal("9.00"),
+        )
+
+        resposta = self.client.get(reverse("faturas:detalhes", args=[7]))
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTemplateUsed(resposta, "faturas/detalhes.html")
+        self.assertContains(resposta, "Apartamento 101")
+        self.assertContains(resposta, "Paga")
+        self.assertContains(resposta, reverse("faturas:pdf", args=[7]))
+        self.assertContains(resposta, reverse("faturas:alterar_status", args=[7]))

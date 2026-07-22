@@ -13,6 +13,14 @@ body {
     background-color: var(--controlcond-background);
 }
 
+a,
+button,
+input,
+select,
+textarea {
+    scroll-margin-top: 1rem;
+}
+
 .navbar-brand {
     letter-spacing: 0.02em;
 }
@@ -41,9 +49,28 @@ body {
     border-radius: 0.5rem;
 }
 
+.empty-state-icon {
+    color: var(--bs-secondary-color);
+    font-size: 2.5rem;
+    line-height: 1;
+}
+
 .clickable-row {
     position: relative;
     cursor: pointer;
+}
+
+.clickable-row > * {
+    transition:
+        background-color 0.2s ease,
+        box-shadow 0.2s ease;
+}
+
+.clickable-row:hover > * {
+    background-color: var(--bs-tertiary-bg);
+    box-shadow:
+        inset 0 0.125rem 0.25rem rgb(0 0 0 / 6%),
+        inset 0 -0.125rem 0.25rem rgb(0 0 0 / 6%);
 }
 
 .clickable-row:focus-within {
@@ -63,4 +90,20 @@ body {
 .dashboard-card-link:focus-visible {
     outline: 0.2rem solid rgb(13 110 253 / 25%);
     outline-offset: 0.15rem;
+}
+
+.detail-label {
+    color: var(--bs-secondary-color);
+    font-size: 0.875rem;
+    margin-bottom: 0.25rem;
+}
+
+.detail-value {
+    font-weight: 600;
+    margin-bottom: 0;
+}
+
+.table-action {
+    position: relative;
+    z-index: 2;
 }

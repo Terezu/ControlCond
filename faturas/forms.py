@@ -7,6 +7,16 @@ from leituras.models import Leitura
 from .models import Fatura, ANO_MAXIMO
 
 
+def _aplicar_estilo_bootstrap(fields):
+    for field in fields.values():
+        classe = (
+            "form-select"
+            if isinstance(field.widget, forms.Select)
+            else "form-control"
+        )
+        field.widget.attrs.update({"class": classe})
+
+
 class GerarFaturaForm(forms.Form):
     leitura = forms.ModelChoiceField(
         queryset=Leitura.objects.none(),
@@ -16,6 +26,7 @@ class GerarFaturaForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        _aplicar_estilo_bootstrap(self.fields)
 
         fatura_do_periodo = Fatura.objects.filter(
             apartamento_id=OuterRef("apartamento_id"),
@@ -60,6 +71,7 @@ class AlterarStatusFaturaForm(forms.Form):
 
     def __init__(self, *args, fatura=None, **kwargs):
         super().__init__(*args, **kwargs)
+        _aplicar_estilo_bootstrap(self.fields)
 
         if fatura is not None:
             self.fields["status"].initial = fatura.status
@@ -109,6 +121,7 @@ class FiltrarFaturasForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        _aplicar_estilo_bootstrap(self.fields)
 
         self.fields["apartamento"].queryset = (
             Apartamento.objects

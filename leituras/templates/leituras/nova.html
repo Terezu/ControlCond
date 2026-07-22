@@ -1,61 +1,58 @@
-<h1>Nova leitura</h1>
+{% extends "base.html" %}
 
-<h2>{{ apartamento }}</h2>
+{% block title %}Nova leitura | ControlCond{% endblock %}
 
-<p>
-  <a href="{% url 'apartamentos:detalhes' apartamento.id %}">
-    Voltar para o apartamento
-  </a>
-</p>
+{% block content %}
+    {% include "components/page_header.html" with titulo="Nova leitura" subtitulo="Registre as medições mensais de água e gás." %}
 
-<form method="post">
-  {% csrf_token %}
+    <div class="row justify-content-center">
+        <div class="col-12 col-lg-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-light py-3">
+                    <p class="text-secondary small mb-1">Apartamento</p>
+                    <h2 class="h5 mb-0">{{ apartamento }}</h2>
+                </div>
 
-  {% if form.non_field_errors %}
-    <div>
-      {% for erro in form.non_field_errors %}
-        <p>{{ erro }}</p>
-      {% endfor %}
+                <div class="card-body p-4">
+                    <form method="post" novalidate>
+                        {% csrf_token %}
+
+                        {% if form.non_field_errors %}
+                            <div class="alert alert-danger" role="alert">
+                                {% for error in form.non_field_errors %}
+                                    <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+
+                        <div class="row">
+                            <div class="col-12 col-md-6">
+                                {% include "components/form_field.html" with field=form.mes %}
+                            </div>
+                            <div class="col-12 col-md-6">
+                                {% include "components/form_field.html" with field=form.ano %}
+                            </div>
+                            <div class="col-12 col-md-6">
+                                {% include "components/form_field.html" with field=form.leitura_agua %}
+                            </div>
+                            <div class="col-12 col-md-6">
+                                {% include "components/form_field.html" with field=form.leitura_gas %}
+                            </div>
+                        </div>
+
+                        <p class="form-text mb-0">
+                            Informe pelo menos uma medição. Os valores serão comparados com a leitura anterior do apartamento.
+                        </p>
+
+                        <div class="d-flex flex-column-reverse flex-sm-row justify-content-end gap-2 mt-4">
+                            <a href="{% url 'apartamentos:detalhes' apartamento.id %}" class="btn btn-outline-secondary">Cancelar</a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check-lg me-1" aria-hidden="true"></i>Salvar leitura
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
     </div>
-  {% endif %}
-
-  <p>
-    {{ form.mes.label_tag }}
-    {{ form.mes }}
-
-    {% for erro in form.mes.errors %}
-      <span>{{ erro }}</span>
-    {% endfor %}
-  </p>
-
-  <p>
-    {{ form.ano.label_tag }}
-    {{ form.ano }}
-
-    {% for erro in form.ano.errors %}
-      <span>{{ erro }}</span>
-    {% endfor %}
-  </p>
-
-  <p>
-    {{ form.leitura_agua.label_tag }}
-    {{ form.leitura_agua }}
-
-    {% for erro in form.leitura_agua.errors %}
-      <span>{{ erro }}</span>
-    {% endfor %}
-  </p>
-
-  <p>
-    {{ form.leitura_gas.label_tag }}
-    {{ form.leitura_gas }}
-
-    {% for erro in form.leitura_gas.errors %}
-      <span>{{ erro }}</span>
-    {% endfor %}
-  </p>
-
-  <button type="submit">
-    Salvar leitura
-  </button>
-</form>
+{% endblock %}

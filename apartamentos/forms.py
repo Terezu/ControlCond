@@ -34,6 +34,12 @@ class ApartamentoForm(forms.ModelForm):
             "observacoes": forms.Textarea(attrs={"rows": 4}),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        for field in self.fields.values():
+            field.widget.attrs.update({"class": "form-control"})
+
     def clean_leitura_base_agua(self):
         valor = self.cleaned_data["leitura_base_agua"]
         if valor < 0:

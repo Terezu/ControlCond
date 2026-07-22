@@ -62,8 +62,9 @@
             <ul class="navbar-nav ms-auto">
                 <li class="nav-item">
                     <a
-                        class="nav-link"
+                        class="nav-link{% if request.resolver_match.namespace == 'dashboard' %} active{% endif %}"
                         href="{% url 'dashboard:inicio' %}"
+                        {% if request.resolver_match.namespace == 'dashboard' %}aria-current="page"{% endif %}
                     >
                         Dashboard
                     </a>
@@ -71,8 +72,9 @@
 
                 <li class="nav-item">
                     <a
-                        class="nav-link"
+                        class="nav-link{% if request.resolver_match.namespace == 'apartamentos' %} active{% endif %}"
                         href="{% url 'apartamentos:lista' %}"
+                        {% if request.resolver_match.namespace == 'apartamentos' %}aria-current="page"{% endif %}
                     >
                         Apartamentos
                     </a>
@@ -80,8 +82,9 @@
 
                 <li class="nav-item">
                     <a
-                        class="nav-link"
+                        class="nav-link{% if request.resolver_match.namespace == 'leituras' %} active{% endif %}"
                         href="{% url 'leituras:lista' %}"
+                        {% if request.resolver_match.namespace == 'leituras' %}aria-current="page"{% endif %}
                     >
                         Leituras
                     </a>
@@ -89,8 +92,9 @@
 
                 <li class="nav-item">
                     <a
-                        class="nav-link"
+                        class="nav-link{% if request.resolver_match.namespace == 'faturas' %} active{% endif %}"
                         href="{% url 'faturas:lista' %}"
+                        {% if request.resolver_match.namespace == 'faturas' %}aria-current="page"{% endif %}
                     >
                         Faturas
                     </a>

@@ -1,11 +1,17 @@
-<div class="mb-4">
-    <h1 class="h2 mb-1">
-        {{ titulo }}
-    </h1>
+<div class="d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-3 mb-4">
+    <div>
+        <h1 class="h2 mb-1">
+            {{ titulo }}
+        </h1>
 
-    {% if subtitulo %}
-        <p class="text-secondary mb-0">
-            {{ subtitulo }}
-        </p>
+        {% if subtitulo %}
+            <p class="text-secondary mb-0">
+                {{ subtitulo }}
+            </p>
+        {% endif %}
+    </div>
+
+    {% if url_acao and texto_acao %}
+        {% include "components/action_button.html" with url=url_acao texto=texto_acao icone=icone_acao %}
     {% endif %}
 </div>

@@ -1,161 +1,98 @@
-<h1>{{ apartamento }}</h1>
+{% extends "base.html" %}
 
-<p>
-  <a href="{% url 'apartamentos:editar' apartamento.id %}">
-    Editar apartamento e leituras-base
-  </a>
-</p>
+{% block title %}{{ apartamento }} | ControlCond{% endblock %}
 
-{% if messages %}
-  <div>
-    {% for message in messages %}
-      <p>{{ message }}</p>
-    {% endfor %}
-  </div>
-{% endif %}
+{% block content %}
+    {% url "apartamentos:editar" apartamento.id as url_editar_apartamento %}
+    {% include "components/page_header.html" with titulo=apartamento subtitulo="Dados da unidade, leituras e histórico de faturamento." url_acao=url_editar_apartamento texto_acao="Editar apartamento" icone_acao="bi-pencil" %}
 
-<h2>Leituras-base</h2>
+    <div class="d-flex mb-4">
+        <a href="{% url 'apartamentos:lista' %}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Voltar para apartamentos
+        </a>
+    </div>
 
-<p>
-  <strong>Água:</strong>
-  {{ apartamento.leitura_base_agua|default_if_none:"Não informada" }}
-</p>
+    <div class="row g-4">
+        <div class="col-12 col-lg-6">
+            <section class="card shadow-sm h-100" aria-labelledby="titulo-leituras-base">
+                <div class="card-header bg-light py-3">
+                    <h2 id="titulo-leituras-base" class="h5 mb-0">Leituras-base</h2>
+                </div>
+                <div class="card-body">
+                    <div class="row g-4">
+                        <div class="col-12 col-sm-6">
+                            <p class="detail-label">Água</p>
+                            <p class="detail-value">{{ apartamento.leitura_base_agua|default_if_none:"Não informada" }}</p>
+                        </div>
+                        <div class="col-12 col-sm-6">
+                            <p class="detail-label">Gás</p>
+                            <p class="detail-value">{{ apartamento.leitura_base_gas|default_if_none:"Não informada" }}</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
 
-<p>
-  <strong>Gás:</strong>
-  {{ apartamento.leitura_base_gas|default_if_none:"Não informada" }}
-</p>
+        <div class="col-12 col-lg-6">
+            <section class="card shadow-sm h-100" aria-labelledby="titulo-ultima-leitura">
+                <div class="card-header bg-light py-3 d-flex align-items-center justify-content-between gap-3">
+                    <h2 id="titulo-ultima-leitura" class="h5 mb-0">Última leitura</h2>
+                    <a href="{% url 'leituras:nova' apartamento.id %}" class="btn btn-primary btn-sm">
+                        <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Nova leitura
+                    </a>
+                </div>
+                <div class="card-body">
+                    {% if ultima_leitura %}
+                        <div class="row g-4">
+                            <div class="col-12 col-sm-4">
+                                <p class="detail-label">Período</p>
+                                <p class="detail-value">{{ ultima_leitura.mes|stringformat:"02d" }}/{{ ultima_leitura.ano }}</p>
+                            </div>
+                            <div class="col-12 col-sm-4">
+                                <p class="detail-label">Água</p>
+                                <p class="detail-value">{{ ultima_leitura.leitura_agua|default_if_none:"Não informada" }}</p>
+                            </div>
+                            <div class="col-12 col-sm-4">
+                                <p class="detail-label">Gás</p>
+                                <p class="detail-value">{{ ultima_leitura.leitura_gas|default_if_none:"Não informada" }}</p>
+                            </div>
+                        </div>
+                    {% else %}
+                        <p class="text-secondary mb-0">Nenhuma leitura cadastrada para este apartamento.</p>
+                    {% endif %}
+                </div>
+            </section>
+        </div>
+    </div>
 
-<p>
-  <a href="{% url 'apartamentos:lista' %}">
-    Voltar para apartamentos
-  </a>
-</p>
+    {% if apartamento.observacoes %}
+        <section class="card shadow-sm mt-4" aria-labelledby="titulo-observacoes">
+            <div class="card-header bg-light py-3">
+                <h2 id="titulo-observacoes" class="h5 mb-0">Observações</h2>
+            </div>
+            <div class="card-body">
+                <p class="mb-0">{{ apartamento.observacoes|linebreaksbr }}</p>
+            </div>
+        </section>
+    {% endif %}
 
-{% if apartamento.observacoes %}
-  <h2>Observações</h2>
-  <p>{{ apartamento.observacoes }}</p>
-{% endif %}
+    <section class="card shadow-sm mt-5" aria-labelledby="titulo-historico-leituras">
+        <div class="card-header bg-light py-3">
+            <h2 id="titulo-historico-leituras" class="h5 mb-1">Histórico de leituras</h2>
+            <p class="text-secondary small mb-0">Medições registradas para esta unidade.</p>
+        </div>
+        <div class="card-body p-0">
+            {% include "components/data_table.html" with template_cabecalho="components/table_headers/leitura_apartamento.html" linhas=leituras template_linha="components/table_rows/leitura_apartamento.html" empty_titulo="Nenhuma leitura cadastrada" empty_texto="Registre a primeira medição desta unidade." empty_icone="bi-droplet" %}
+        </div>
+    </section>
 
-<hr>
-
-<h2>Última leitura</h2>
-
-{% if ultima_leitura %}
-  <p>
-    <strong>Período:</strong>
-    {{ ultima_leitura.mes|stringformat:"02d" }}/{{ ultima_leitura.ano }}
-  </p>
-
-  <p>
-    <strong>Água:</strong>
-    {{ ultima_leitura.leitura_agua|default_if_none:"Não informada" }}
-  </p>
-
-  <p>
-    <strong>Gás:</strong>
-    {{ ultima_leitura.leitura_gas|default_if_none:"Não informada" }}
-  </p>
-{% else %}
-  <p>Nenhuma leitura cadastrada para este apartamento.</p>
-{% endif %}
-
-<p>
-  <a href="{% url 'leituras:nova' apartamento.id %}">
-    Nova leitura
-  </a>
-</p>
-
-<hr>
-
-<h2>Histórico de leituras</h2>
-
-<table border="1">
-  <thead>
-    <tr>
-      <th>Período</th>
-      <th>Água</th>
-      <th>Gás</th>
-      <th>Data de registro</th>
-    </tr>
-  </thead>
-
-  <tbody>
-    {% for leitura in leituras %}
-      <tr>
-        <td>
-          {{ leitura.mes|stringformat:"02d" }}/{{ leitura.ano }}
-        </td>
-
-        <td>
-          {{ leitura.leitura_agua|default_if_none:"Não informada" }}
-        </td>
-
-        <td>
-          {{ leitura.leitura_gas|default_if_none:"Não informada" }}
-        </td>
-
-        <td>
-          {{ leitura.data_registro|date:"d/m/Y H:i" }}
-        </td>
-      </tr>
-    {% empty %}
-      <tr>
-        <td colspan="4">
-          Nenhuma leitura cadastrada.
-        </td>
-      </tr>
-    {% endfor %}
-  </tbody>
-</table>
-
-<hr>
-
-<h2>Histórico de faturas</h2>
-
-<table border="1">
-  <thead>
-    <tr>
-      <th>Período</th>
-      <th>Consumo de água</th>
-      <th>Consumo de gás</th>
-      <th>Valor total</th>
-      <th>Status</th>
-      <th>Ações</th>
-    </tr>
-  </thead>
-
-  <tbody>
-    {% for fatura in faturas %}
-      <tr>
-        <td>
-          {{ fatura.mes|stringformat:"02d" }}/{{ fatura.ano }}
-        </td>
-
-        <td>{{ fatura.consumo_agua }}</td>
-
-        <td>{{ fatura.consumo_gas }}</td>
-
-        <td>
-          R$ {{ fatura.valor_total|floatformat:2 }}
-        </td>
-
-        <td>
-          {{ fatura.get_status_display }}
-        </td>
-
-        <td>
-          <a href="{% url 'faturas:detalhes' fatura.id %}">
-            Ver fatura
-          </a>
-        </td>
-      </tr>
-    {% empty %}
-      <tr>
-        <td colspan="6">
-          Nenhuma fatura cadastrada.
-        </td>
-      </tr>
-    {% endfor %}
-  </tbody>
-</table>
+    <section class="card shadow-sm mt-5" aria-labelledby="titulo-historico-faturas">
+        <div class="card-header bg-light py-3">
+            <h2 id="titulo-historico-faturas" class="h5 mb-1">Histórico de faturas</h2>
+            <p class="text-secondary small mb-0">Faturas emitidas para esta unidade.</p>
+        </div>
+        <div class="card-body p-0">
+            {% include "components/data_table.html" with template_cabecalho="components/table_headers/fatura_apartamento.html" linhas=faturas template_linha="components/table_rows/fatura_apartamento.html" empty_titulo="Nenhuma fatura cadastrada" empty_texto="As faturas desta unidade aparecerão aqui." empty_icone="bi-receipt" %}
+        </div>
+    </section>
+{% endblock %}

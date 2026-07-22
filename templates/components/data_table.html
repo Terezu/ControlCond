@@ -4,11 +4,15 @@
         <table class="table table-hover align-middle mb-0">
             <thead class="table-light">
                 <tr>
-                    {% for cabecalho in cabecalhos %}
-                        <th scope="col">
-                            {{ cabecalho }}
-                        </th>
-                    {% endfor %}
+                    {% if template_cabecalho %}
+                        {% include template_cabecalho %}
+                    {% else %}
+                        {% for cabecalho in cabecalhos %}
+                            <th scope="col">
+                                {{ cabecalho }}
+                            </th>
+                        {% endfor %}
+                    {% endif %}
                 </tr>
             </thead>
 
@@ -32,6 +36,6 @@
 
 {% else %}
 
-    {% include "components/empty_state.html" with titulo=empty_titulo texto=empty_texto icone=empty_icone %}
+    {% include "components/empty_state.html" with titulo=empty_titulo texto=empty_texto icone=empty_icone url_acao=empty_url_acao texto_acao=empty_texto_acao icone_acao=empty_icone_acao embutido=True %}
 
 {% endif %}

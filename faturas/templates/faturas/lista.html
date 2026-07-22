@@ -1,201 +1,106 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
+{% extends "base.html" %}
 
-    <title>Faturas</title>
-</head>
+{% block title %}Faturas | ControlCond{% endblock %}
 
-<body>
-    <header>
-        <h1>Faturas</h1>
+{% block content %}
+    {% url "faturas:gerar" as url_gerar_fatura %}
+    {% include "components/page_header.html" with titulo="Faturas" subtitulo="Consulte, filtre e acompanhe as faturas do condomínio." url_acao=url_gerar_fatura texto_acao="Gerar nova fatura" icone_acao="bi-plus-lg" %}
 
-        <nav aria-label="Ações da página">
-            <a href="{% url 'faturas:gerar' %}">
-                Gerar nova fatura
-            </a>
-        </nav>
-    </header>
-
-    <main>
-        {% if messages %}
-            <section
-                aria-label="Mensagens do sistema"
-                aria-live="polite"
-            >
-                {% for message in messages %}
-                    <p>{{ message }}</p>
-                {% endfor %}
-            </section>
-        {% endif %}
-
-        <section aria-labelledby="titulo-filtros">
-            <h2 id="titulo-filtros">Filtros</h2>
-
+    <section class="card shadow-sm mb-5" aria-labelledby="titulo-filtros">
+        <div class="card-header bg-light py-3">
+            <h2 id="titulo-filtros" class="h5 mb-1">Filtros</h2>
+            <p class="text-secondary small mb-0">Refine a consulta por unidade, período ou status.</p>
+        </div>
+        <div class="card-body">
             <form method="get">
-                {{ form_filtros.non_field_errors }}
+                {% if form_filtros.non_field_errors %}
+                    <div class="alert alert-danger" role="alert">
+                        {{ form_filtros.non_field_errors }}
+                    </div>
+                {% endif %}
 
-                <div>
-                    {{ form_filtros.apartamento.label_tag }}
-                    {{ form_filtros.apartamento }}
-                    {{ form_filtros.apartamento.errors }}
+                <div class="row align-items-end">
+                    <div class="col-12 col-md-6 col-xl-3">
+                        {% include "components/form_field.html" with field=form_filtros.apartamento %}
+                    </div>
+                    <div class="col-12 col-md-6 col-xl-2">
+                        {% include "components/form_field.html" with field=form_filtros.bloco %}
+                    </div>
+                    <div class="col-6 col-md-4 col-xl-2">
+                        {% include "components/form_field.html" with field=form_filtros.mes %}
+                    </div>
+                    <div class="col-6 col-md-4 col-xl-2">
+                        {% include "components/form_field.html" with field=form_filtros.ano %}
+                    </div>
+                    <div class="col-12 col-md-4 col-xl-3">
+                        {% include "components/form_field.html" with field=form_filtros.status %}
+                    </div>
                 </div>
 
-                <div>
-                    {{ form_filtros.bloco.label_tag }}
-                    {{ form_filtros.bloco }}
-                    {{ form_filtros.bloco.errors }}
-                </div>
-
-                <div>
-                    {{ form_filtros.mes.label_tag }}
-                    {{ form_filtros.mes }}
-                    {{ form_filtros.mes.errors }}
-                </div>
-
-                <div>
-                    {{ form_filtros.ano.label_tag }}
-                    {{ form_filtros.ano }}
-                    {{ form_filtros.ano.errors }}
-                </div>
-
-                <div>
-                    {{ form_filtros.status.label_tag }}
-                    {{ form_filtros.status }}
-                    {{ form_filtros.status.errors }}
-                </div>
-
-                <div>
-                    <button type="submit">
-                        Filtrar
+                <div class="d-flex flex-column-reverse flex-sm-row justify-content-end gap-2">
+                    <a href="{% url 'faturas:lista' %}" class="btn btn-outline-secondary">Limpar filtros</a>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-funnel me-1" aria-hidden="true"></i>Filtrar
                     </button>
-
-                    <a href="{% url 'faturas:lista' %}">
-                        Limpar filtros
-                    </a>
                 </div>
             </form>
-        </section>
+        </div>
+    </section>
 
-        <hr>
+    <section class="card shadow-sm" aria-labelledby="titulo-lista-faturas">
+        <div class="card-header bg-light py-3 d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-2">
+            <div>
+                <h2 id="titulo-lista-faturas" class="h5 mb-1">Faturas cadastradas</h2>
+                <p class="text-secondary small mb-0">Resultados ordenados pelas competências mais recentes.</p>
+            </div>
+            <span class="badge text-bg-secondary">
+                {{ pagina_faturas.paginator.count }}
+                {% if pagina_faturas.paginator.count == 1 %}fatura{% else %}faturas{% endif %}
+            </span>
+        </div>
 
-        <section aria-labelledby="titulo-lista-faturas">
-            <h2 id="titulo-lista-faturas">Faturas cadastradas</h2>
+        <div class="card-body p-0">
+            {% include "components/data_table.html" with template_cabecalho="components/table_headers/fatura.html" linhas=faturas template_linha="components/table_rows/fatura.html" empty_titulo="Nenhuma fatura encontrada" empty_texto="Ajuste os filtros ou gere uma nova fatura." empty_icone="bi-receipt" empty_url_acao=url_gerar_fatura empty_texto_acao="Gerar nova fatura" empty_icone_acao="bi-plus-lg" %}
+        </div>
 
-            <p>
-                <strong>{{ pagina_faturas.paginator.count }}</strong>
-
-                {% if pagina_faturas.paginator.count == 1 %}
-                    Fatura encontrada.
-                {% else %}
-                    Faturas encontradas.
-                {% endif %}
-            </p>
-
-            {% for fatura in faturas %}
-                <article>
-                    <h3>
-                        Apartamento {{ fatura.apartamento_numero_emissao }}
-
-                        {% if fatura.apartamento_bloco_emissao %}
-                            - Bloco {{ fatura.apartamento_bloco_emissao }}
-                        {% endif %}
-                    </h3>
-
-                    <p>
-                        <strong>Referência:</strong>
-                        {{ fatura.mes|stringformat:"02d" }}/{{ fatura.ano }}
-                    </p>
-
-                    <p>
-                        <strong>Status:</strong>
-                        {{ fatura.get_status_display }}
-                    </p>
-
-                    <p>
-                        <strong>Valor total:</strong>
-                        R$ {{ fatura.valor_total|floatformat:2 }}
-                    </p>
-
-                    <p>
-                        <a href="{% url 'faturas:detalhes' fatura.id %}">
-                            Ver detalhes
-                        </a>
-
-                        <a
-                            href="{% url 'faturas:pdf' fatura.id %}"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                        >
-                            Visualizar PDF
-                        </a>
-                    </p>
-                </article>
-
-                {% if not forloop.last %}
-                    <hr>
-                {% endif %}
-            {% empty %}
-                <p>Nenhuma fatura encontrada.</p>
-            {% endfor %}
-
-            {% if pagina_faturas.paginator.num_pages > 1 %}
+        {% if pagina_faturas.paginator.num_pages > 1 %}
+            <div class="card-footer bg-white py-3">
                 <nav aria-label="Paginação de faturas">
-                    <p>
-                        Página
-                        {{ pagina_faturas.number }}
-                        de
-                        {{ pagina_faturas.paginator.num_pages }}
-                    </p>
+                    <div class="d-flex flex-column flex-md-row align-items-center justify-content-between gap-3">
+                        <p class="text-secondary small mb-0">
+                            Página {{ pagina_faturas.number }} de {{ pagina_faturas.paginator.num_pages }}
+                        </p>
 
-                    {% if pagina_faturas.has_previous %}
-                        <a
-                            href="?{% if parametros_filtros %}{{ parametros_filtros }}&{% endif %}page=1"
-                        >
-                            Primeira
-                        </a>
+                        <ul class="pagination pagination-sm mb-0">
+                            {% if pagina_faturas.has_previous %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?{% if parametros_filtros %}{{ parametros_filtros }}&{% endif %}page=1" aria-label="Primeira página">Primeira</a>
+                                </li>
+                                <li class="page-item">
+                                    <a class="page-link" href="?{% if parametros_filtros %}{{ parametros_filtros }}&{% endif %}page={{ pagina_faturas.previous_page_number }}" aria-label="Página anterior">Anterior</a>
+                                </li>
+                            {% endif %}
 
-                        <a
-                            href="?{% if parametros_filtros %}{{ parametros_filtros }}&{% endif %}page={{ pagina_faturas.previous_page_number }}"
-                        >
-                            Anterior
-                        </a>
-                    {% endif %}
+                            {% for numero in pagina_faturas.paginator.page_range %}
+                                {% if numero == pagina_faturas.number %}
+                                    <li class="page-item active" aria-current="page"><span class="page-link">{{ numero }}</span></li>
+                                {% elif numero >= pagina_faturas.number|add:"-2" and numero <= pagina_faturas.number|add:"2" %}
+                                    <li class="page-item"><a class="page-link" href="?{% if parametros_filtros %}{{ parametros_filtros }}&{% endif %}page={{ numero }}">{{ numero }}</a></li>
+                                {% endif %}
+                            {% endfor %}
 
-                    {% for numero in pagina_faturas.paginator.page_range %}
-                        {% if numero == pagina_faturas.number %}
-                            <strong>
-                                {{ numero }}
-                            </strong>
-                        {% elif numero >= pagina_faturas.number|add:"-2" and numero <= pagina_faturas.number|add:"2" %}
-                            <a
-                                href="?{% if parametros_filtros %}{{ parametros_filtros }}&{% endif %}page={{ numero }}"
-                            >
-                                {{ numero }}
-                            </a>
-                        {% endif %}
-                    {% endfor %}
-
-                    {% if pagina_faturas.has_next %}
-                        <a
-                            href="?{% if parametros_filtros %}{{ parametros_filtros }}&{% endif %}page={{ pagina_faturas.next_page_number }}"
-                        >
-                            Próxima
-                        </a>
-
-                        <a
-                            href="?{% if parametros_filtros %}{{ parametros_filtros }}&{% endif %}page={{ pagina_faturas.paginator.num_pages }}"
-                        >
-                            Última
-                        </a>
-                    {% endif %}
+                            {% if pagina_faturas.has_next %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?{% if parametros_filtros %}{{ parametros_filtros }}&{% endif %}page={{ pagina_faturas.next_page_number }}" aria-label="Próxima página">Próxima</a>
+                                </li>
+                                <li class="page-item">
+                                    <a class="page-link" href="?{% if parametros_filtros %}{{ parametros_filtros }}&{% endif %}page={{ pagina_faturas.paginator.num_pages }}" aria-label="Última página">Última</a>
+                                </li>
+                            {% endif %}
+                        </ul>
+                    </div>
                 </nav>
-            {% endif %}
-        </section>
-    </main>
-</body>
-</html>
+            </div>
+        {% endif %}
+    </section>
+{% endblock %}
