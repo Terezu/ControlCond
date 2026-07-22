@@ -2,7 +2,7 @@
     {% if link %}
         <a
             href="{{ link }}"
-            class="card card-dashboard dashboard-card-link shadow-sm h-100 text-decoration-none text-body"
+            class="card card-dashboard shadow-sm h-100 dashboard-card-link text-decoration-none text-body"
         >
             <div class="card-body">
                 <div class="d-flex align-items-start justify-content-between mb-3">
@@ -15,7 +15,7 @@
                     {% endif %}
                 </div>
 
-                <p class="{{ classe_valor|default:'display-6' }} fw-bold dashboard-value mb-0">
+                <p class="{{ classe_valor|default:'display-6' }} {{ classe_peso|default:'fw-bold' }} dashboard-value mb-0">
                     {{ valor }}
                 </p>
             </div>
@@ -40,7 +40,7 @@
                     {% endif %}
                 </div>
 
-                <p class="{{ classe_valor|default:'display-6' }} fw-bold dashboard-value mb-0">
+                <p class="{{ classe_valor|default:'display-6' }} {{ classe_peso|default:'fw-bold' }} dashboard-value mb-0">
                     {{ valor }}
                 </p>
             </div>

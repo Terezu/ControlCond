@@ -35,6 +35,22 @@ body {
 .dashboard-value {
     line-height: 1;
 }
+
+.badge {
+    padding: 0.45rem 0.75rem;
+    border-radius: 0.5rem;
+}
+
+.clickable-row {
+    position: relative;
+    cursor: pointer;
+}
+
+.clickable-row:focus-within {
+    outline: 0.2rem solid rgb(13 110 253 / 25%);
+    outline-offset: -0.2rem;
+}
+
 .dashboard-card-link {
     display: flex;
     flex-direction: column;

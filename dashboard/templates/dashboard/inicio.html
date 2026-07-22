@@ -19,8 +19,42 @@
     {% url "faturas:lista" as url_faturas %}
     {% include "components/card_dashboard.html" with titulo="Faturas pendentes" valor=total_faturas_pendentes link=url_faturas texto_link="Ver faturas" icone="bi-receipt" classe_icone="text-warning" %}
 
-    {% include "components/card_dashboard.html" with titulo="Valor pendente" valor=valor_total_pendente_formatado classe_valor="fs-2" rodape="Soma das faturas pendentes" icone="bi-cash-stack" classe_icone="text-danger" %}
+    {% include "components/card_dashboard.html" with titulo="Valor pendente" valor=valor_total_pendente_formatado classe_valor="fs-5" classe_peso="fw-semibold" rodape="Soma das faturas pendentes" icone="bi-cash-stack" classe_icone="text-danger" %}
 
+</div>
+
+<div class="card shadow-sm mt-5">
+    <div class="card-header bg-light py-3">
+        <div class="d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-3">
+
+            <div>
+                <h2 class="h5 mb-1">
+                    Últimas faturas
+                </h2>
+
+                <p class="text-secondary small mb-0">
+                    Faturas cadastradas mais recentemente.
+                </p>
+            </div>
+
+            {% url "faturas:lista" as url_lista_faturas %}
+
+            <a
+                href="{{ url_lista_faturas }}"
+                class="btn btn-outline-primary btn-sm"
+            >
+                <i class="bi bi-list-ul me-1"></i>
+                Ver todas
+            </a>
+
+        </div>
+    </div>
+
+    <div class="card-body p-0">
+
+        {% include "components/data_table.html" with cabecalhos=cabecalhos_ultimas_faturas linhas=ultimas_faturas template_linha="components/table_rows/fatura_dashboard.html" empty_titulo="Nenhuma fatura cadastrada" empty_texto="As últimas faturas aparecerão aqui após o primeiro cadastro." empty_icone="bi-receipt" %}
+
+    </div>
 </div>
 
 {% endblock %}

@@ -1,25 +1,37 @@
-<div class="table-responsive">
-    <table class="table table-hover align-middle mb-0">
-        <thead class="table-light">
-            <tr>
-                {% for cabecalho in cabecalhos %}
-                    <th scope="col">
-                        {{ cabecalho }}
-                    </th>
-                {% endfor %}
-            </tr>
-        </thead>
+{% if linhas %}
 
-        <tbody>
-            {% for linha in linhas %}
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
                 <tr>
-                    {% for valor in linha %}
-                        <td>
-                            {{ valor }}
-                        </td>
+                    {% for cabecalho in cabecalhos %}
+                        <th scope="col">
+                            {{ cabecalho }}
+                        </th>
                     {% endfor %}
                 </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
+            </thead>
+
+            <tbody>
+                {% for linha in linhas %}
+                    {% if template_linha %}
+                        {% include template_linha with linha=linha %}
+                    {% else %}
+                        <tr>
+                            {% for valor in linha %}
+                                <td>
+                                    {{ valor }}
+                                </td>
+                            {% endfor %}
+                        </tr>
+                    {% endif %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+{% else %}
+
+    {% include "components/empty_state.html" with titulo=empty_titulo texto=empty_texto icone=empty_icone %}
+
+{% endif %}
