@@ -35,3 +35,16 @@ body {
 .dashboard-value {
     line-height: 1;
 }
+.dashboard-card-link {
+    display: flex;
+    flex-direction: column;
+}
+
+.dashboard-card-link:hover {
+    color: inherit;
+}
+
+.dashboard-card-link:focus-visible {
+    outline: 0.2rem solid rgb(13 110 253 / 25%);
+    outline-offset: 0.15rem;
+}

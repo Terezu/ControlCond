@@ -1,25 +1,55 @@
 <div class="col-12 col-md-6 col-xl-3">
-    <div class="card card-dashboard shadow-sm h-100">
-        <div class="card-body">
-            <p class="text-secondary mb-2">
-                {{ titulo }}
-            </p>
+    {% if link %}
+        <a
+            href="{{ link }}"
+            class="card card-dashboard dashboard-card-link shadow-sm h-100 text-decoration-none text-body"
+        >
+            <div class="card-body">
+                <div class="d-flex align-items-start justify-content-between mb-3">
+                    <p class="text-secondary mb-0">
+                        {{ titulo }}
+                    </p>
 
-            <p class="{{ classe_valor|default:'display-6' }} fw-bold dashboard-value mb-0">
-                {{ valor }}
-            </p>
-        </div>
+                    {% if icone %}
+                        <i class="bi {{ icone }} fs-3 {{ classe_icone|default:'text-primary' }}"></i>
+                    {% endif %}
+                </div>
 
-        <div class="card-footer bg-transparent">
-            {% if link %}
-                <a href="{{ link }}" class="text-decoration-none">
+                <p class="{{ classe_valor|default:'display-6' }} fw-bold dashboard-value mb-0">
+                    {{ valor }}
+                </p>
+            </div>
+
+            <div class="card-footer bg-transparent">
+                <span class="text-primary">
                     {{ texto_link|default:"Abrir módulo" }}
-                </a>
-            {% elif rodape %}
-                <span class="text-secondary">
-                    {{ rodape }}
+                    <i class="bi bi-arrow-right ms-1"></i>
                 </span>
+            </div>
+        </a>
+    {% else %}
+        <div class="card card-dashboard shadow-sm h-100">
+            <div class="card-body">
+                <div class="d-flex align-items-start justify-content-between mb-3">
+                    <p class="text-secondary mb-0">
+                        {{ titulo }}
+                    </p>
+
+                    {% if icone %}
+                        <i class="bi {{ icone }} fs-3 {{ classe_icone|default:'text-primary' }}"></i>
+                    {% endif %}
+                </div>
+
+                <p class="{{ classe_valor|default:'display-6' }} fw-bold dashboard-value mb-0">
+                    {{ valor }}
+                </p>
+            </div>
+
+            {% if rodape %}
+                <div class="card-footer bg-transparent text-secondary">
+                    {{ rodape }}
+                </div>
             {% endif %}
         </div>
-    </div>
+    {% endif %}
 </div>

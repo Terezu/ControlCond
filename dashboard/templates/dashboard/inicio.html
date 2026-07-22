@@ -11,25 +11,16 @@
 <div class="row g-4">
 
     {% url "apartamentos:lista" as url_apartamentos %}
-    {% include "components/card_dashboard.html" with titulo="Apartamentos" valor=total_apartamentos link=url_apartamentos texto_link="Ver apartamentos" %}
+    {% include "components/card_dashboard.html" with titulo="Apartamentos" valor=total_apartamentos link=url_apartamentos texto_link="Ver apartamentos" icone="bi-buildings" classe_icone="text-primary" %}
 
     {% url "leituras:lista" as url_leituras %}
-    {% include "components/card_dashboard.html" with titulo="Leituras" valor=total_leituras link=url_leituras texto_link="Ver leituras" %}
+    {% include "components/card_dashboard.html" with titulo="Leituras" valor=total_leituras link=url_leituras texto_link="Ver leituras" icone="bi-droplet-half" classe_icone="text-success" %}
 
     {% url "faturas:lista" as url_faturas %}
-    {% include "components/card_dashboard.html" with titulo="Faturas pendentes" valor=total_faturas_pendentes link=url_faturas texto_link="Ver faturas" %}
+    {% include "components/card_dashboard.html" with titulo="Faturas pendentes" valor=total_faturas_pendentes link=url_faturas texto_link="Ver faturas" icone="bi-receipt" classe_icone="text-warning" %}
 
-    {% include "components/card_dashboard.html" with titulo="Valor pendente" valor=valor_total_pendente_formatado classe_valor="fs-2" rodape="Soma das faturas pendentes" %}
+    {% include "components/card_dashboard.html" with titulo="Valor pendente" valor=valor_total_pendente_formatado classe_valor="fs-2" rodape="Soma das faturas pendentes" icone="bi-cash-stack" classe_icone="text-danger" %}
 
 </div>
-<div class="mt-5">
-    <h2 class="h4 mb-3">Teste dos componentes</h2>
 
-    {% url "apartamentos:lista" as url_apartamentos %}
-    {% include "components/action_button.html" with url=url_apartamentos texto="Abrir apartamentos" %}
-
-    <div class="mt-4">
-        {% include "components/empty_state.html" with titulo="Componente vazio" mensagem="Este é apenas um teste visual do componente." %}
-    </div>
-</div>
 {% endblock %}

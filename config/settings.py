@@ -253,5 +253,6 @@ SECURE_CSP = {
 
     "font-src": [
         CSP.SELF,
+        "https://cdn.jsdelivr.net",
     ],
 }
