@@ -1,0 +1,17 @@
+<div class="card border-0 shadow-sm">
+    <div class="card-body py-5 text-center">
+        <h2 class="h5 mb-2">
+            {{ titulo|default:"Nenhum registro encontrado" }}
+        </h2>
+
+        {% if mensagem %}
+            <p class="text-secondary mb-4">
+                {{ mensagem }}
+            </p>
+        {% endif %}
+
+        {% if url_acao and texto_acao %}
+            {% include "components/action_button.html" with url=url_acao texto=texto_acao classe=classe_acao %}
+        {% endif %}
+    </div>
+</div>

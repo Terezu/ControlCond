@@ -1,0 +1,25 @@
+<div class="col-12 col-md-6 col-xl-3">
+    <div class="card card-dashboard shadow-sm h-100">
+        <div class="card-body">
+            <p class="text-secondary mb-2">
+                {{ titulo }}
+            </p>
+
+            <p class="{{ classe_valor|default:'display-6' }} fw-bold dashboard-value mb-0">
+                {{ valor }}
+            </p>
+        </div>
+
+        <div class="card-footer bg-transparent">
+            {% if link %}
+                <a href="{{ link }}" class="text-decoration-none">
+                    {{ texto_link|default:"Abrir módulo" }}
+                </a>
+            {% elif rodape %}
+                <span class="text-secondary">
+                    {{ rodape }}
+                </span>
+            {% endif %}
+        </div>
+    </div>
+</div>

@@ -1,0 +1,37 @@
+:root {
+    --controlcond-primary: #0d6efd;
+    --controlcond-success: #198754;
+    --controlcond-warning: #fd7e14;
+    --controlcond-danger: #dc3545;
+    --controlcond-dark: #212529;
+    --controlcond-background: #f8f9fa;
+    --controlcond-card: #ffffff;
+}
+
+body {
+    min-height: 100vh;
+    background-color: var(--controlcond-background);
+}
+
+.navbar-brand {
+    letter-spacing: 0.02em;
+}
+
+.card {
+    border-radius: 1rem;
+}
+
+.card-dashboard {
+    transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease;
+}
+
+.card-dashboard:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 0.5rem 1rem rgb(0 0 0 / 12%);
+}
+
+.dashboard-value {
+    line-height: 1;
+}

@@ -23,6 +23,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
+from django.utils.csp import CSP
+
+
 def _env_bool(nome, padrao=False):
     valor = os.environ.get(nome)
     if valor is None:
@@ -118,7 +121,7 @@ ROOT_URLCONF = 'config.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / "templates"],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -193,6 +196,10 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+STATICFILES_DIRS = [
+    BASE_DIR / "static",
+]
+
 # As telas operacionais usam o login já fornecido pelo painel administrativo.
 LOGIN_URL = "/admin/login/"
 
@@ -219,16 +226,32 @@ X_FRAME_OPTIONS = "DENY"
 if _env_bool("DJANGO_TRUST_X_FORWARDED_PROTO", False):
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
-# O sistema não depende de scripts ou recursos de terceiros. A única exceção
-# a conteúdo inline são estilos usados pelo próprio painel administrativo.
+# O Bootstrap é carregado pelo CDN jsDelivr.
+# Estilos inline continuam permitidos para compatibilidade com o admin.
 SECURE_CSP = {
     "default-src": [CSP.SELF],
     "base-uri": [CSP.SELF],
     "form-action": [CSP.SELF],
     "frame-ancestors": [CSP.NONE],
     "object-src": [CSP.NONE],
-    "script-src": [CSP.SELF],
-    "style-src": [CSP.SELF, CSP.UNSAFE_INLINE],
-    "img-src": [CSP.SELF, "data:"],
-    "font-src": [CSP.SELF],
+
+    "script-src": [
+        CSP.SELF,
+        "https://cdn.jsdelivr.net",
+    ],
+
+    "style-src": [
+        CSP.SELF,
+        CSP.UNSAFE_INLINE,
+        "https://cdn.jsdelivr.net",
+    ],
+
+    "img-src": [
+        CSP.SELF,
+        "data:",
+    ],
+
+    "font-src": [
+        CSP.SELF,
+    ],
 }
