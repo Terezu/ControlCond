@@ -24,6 +24,7 @@ from .models import Fatura
 from .pdf import gerar_pdf_fatura, obter_leituras_fatura
 from .services import (
     cadastrar_fatura,
+    editar_fatura,
     gerar_fatura_mensal,
     gerar_pdf_fatura as salvar_pdf_fatura,
 )
@@ -229,6 +230,111 @@ class GerarFaturaMensalTests(TestCase):
             fatura.status,
             Fatura.Status.PENDENTE,
         )
+
+    def test_fatura_copia_aluguel_do_apartamento(self):
+        self.apartamento.valor_aluguel = Decimal("1200.00")
+        self.apartamento.save(update_fields=["valor_aluguel"])
+        self.configurar_leituras_base()
+        leitura = self.criar_leitura(
+            mes=1,
+            ano=2026,
+            leitura_agua=Decimal("1.00"),
+            leitura_gas=Decimal("1.00"),
+        )
+
+        fatura = gerar_fatura_mensal(leitura.id)
+
+        self.assertEqual(fatura.valor_aluguel, Decimal("1200.00"))
+        self.assertEqual(fatura.desconto, Decimal("0.00"))
+        self.assertEqual(fatura.subtotal, Decimal("1322.93"))
+        self.assertEqual(fatura.valor_total, Decimal("1322.93"))
+
+    def test_fatura_aceita_aluguel_especifico_e_desconto(self):
+        self.apartamento.valor_aluguel = Decimal("1200.00")
+        self.apartamento.save(update_fields=["valor_aluguel"])
+        self.configurar_leituras_base()
+        leitura = self.criar_leitura(
+            mes=1,
+            ano=2026,
+            leitura_agua=Decimal("10.00"),
+            leitura_gas=Decimal("3.00"),
+        )
+
+        fatura = gerar_fatura_mensal(
+            leitura.id,
+            valor_aluguel=Decimal("1000.00"),
+            desconto=Decimal("50.00"),
+        )
+
+        self.assertEqual(fatura.valor_agua, Decimal("117.66"))
+        self.assertEqual(fatura.valor_gas, Decimal("63.06"))
+        self.assertEqual(fatura.valor_aluguel, Decimal("1000.00"))
+        self.assertEqual(fatura.subtotal, Decimal("1180.72"))
+        self.assertEqual(fatura.desconto, Decimal("50.00"))
+        self.assertEqual(fatura.valor_total, Decimal("1130.72"))
+
+    def test_alteracao_do_apartamento_nao_muda_fatura_antiga(self):
+        self.apartamento.valor_aluguel = Decimal("900.00")
+        self.apartamento.save(update_fields=["valor_aluguel"])
+        self.configurar_leituras_base()
+        leitura = self.criar_leitura(
+            mes=1,
+            ano=2026,
+            leitura_agua=Decimal("1.00"),
+            leitura_gas=Decimal("1.00"),
+        )
+        fatura = gerar_fatura_mensal(leitura.id)
+
+        self.apartamento.valor_aluguel = Decimal("1500.00")
+        self.apartamento.save(update_fields=["valor_aluguel"])
+        fatura.refresh_from_db()
+
+        self.assertEqual(fatura.valor_aluguel, Decimal("900.00"))
+
+    def test_rejeita_desconto_negativo_ou_superior_ao_subtotal(self):
+        self.configurar_leituras_base()
+        leitura = self.criar_leitura(
+            mes=1,
+            ano=2026,
+            leitura_agua=Decimal("1.00"),
+            leitura_gas=Decimal("1.00"),
+        )
+
+        with self.assertRaisesRegex(ValueError, "desconto"):
+            gerar_fatura_mensal(
+                leitura.id,
+                desconto=Decimal("-0.01"),
+            )
+        with self.assertRaisesRegex(ValueError, "subtotal"):
+            gerar_fatura_mensal(
+                leitura.id,
+                desconto=Decimal("999.00"),
+            )
+
+    def test_edicao_financeira_recalcula_sem_alterar_consumos(self):
+        self.configurar_leituras_base()
+        leitura = self.criar_leitura(
+            mes=1,
+            ano=2026,
+            leitura_agua=Decimal("1.00"),
+            leitura_gas=Decimal("1.00"),
+        )
+        fatura = gerar_fatura_mensal(leitura.id)
+        consumos = (fatura.consumo_agua, fatura.consumo_gas)
+
+        editar_fatura(
+            fatura.id,
+            valor_aluguel=Decimal("500.00"),
+            desconto=Decimal("25.00"),
+        )
+        fatura.refresh_from_db()
+
+        self.assertEqual(
+            (fatura.consumo_agua, fatura.consumo_gas),
+            consumos,
+        )
+        self.assertEqual(fatura.subtotal, Decimal("622.93"))
+        self.assertEqual(fatura.valor_total, Decimal("597.93"))
 
     def test_tarifa_configurada_do_gas_e_usada_e_fica_registrada(self):
         atualizar_configuracao(
@@ -564,6 +670,48 @@ class GerarFaturaMensalTests(TestCase):
         finally:
             arquivo.close()
 
+    def test_pdf_exibe_aluguel_subtotal_desconto_e_total_persistidos(self):
+        fatura = Fatura.objects.create(
+            apartamento=self.apartamento,
+            mes=1,
+            ano=2026,
+            consumo_agua=10,
+            consumo_gas=3,
+            valor_agua=Decimal("117.66"),
+            valor_gas=Decimal("63.06"),
+            valor_aluguel=Decimal("1200.00"),
+            desconto=Decimal("50.00"),
+            valor_total=Decimal("1330.72"),
+            apartamento_numero_emissao=self.apartamento.numero,
+        )
+
+        with patch("faturas.pdf.canvas.Canvas") as canvas_mock:
+            pdf_mock = canvas_mock.return_value
+            pdf_mock.stringWidth.return_value = 0
+            gerar_pdf_fatura(
+                fatura,
+                configuracao=obter_configuracao(),
+            )
+
+        textos = [
+            chamada.args[2]
+            for chamada in (
+                pdf_mock.drawString.call_args_list
+                + pdf_mock.drawRightString.call_args_list
+            )
+        ]
+        conteudo = " ".join(textos)
+        for esperado in (
+            "R$ 117,66",
+            "R$ 63,06",
+            "R$ 1.200,00",
+            "R$ 1.380,72",
+            "- R$ 50,00",
+            "R$ 1.330,72",
+        ):
+            with self.subTest(esperado=esperado):
+                self.assertIn(esperado, conteudo)
+
     def test_pdf_usa_dados_configurados(self):
         configuracao = atualizar_configuracao(
             {
@@ -670,6 +818,36 @@ class GerarFaturaMensalTests(TestCase):
                 valor_total=Decimal("99.00"),
             )
 
+    def test_banco_rejeita_aluguel_desconto_e_subtotal_invalidos(self):
+        casos = [
+            {
+                "valor_aluguel": Decimal("-0.01"),
+                "desconto": Decimal("0.00"),
+                "valor_total": Decimal("0.00"),
+            },
+            {
+                "valor_aluguel": Decimal("0.00"),
+                "desconto": Decimal("-0.01"),
+                "valor_total": Decimal("0.01"),
+            },
+            {
+                "valor_aluguel": Decimal("10.00"),
+                "desconto": Decimal("10.01"),
+                "valor_total": Decimal("0.00"),
+            },
+        ]
+        for indice, valores in enumerate(casos, start=1):
+            with self.subTest(valores=valores):
+                with self.assertRaises(IntegrityError), transaction.atomic():
+                    Fatura.objects.create(
+                        apartamento=self.apartamento,
+                        mes=indice,
+                        ano=2026,
+                        consumo_agua=0,
+                        consumo_gas=0,
+                        **valores,
+                    )
+
     def test_banco_rejeita_retrato_de_leituras_incompleto_ou_regressivo(self):
         casos = [
             {
@@ -775,6 +953,27 @@ class FaturaFormPresentationTests(TestCase):
             "form-select",
         )
 
+    def test_desconto_vazio_e_normalizado_para_zero(self):
+        apartamento = Apartamento.objects.create(numero="101")
+        leitura = Leitura.objects.create(
+            apartamento=apartamento,
+            mes=1,
+            ano=2026,
+            leitura_agua=Decimal("1.00"),
+            leitura_gas=Decimal("1.00"),
+        )
+        form = GerarFaturaForm(
+            {
+                "leitura": leitura.id,
+                "valor_aluguel": "",
+                "desconto": "",
+            }
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertIsNone(form.cleaned_data["valor_aluguel"])
+        self.assertEqual(form.cleaned_data["desconto"], Decimal("0.00"))
+
 
 class FaturaPresentationTests(TestCase):
     def setUp(self):
@@ -824,7 +1023,64 @@ class FaturaPresentationTests(TestCase):
         self.assertTemplateUsed(resposta, "faturas/gerar.html")
         self.assertTemplateUsed(resposta, "components/form_field.html")
         self.assertContains(resposta, "Gerar fatura")
+        self.assertContains(resposta, "Valor do aluguel")
+        self.assertContains(resposta, "Desconto")
+        self.assertContains(resposta, "faturas/js/gerar_fatura.js")
         self.assertContains(resposta, reverse("faturas:lista"))
+
+    def test_endpoint_retorna_aluguel_da_unidade(self):
+        apartamento = Apartamento.objects.create(
+            numero="303",
+            valor_aluguel=Decimal("1250.50"),
+        )
+        leitura = Leitura.objects.create(
+            apartamento=apartamento,
+            mes=1,
+            ano=2026,
+            leitura_agua=Decimal("1.00"),
+            leitura_gas=Decimal("1.00"),
+        )
+
+        resposta = self.client.get(
+            reverse("faturas:valor_aluguel_leitura"),
+            {"leitura": leitura.id},
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(
+            resposta.json()["valor_aluguel"],
+            "1250.50",
+        )
+
+    def test_edicao_financeira_atualiza_total(self):
+        apartamento = Apartamento.objects.create(numero="404")
+        fatura = Fatura.objects.create(
+            apartamento=apartamento,
+            mes=1,
+            ano=2026,
+            consumo_agua=0,
+            consumo_gas=0,
+            valor_agua=Decimal("100.00"),
+            valor_gas=Decimal("50.00"),
+            valor_total=Decimal("150.00"),
+        )
+
+        resposta = self.client.post(
+            reverse("faturas:alterar_valores", args=[fatura.id]),
+            {
+                "valor_aluguel": "1000.00",
+                "desconto": "50.00",
+            },
+        )
+
+        self.assertRedirects(
+            resposta,
+            reverse("faturas:detalhes", args=[fatura.id]),
+        )
+        fatura.refresh_from_db()
+        self.assertEqual(fatura.valor_aluguel, Decimal("1000.00"))
+        self.assertEqual(fatura.desconto, Decimal("50.00"))
+        self.assertEqual(fatura.valor_total, Decimal("1100.00"))
 
     @patch("faturas.views.consultar_fatura")
     def test_detalhes_exibe_dados_status_e_acoes(self, consultar):
@@ -838,6 +1094,9 @@ class FaturaPresentationTests(TestCase):
             consumo_gas=4,
             valor_agua=Decimal("100.00"),
             valor_gas=Decimal("44.03"),
+            valor_aluguel=Decimal("0.00"),
+            desconto=Decimal("0.00"),
+            subtotal=Decimal("144.03"),
             valor_total=Decimal("144.03"),
             status="paga",
             get_status_display=lambda: "Paga",

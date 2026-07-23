@@ -1,28 +1,58 @@
 from io import BytesIO
 from pathlib import Path
 
+from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 
 from configuracoes.services import obter_configuracao
 
-MARGEM_ESQUERDA = 50
-ESPACO_PADRAO = 20
+
+# Geometria geral
+MARGEM_HORIZONTAL = 50
+MARGEM_SUPERIOR = 42
+MARGEM_INFERIOR = 42
+ESPACO_SECAO = 18
+RAIO_CARD = 6
+
+# Identidade visual
 LARGURA_MAXIMA_LOGO = 247.5
 ALTURA_MAXIMA_LOGO = 123.75
 ESPACO_ENTRE_LOGO_E_CABECALHO = 20
+
+# Paleta e tipografia
+COR_PRIMARIA = colors.HexColor("#1F4E5F")
+COR_TEXTO = colors.HexColor("#263238")
+COR_SECUNDARIA = colors.HexColor("#64748B")
+COR_BORDA = colors.HexColor("#D9E2E8")
+COR_FUNDO_SUAVE = colors.HexColor("#F5F8FA")
+COR_TOTAL = colors.HexColor("#E8F1F4")
+FONTE_REGULAR = "Helvetica"
+FONTE_DESTAQUE = "Helvetica-Bold"
+
+# Alturas dos blocos
+ALTURA_CABECALHO = 132
+ALTURA_DADOS_FATURA = 72
+ALTURA_CARD_CONSUMO = 150
+ALTURA_COMPOSICAO = 84
+ALTURA_TOTAL = 56
+ALTURA_RODAPE = 58
 
 
 def formatar_decimal(valor):
     if valor is None:
         return "Não informado"
-
     return str(valor).replace(".", ",")
 
 
 def formatar_valor_monetario(valor):
-    return f"{valor:.2f}".replace(".", ",")
+    return (
+        f"{valor:,.2f}"
+        .replace(",", "_")
+        .replace(".", ",")
+        .replace("_", ".")
+    )
 
 
 def obter_leituras_fatura(fatura):
@@ -61,18 +91,17 @@ def _quebrar_texto(pdf, texto, largura_maxima, fonte, tamanho):
     return linhas
 
 
-def _desenhar_logo(pdf, configuracao, largura, y):
+def _desenhar_logo(pdf, configuracao, largura, topo):
     if not configuracao.logo:
         return
     try:
         caminho = Path(configuracao.logo.path)
         if not caminho.is_file():
             return
-        imagem = ImageReader(str(caminho))
         pdf.drawImage(
-            imagem,
-            largura - MARGEM_ESQUERDA - LARGURA_MAXIMA_LOGO,
-            y - ALTURA_MAXIMA_LOGO,
+            ImageReader(str(caminho)),
+            largura - MARGEM_HORIZONTAL - LARGURA_MAXIMA_LOGO,
+            topo - ALTURA_MAXIMA_LOGO,
             width=LARGURA_MAXIMA_LOGO,
             height=ALTURA_MAXIMA_LOGO,
             preserveAspectRatio=True,
@@ -80,324 +109,398 @@ def _desenhar_logo(pdf, configuracao, largura, y):
             mask="auto",
         )
     except Exception:
-        # O documento deve continuar disponível mesmo se o arquivo tiver sido
-        # removido ou não puder ser interpretado pelo ReportLab.
+        # Arquivos ausentes ou corrompidos não podem impedir a emissão.
         return
 
 
-def desenhar_cabecalho(pdf, fatura, configuracao, largura, y):
-    _desenhar_logo(pdf, configuracao, largura, y)
-    limite_texto_cabecalho = (
+def _desenhar_linhas(
+    pdf,
+    linhas,
+    x,
+    y,
+    *,
+    fonte=FONTE_REGULAR,
+    tamanho=8,
+    cor=COR_SECUNDARIA,
+    entrelinha=10,
+):
+    pdf.setFont(fonte, tamanho)
+    pdf.setFillColor(cor)
+    for linha in linhas:
+        if linha:
+            pdf.drawString(x, y, linha)
+        y -= entrelinha
+    return y
+
+
+def desenhar_cabecalho(pdf, fatura, configuracao, largura, topo):
+    _desenhar_logo(pdf, configuracao, largura, topo)
+    largura_texto = (
         largura
-        - (2 * MARGEM_ESQUERDA)
+        - (2 * MARGEM_HORIZONTAL)
         - LARGURA_MAXIMA_LOGO
         - ESPACO_ENTRE_LOGO_E_CABECALHO
     )
 
-    tamanho_nome = 18
-    nome_condominio = configuracao.nome or "CONTROLCOND"
+    nome = configuracao.nome or "CONTROLCOND"
+    tamanho_nome = 20
     while (
-        tamanho_nome > 10
+        tamanho_nome > 11
         and pdf.stringWidth(
-            nome_condominio,
-            "Helvetica-Bold",
+            nome,
+            FONTE_DESTAQUE,
             tamanho_nome,
-        ) > limite_texto_cabecalho
+        ) > largura_texto
     ):
         tamanho_nome -= 1
 
     linhas_nome = _quebrar_texto(
         pdf,
-        nome_condominio,
-        limite_texto_cabecalho,
-        "Helvetica-Bold",
+        nome,
+        largura_texto,
+        FONTE_DESTAQUE,
         tamanho_nome,
     )
-    pdf.setFont("Helvetica-Bold", tamanho_nome)
-    for indice, linha_nome in enumerate(linhas_nome):
-        if indice:
-            y -= tamanho_nome + 2
-        pdf.drawString(MARGEM_ESQUERDA, y, linha_nome)
+    y = _desenhar_linhas(
+        pdf,
+        linhas_nome,
+        MARGEM_HORIZONTAL,
+        topo - tamanho_nome,
+        fonte=FONTE_DESTAQUE,
+        tamanho=tamanho_nome,
+        cor=COR_PRIMARIA,
+        entrelinha=tamanho_nome + 2,
+    )
 
-    dados_condominio = [
-        _juntar_partes(
-            f"CNPJ: {configuracao.cnpj}" if configuracao.cnpj else "",
-            configuracao.telefone,
-            configuracao.email,
-        ),
+    dados_institucionais = [
+        f"CNPJ: {configuracao.cnpj}" if configuracao.cnpj else "",
         _juntar_partes(configuracao.endereco, configuracao.cep),
         _juntar_partes(
             configuracao.cidade,
             configuracao.estado,
             separador=" - ",
         ),
+        _juntar_partes(configuracao.telefone, configuracao.email),
     ]
-    pdf.setFont("Helvetica", 8)
-    for linha in dados_condominio:
-        if linha:
-            y -= 12
-            linhas_cabecalho = _quebrar_texto(
-                pdf,
-                linha,
-                limite_texto_cabecalho,
-                "Helvetica",
-                8,
-            )
-            for trecho in linhas_cabecalho:
-                pdf.drawString(MARGEM_ESQUERDA, y, trecho)
-                y -= 10
-            y += 10
+    for dado in dados_institucionais:
+        if not dado:
+            continue
+        linhas = _quebrar_texto(
+            pdf,
+            dado,
+            largura_texto,
+            FONTE_REGULAR,
+            8,
+        )
+        y = _desenhar_linhas(
+            pdf,
+            linhas,
+            MARGEM_HORIZONTAL,
+            y - 1,
+        )
 
-    y -= 30
-
-    pdf.setFont("Helvetica-Bold", 14)
-    pdf.drawString(
-        MARGEM_ESQUERDA,
-        y,
-        "Fatura de consumo",
-    )
-
-    y -= 25
-
-    pdf.setFont("Helvetica-Bold", 11)
-    pdf.drawString(
-        MARGEM_ESQUERDA,
-        y,
-        f"FATURA Nº {fatura.id:06d}",
-    )
-
-    return y - 35
-
-
-def desenhar_dados_apartamento(pdf, fatura, y):
-    pdf.setFont("Helvetica", 11)
-
-    pdf.drawString(
-        MARGEM_ESQUERDA,
-        y,
-        f"Apartamento: {fatura.apartamento_numero_emissao}",
-    )
-
-    y -= ESPACO_PADRAO
-
-    bloco = fatura.apartamento_bloco_emissao or "Não informado"
-
-    pdf.drawString(
-        MARGEM_ESQUERDA,
-        y,
-        f"Bloco: {bloco}",
-    )
-
-    y -= ESPACO_PADRAO
-
-    pdf.drawString(
-        MARGEM_ESQUERDA,
-        y,
-        f"Referência: {fatura.mes:02d}/{fatura.ano}",
-    )
-
-    y -= ESPACO_PADRAO
-
-    data_emissao = fatura.data_emissao.strftime("%d/%m/%Y")
-
-    pdf.drawString(
-        MARGEM_ESQUERDA,
-        y,
-        f"Data de emissão: {data_emissao}",
-    )
-
-    y -= ESPACO_PADRAO
-
-    pdf.drawString(
-        MARGEM_ESQUERDA,
-        y,
-        f"Status: {fatura.get_status_display()}",
-    )
-
-    return y - 35
-
-
-def desenhar_linha_divisoria(pdf, largura, y):
+    base = topo - ALTURA_CABECALHO
+    pdf.setStrokeColor(COR_BORDA)
+    pdf.setLineWidth(0.8)
     pdf.line(
-        MARGEM_ESQUERDA,
-        y,
-        largura - MARGEM_ESQUERDA,
-        y,
+        MARGEM_HORIZONTAL,
+        base,
+        largura - MARGEM_HORIZONTAL,
+        base,
+    )
+    return base - ESPACO_SECAO
+
+
+def desenhar_titulo_fatura(pdf, fatura, largura, y):
+    pdf.setFillColor(COR_TEXTO)
+    pdf.setFont(FONTE_DESTAQUE, 22)
+    pdf.drawString(MARGEM_HORIZONTAL, y, "Fatura de consumo")
+
+    pdf.setFillColor(COR_SECUNDARIA)
+    pdf.setFont(FONTE_REGULAR, 9)
+    pdf.drawRightString(
+        largura - MARGEM_HORIZONTAL,
+        y + 3,
+        f"Fatura nº {fatura.id:06d}",
+    )
+    return y - 28
+
+
+def _desenhar_campo_resumo(pdf, rotulo, valor, x, y):
+    pdf.setFillColor(COR_SECUNDARIA)
+    pdf.setFont(FONTE_REGULAR, 7.5)
+    pdf.drawString(x, y, rotulo.upper())
+    pdf.setFillColor(COR_TEXTO)
+    pdf.setFont(FONTE_DESTAQUE, 10)
+    pdf.drawString(x, y - 16, str(valor))
+
+
+def desenhar_dados_apartamento(pdf, fatura, largura, y):
+    largura_util = largura - (2 * MARGEM_HORIZONTAL)
+    base = y - ALTURA_DADOS_FATURA
+
+    pdf.setFillColor(COR_FUNDO_SUAVE)
+    pdf.setStrokeColor(COR_BORDA)
+    pdf.roundRect(
+        MARGEM_HORIZONTAL,
+        base,
+        largura_util,
+        ALTURA_DADOS_FATURA,
+        RAIO_CARD,
+        stroke=1,
+        fill=1,
     )
 
-    return y - 30
+    campos = (
+        ("Apartamento", fatura.apartamento_numero_emissao or "Não informado"),
+        ("Bloco", fatura.apartamento_bloco_emissao or "Não informado"),
+        ("Referência", f"{fatura.mes:02d}/{fatura.ano}"),
+        ("Emissão", fatura.data_emissao.strftime("%d/%m/%Y")),
+        ("Status", fatura.get_status_display()),
+    )
+    larguras = (0.23, 0.16, 0.19, 0.21, 0.21)
+    x = MARGEM_HORIZONTAL + 14
+    for (rotulo, valor), proporcao in zip(campos, larguras, strict=True):
+        _desenhar_campo_resumo(pdf, rotulo, valor, x, y - 24)
+        x += largura_util * proporcao
+
+    return base - ESPACO_SECAO
 
 
-def desenhar_consumo_agua(pdf, fatura, leituras, y):
-    pdf.setFont("Helvetica-Bold", 13)
+def _desenhar_linha_valor(pdf, rotulo, valor, x, y, largura):
+    pdf.setFillColor(COR_SECUNDARIA)
+    pdf.setFont(FONTE_REGULAR, 8)
+    pdf.drawString(x, y, rotulo)
+    pdf.setFillColor(COR_TEXTO)
+    pdf.setFont(FONTE_DESTAQUE, 10)
+    pdf.drawRightString(x + largura, y, valor)
+
+
+def _desenhar_card_consumo(
+    pdf,
+    titulo,
+    leitura_anterior,
+    leitura_atual,
+    consumo,
+    valor,
+    x,
+    topo,
+    largura,
+):
+    base = topo - ALTURA_CARD_CONSUMO
+    pdf.setFillColor(colors.white)
+    pdf.setStrokeColor(COR_BORDA)
+    pdf.roundRect(
+        x,
+        base,
+        largura,
+        ALTURA_CARD_CONSUMO,
+        RAIO_CARD,
+        stroke=1,
+        fill=1,
+    )
+
+    pdf.setFillColor(COR_PRIMARIA)
+    pdf.setFont(FONTE_DESTAQUE, 13)
+    pdf.drawString(x + 14, topo - 24, titulo)
+
+    largura_linha = largura - 28
+    _desenhar_linha_valor(
+        pdf,
+        "Leitura anterior",
+        formatar_decimal(leitura_anterior),
+        x + 14,
+        topo - 50,
+        largura_linha,
+    )
+    _desenhar_linha_valor(
+        pdf,
+        "Leitura atual",
+        formatar_decimal(leitura_atual),
+        x + 14,
+        topo - 70,
+        largura_linha,
+    )
+
+    pdf.setStrokeColor(COR_BORDA)
+    pdf.line(x + 14, topo - 84, x + largura - 14, topo - 84)
+
+    pdf.setFillColor(COR_SECUNDARIA)
+    pdf.setFont(FONTE_REGULAR, 8)
+    pdf.drawString(x + 14, topo - 104, "CONSUMO")
+    pdf.drawRightString(x + largura - 14, topo - 104, "VALOR")
+
+    pdf.setFillColor(COR_TEXTO)
+    pdf.setFont(FONTE_DESTAQUE, 14)
     pdf.drawString(
-        MARGEM_ESQUERDA,
-        y,
+        x + 14,
+        topo - 126,
+        f"{formatar_decimal(consumo)} m³",
+    )
+    pdf.setFillColor(COR_PRIMARIA)
+    pdf.drawRightString(
+        x + largura - 14,
+        topo - 126,
+        f"R$ {formatar_valor_monetario(valor)}",
+    )
+
+
+def desenhar_consumos(pdf, fatura, leituras, largura, y):
+    largura_util = largura - (2 * MARGEM_HORIZONTAL)
+    espaco = 14
+    largura_card = (largura_util - espaco) / 2
+
+    _desenhar_card_consumo(
+        pdf,
         "Água e esgoto",
-    )
-
-    y -= 25
-
-    pdf.setFont("Helvetica", 11)
-
-    pdf.drawString(
-        MARGEM_ESQUERDA,
+        leituras["agua_anterior"],
+        leituras["agua_atual"],
+        fatura.consumo_agua,
+        fatura.valor_agua,
+        MARGEM_HORIZONTAL,
         y,
-        (
-            "Leitura anterior: "
-            f"{formatar_decimal(leituras['agua_anterior'])}"
-        ),
+        largura_card,
     )
-
-    y -= ESPACO_PADRAO
-
-    pdf.drawString(
-        MARGEM_ESQUERDA,
-        y,
-        (
-            "Leitura atual: "
-            f"{formatar_decimal(leituras['agua_atual'])}"
-        ),
-    )
-
-    y -= ESPACO_PADRAO
-
-    pdf.drawString(
-        MARGEM_ESQUERDA,
-        y,
-        f"Consumo: {formatar_decimal(fatura.consumo_agua)} m³",
-    )
-
-    y -= ESPACO_PADRAO
-
-    pdf.drawString(
-        MARGEM_ESQUERDA,
-        y,
-        (
-            "Valor: R$ "
-            f"{formatar_valor_monetario(fatura.valor_agua)}"
-        ),
-    )
-
-    return y - 35
-
-
-def desenhar_consumo_gas(pdf, fatura, leituras, y):
-    pdf.setFont("Helvetica-Bold", 13)
-    pdf.drawString(
-        MARGEM_ESQUERDA,
-        y,
+    _desenhar_card_consumo(
+        pdf,
         "Gás",
-    )
-
-    y -= 25
-
-    pdf.setFont("Helvetica", 11)
-
-    pdf.drawString(
-        MARGEM_ESQUERDA,
+        leituras["gas_anterior"],
+        leituras["gas_atual"],
+        fatura.consumo_gas,
+        fatura.valor_gas,
+        MARGEM_HORIZONTAL + largura_card + espaco,
         y,
-        (
-            "Leitura anterior: "
-            f"{formatar_decimal(leituras['gas_anterior'])}"
-        ),
+        largura_card,
+    )
+    return y - ALTURA_CARD_CONSUMO - ESPACO_SECAO
+
+
+def desenhar_composicao_financeira(pdf, fatura, largura, y):
+    largura_util = largura - (2 * MARGEM_HORIZONTAL)
+    base = y - ALTURA_COMPOSICAO
+    pdf.setFillColor(COR_FUNDO_SUAVE)
+    pdf.setStrokeColor(COR_BORDA)
+    pdf.roundRect(
+        MARGEM_HORIZONTAL,
+        base,
+        largura_util,
+        ALTURA_COMPOSICAO,
+        RAIO_CARD,
+        stroke=1,
+        fill=1,
     )
 
-    y -= ESPACO_PADRAO
+    coluna_esquerda = (
+        ("Água e esgoto", f"R$ {formatar_valor_monetario(fatura.valor_agua)}"),
+        ("Gás", f"R$ {formatar_valor_monetario(fatura.valor_gas)}"),
+        ("Aluguel", f"R$ {formatar_valor_monetario(fatura.valor_aluguel)}"),
+    )
+    coluna_direita = [
+        ("Subtotal", f"R$ {formatar_valor_monetario(fatura.subtotal)}"),
+    ]
+    if fatura.desconto:
+        coluna_direita.append(
+            (
+                "Desconto",
+                f"- R$ {formatar_valor_monetario(fatura.desconto)}",
+            )
+        )
 
+    largura_coluna = (largura_util - 42) / 2
+    for indice, (rotulo, valor) in enumerate(coluna_esquerda):
+        _desenhar_linha_valor(
+            pdf,
+            rotulo,
+            valor,
+            MARGEM_HORIZONTAL + 14,
+            y - 22 - (indice * 20),
+            largura_coluna,
+        )
+    for indice, (rotulo, valor) in enumerate(coluna_direita):
+        _desenhar_linha_valor(
+            pdf,
+            rotulo,
+            valor,
+            MARGEM_HORIZONTAL + largura_coluna + 28,
+            y - 22 - (indice * 20),
+            largura_coluna,
+        )
+    return base - ESPACO_SECAO
+
+
+def desenhar_total(pdf, fatura, largura, y):
+    largura_util = largura - (2 * MARGEM_HORIZONTAL)
+    base = y - ALTURA_TOTAL
+    pdf.setFillColor(COR_TOTAL)
+    pdf.setStrokeColor(COR_PRIMARIA)
+    pdf.roundRect(
+        MARGEM_HORIZONTAL,
+        base,
+        largura_util,
+        ALTURA_TOTAL,
+        RAIO_CARD,
+        stroke=1,
+        fill=1,
+    )
+    pdf.setFillColor(COR_PRIMARIA)
+    pdf.setFont(FONTE_DESTAQUE, 11)
     pdf.drawString(
-        MARGEM_ESQUERDA,
-        y,
-        (
-            "Leitura atual: "
-            f"{formatar_decimal(leituras['gas_atual'])}"
-        ),
+        MARGEM_HORIZONTAL + 16,
+        base + 22,
+        "TOTAL A PAGAR",
     )
-
-    y -= ESPACO_PADRAO
-
-    pdf.drawString(
-        MARGEM_ESQUERDA,
-        y,
-        f"Consumo: {formatar_decimal(fatura.consumo_gas)} m³",
+    pdf.setFont(FONTE_DESTAQUE, 20)
+    pdf.drawRightString(
+        largura - MARGEM_HORIZONTAL - 16,
+        base + 18,
+        f"R$ {formatar_valor_monetario(fatura.valor_total)}",
     )
-
-    y -= ESPACO_PADRAO
-
-    pdf.drawString(
-        MARGEM_ESQUERDA,
-        y,
-        (
-            "Valor: R$ "
-            f"{formatar_valor_monetario(fatura.valor_gas)}"
-        ),
-    )
-
-    return y - 35
-
-
-def desenhar_total(pdf, fatura, y):
-    pdf.setFont("Helvetica-Bold", 16)
-
-    pdf.drawString(
-        MARGEM_ESQUERDA,
-        y,
-        (
-            "Total: R$ "
-            f"{formatar_valor_monetario(fatura.valor_total)}"
-        ),
-    )
-
-    return y - 45
+    return base - ESPACO_SECAO
 
 
 def desenhar_observacoes(pdf, configuracao, largura, altura, y):
     if not configuracao.observacoes_padrao:
         return y
 
-    fonte = "Helvetica"
-    tamanho = 9
-    largura_texto = largura - (2 * MARGEM_ESQUERDA)
+    largura_texto = largura - (2 * MARGEM_HORIZONTAL)
     linhas = _quebrar_texto(
         pdf,
         configuracao.observacoes_padrao,
         largura_texto,
-        fonte,
-        tamanho,
+        FONTE_REGULAR,
+        8,
     )
+    altura_necessaria = 23 + (len(linhas) * 11)
+    limite_rodape = MARGEM_INFERIOR + ALTURA_RODAPE
 
-    if y < 105:
+    if y - altura_necessaria < limite_rodape:
         pdf.showPage()
-        y = altura - 60
+        y = altura - MARGEM_SUPERIOR
 
-    pdf.setFont("Helvetica-Bold", 10)
-    pdf.drawString(MARGEM_ESQUERDA, y, "Observações")
+    pdf.setFillColor(COR_SECUNDARIA)
+    pdf.setFont(FONTE_DESTAQUE, 8)
+    pdf.drawString(MARGEM_HORIZONTAL, y, "OBSERVAÇÕES")
     y -= 15
-    pdf.setFont(fonte, tamanho)
-
-    for linha in linhas:
-        if y < 105:
-            pdf.showPage()
-            y = altura - 60
-            pdf.setFont(fonte, tamanho)
-        pdf.drawString(MARGEM_ESQUERDA, y, linha)
-        y -= 13
-
-    return y - 10
-
-
-def desenhar_rodape(pdf, configuracao, largura, y):
-    y = max(y, 75)
-    pdf.line(
-        MARGEM_ESQUERDA,
+    return _desenhar_linhas(
+        pdf,
+        linhas,
+        MARGEM_HORIZONTAL,
         y,
-        largura - MARGEM_ESQUERDA,
-        y,
+        tamanho=8,
+        entrelinha=11,
     )
 
-    y -= 25
 
-    pdf.setFont("Helvetica", 9)
+def desenhar_rodape(pdf, configuracao, largura):
+    linha_y = MARGEM_INFERIOR + ALTURA_RODAPE
+    pdf.setStrokeColor(COR_BORDA)
+    pdf.setLineWidth(0.7)
+    pdf.line(
+        MARGEM_HORIZONTAL,
+        linha_y,
+        largura - MARGEM_HORIZONTAL,
+        linha_y,
+    )
 
     linhas = []
     if configuracao.texto_rodape:
@@ -405,9 +508,9 @@ def desenhar_rodape(pdf, configuracao, largura, y):
             _quebrar_texto(
                 pdf,
                 configuracao.texto_rodape,
-                largura - (2 * MARGEM_ESQUERDA),
-                "Helvetica",
-                9,
+                largura - (2 * MARGEM_HORIZONTAL),
+                FONTE_REGULAR,
+                7,
             )
         )
     else:
@@ -431,50 +534,46 @@ def desenhar_rodape(pdf, configuracao, largura, y):
             "do condomínio."
         )
 
-    for linha in linhas[:3]:
-        pdf.drawString(MARGEM_ESQUERDA, y, linha)
-        y -= 13
+    _desenhar_linhas(
+        pdf,
+        linhas[:3],
+        MARGEM_HORIZONTAL,
+        linha_y - 15,
+        tamanho=7,
+        cor=COR_SECUNDARIA,
+        entrelinha=10,
+    )
 
 
 def gerar_pdf_fatura(fatura, configuracao=None):
     buffer = BytesIO()
     configuracao = configuracao or obter_configuracao()
-
-    pdf = canvas.Canvas(
-        buffer,
-        pagesize=A4,
-    )
-
+    pdf = canvas.Canvas(buffer, pagesize=A4)
     largura, altura = A4
-    y = altura - 60
 
     pdf.setTitle(
         f"Fatura {fatura.mes:02d}-{fatura.ano} "
         f"Apartamento {fatura.apartamento_numero_emissao}"
     )
 
+    topo = altura - MARGEM_SUPERIOR
     leituras = obter_leituras_fatura(fatura)
-
-    y = desenhar_cabecalho(pdf, fatura, configuracao, largura, y)
-    y = desenhar_dados_apartamento(pdf, fatura, y)
-    y = desenhar_linha_divisoria(pdf, largura, y)
-    y = desenhar_consumo_agua(pdf, fatura, leituras, y)
-    y = desenhar_consumo_gas(pdf, fatura, leituras, y)
-    y = desenhar_linha_divisoria(pdf, largura, y)
-    y = desenhar_total(pdf, fatura, y)
-    y = desenhar_observacoes(
+    y = desenhar_cabecalho(
         pdf,
+        fatura,
         configuracao,
         largura,
-        altura,
-        y,
+        topo,
     )
-
-    desenhar_rodape(pdf, configuracao, largura, y)
+    y = desenhar_titulo_fatura(pdf, fatura, largura, y)
+    y = desenhar_dados_apartamento(pdf, fatura, largura, y)
+    y = desenhar_consumos(pdf, fatura, leituras, largura, y)
+    y = desenhar_composicao_financeira(pdf, fatura, largura, y)
+    y = desenhar_total(pdf, fatura, largura, y)
+    desenhar_observacoes(pdf, configuracao, largura, altura, y)
+    desenhar_rodape(pdf, configuracao, largura)
 
     pdf.showPage()
     pdf.save()
-
     buffer.seek(0)
-
     return buffer

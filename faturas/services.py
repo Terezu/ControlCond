@@ -1,4 +1,4 @@
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
 
 from django.core.exceptions import ValidationError
@@ -96,6 +96,23 @@ def _normalizar_decimal(
     return valor
 
 
+def _normalizar_valor_financeiro(valor, descricao, *, padrao=None):
+    if valor in (None, ""):
+        if padrao is None:
+            raise ValueError(f"{descricao} é obrigatório.")
+        valor = padrao
+    valor = _normalizar_decimal(valor, descricao)
+    try:
+        return valor.quantize(
+            Decimal("0.01"),
+            rounding=ROUND_HALF_UP,
+        )
+    except InvalidOperation as exc:
+        raise ValueError(
+            f"{descricao} excede o limite permitido."
+        ) from exc
+
+
 def _calcular_dados_da_leitura(leitura_atual, valor_m3_gas):
     if (
         leitura_atual.leitura_agua is None
@@ -183,9 +200,21 @@ def cadastrar_fatura(
     leitura_agua_atual=None,
     leitura_gas_anterior=None,
     leitura_gas_atual=None,
+    valor_aluguel=None,
+    desconto=None,
 ):
     apartamento = _consultar_apartamento_para_atualizacao(apartamento_id)
     valor_m3_gas = obter_configuracao().valor_m3_gas
+    valor_aluguel = _normalizar_valor_financeiro(
+        valor_aluguel,
+        "O valor do aluguel",
+        padrao=apartamento.valor_aluguel,
+    )
+    desconto = _normalizar_valor_financeiro(
+        desconto,
+        "O desconto",
+        padrao=Decimal("0.00"),
+    )
 
     if (
         isinstance(mes, bool)
@@ -371,7 +400,9 @@ def cadastrar_fatura(
         consumo_gas=consumo_gas,
         valor_agua=valor_agua,
         valor_gas=valor_gas,
-        valor_total=valor_agua + valor_gas,
+        valor_aluguel=valor_aluguel,
+        desconto=desconto,
+        valor_total=Decimal("0.00"),
         valor_m3_gas_emissao=valor_m3_gas,
         status=status,
         apartamento_numero_emissao=apartamento.numero,
@@ -381,6 +412,10 @@ def cadastrar_fatura(
         leitura_gas_anterior=leitura_gas_anterior,
         leitura_gas_atual=leitura_gas_atual,
     )
+    try:
+        fatura.recalcular_valor_total()
+    except ValidationError as exc:
+        raise ValueError(" ".join(exc.messages)) from exc
     try:
         fatura.full_clean(
             validate_unique=False,
@@ -452,13 +487,63 @@ def listar_faturas(
     return queryset.order_by("-ano", "-mes", "-id")
 
 
-def editar_fatura(fatura_id, *, status=None):
-    fatura = consultar_fatura(fatura_id)
+@transaction.atomic
+def editar_fatura(
+    fatura_id,
+    *,
+    status=None,
+    valor_aluguel=None,
+    desconto=None,
+):
+    try:
+        fatura = (
+            Fatura.objects
+            .select_for_update()
+            .select_related("apartamento", "leitura")
+            .get(pk=fatura_id)
+        )
+    except Fatura.DoesNotExist as exc:
+        raise ValueError("Fatura não encontrada.") from exc
+
+    campos_atualizados = []
     if status is not None:
         if status not in Fatura.Status.values:
             raise ValueError("Status de fatura inválido.")
         fatura.status = status
-        fatura.save(update_fields=["status"])
+        campos_atualizados.append("status")
+
+    if valor_aluguel is not None or desconto is not None:
+        if valor_aluguel is not None:
+            fatura.valor_aluguel = _normalizar_valor_financeiro(
+                valor_aluguel,
+                "O valor do aluguel",
+            )
+            campos_atualizados.append("valor_aluguel")
+        if desconto is not None:
+            fatura.desconto = _normalizar_valor_financeiro(
+                desconto,
+                "O desconto",
+            )
+            campos_atualizados.append("desconto")
+        try:
+            fatura.recalcular_valor_total()
+        except ValidationError as exc:
+            raise ValueError(" ".join(exc.messages)) from exc
+        campos_atualizados.append("valor_total")
+
+    if campos_atualizados:
+        try:
+            fatura.full_clean(
+                validate_unique=False,
+                validate_constraints=False,
+            )
+            fatura.save(update_fields=campos_atualizados)
+        except ValidationError as exc:
+            raise ValueError(" ".join(exc.messages)) from exc
+        except IntegrityError as exc:
+            raise ValueError(
+                "Os valores da fatura violam uma regra de integridade."
+            ) from exc
     return fatura
 
 
@@ -490,8 +575,26 @@ def buscar_leitura_anterior(leitura_atual, campo=None):
     return queryset.order_by("-ano", "-mes", "-id").first()
 
 
+def consultar_valor_aluguel_leitura(leitura_id):
+    try:
+        return (
+            Leitura.objects
+            .select_related("apartamento")
+            .get(pk=leitura_id)
+            .apartamento
+            .valor_aluguel
+        )
+    except Leitura.DoesNotExist as exc:
+        raise ValueError("Leitura não encontrada.") from exc
+
+
 @transaction.atomic
-def gerar_fatura_mensal(leitura_id):
+def gerar_fatura_mensal(
+    leitura_id,
+    *,
+    valor_aluguel=None,
+    desconto=None,
+):
     leitura_atual = _consultar_contexto_leitura_para_atualizacao(leitura_id)
 
     return cadastrar_fatura(
@@ -499,6 +602,8 @@ def gerar_fatura_mensal(leitura_id):
         leitura_id=leitura_atual.id,
         mes=leitura_atual.mes,
         ano=leitura_atual.ano,
+        valor_aluguel=valor_aluguel,
+        desconto=desconto,
     )
 
 

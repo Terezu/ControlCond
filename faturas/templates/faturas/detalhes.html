@@ -75,19 +75,53 @@
         </div>
         <div class="card-body">
             <div class="row g-4">
-                <div class="col-12 col-md-4">
+                <div class="col-12 col-sm-6 col-lg-4">
                     <p class="detail-label">Água e esgoto</p>
                     <p class="detail-value">R$ {{ fatura.valor_agua|floatformat:2 }}</p>
                 </div>
-                <div class="col-12 col-md-4">
+                <div class="col-12 col-sm-6 col-lg-4">
                     <p class="detail-label">Gás</p>
                     <p class="detail-value">R$ {{ fatura.valor_gas|floatformat:2 }}</p>
                 </div>
-                <div class="col-12 col-md-4">
-                    <p class="detail-label">Valor total</p>
+                <div class="col-12 col-sm-6 col-lg-4">
+                    <p class="detail-label">Aluguel</p>
+                    <p class="detail-value">R$ {{ fatura.valor_aluguel|floatformat:2 }}</p>
+                </div>
+                <div class="col-12 col-sm-6 col-lg-4">
+                    <p class="detail-label">Subtotal</p>
+                    <p class="detail-value">R$ {{ fatura.subtotal|floatformat:2 }}</p>
+                </div>
+                <div class="col-12 col-sm-6 col-lg-4">
+                    <p class="detail-label">Desconto</p>
+                    <p class="detail-value">- R$ {{ fatura.desconto|floatformat:2 }}</p>
+                </div>
+                <div class="col-12 col-sm-6 col-lg-4">
+                    <p class="detail-label">Total a pagar</p>
                     <p class="fs-5 fw-semibold mb-0">R$ {{ fatura.valor_total|floatformat:2 }}</p>
                 </div>
             </div>
+        </div>
+    </section>
+
+    <section class="card shadow-sm mt-4" aria-labelledby="titulo-editar-valores">
+        <div class="card-header bg-light py-3">
+            <h2 id="titulo-editar-valores" class="h5 mb-0">Editar valores da fatura</h2>
+        </div>
+        <div class="card-body">
+            <form method="post" action="{% url 'faturas:alterar_valores' fatura.id %}" novalidate>
+                {% csrf_token %}
+                <div class="row align-items-end">
+                    <div class="col-12 col-md-5">
+                        {% include "components/form_field.html" with field=form_valores.valor_aluguel %}
+                    </div>
+                    <div class="col-12 col-md-5">
+                        {% include "components/form_field.html" with field=form_valores.desconto %}
+                    </div>
+                    <div class="col-12 col-md-2 mb-3">
+                        <button type="submit" class="btn btn-primary w-100">Salvar</button>
+                    </div>
+                </div>
+            </form>
         </div>
     </section>
 

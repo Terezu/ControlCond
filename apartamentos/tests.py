@@ -77,6 +77,26 @@ class FiltrosApartamentoTests(TestCase):
 
         self.assertTrue(form.is_valid(), form.errors)
 
+    def test_aluguel_vazio_vira_zero_e_negativo_e_rejeitado(self):
+        dados = {
+            "numero": "101",
+            "leitura_base_agua": "0",
+            "leitura_base_gas": "0",
+            "valor_aluguel": "",
+        }
+        form_sem_aluguel = ApartamentoForm(data=dados)
+        self.assertTrue(form_sem_aluguel.is_valid(), form_sem_aluguel.errors)
+        self.assertEqual(
+            form_sem_aluguel.cleaned_data["valor_aluguel"],
+            Decimal("0.00"),
+        )
+
+        form_negativo = ApartamentoForm(
+            data={**dados, "valor_aluguel": "-0.01"}
+        )
+        self.assertFalse(form_negativo.is_valid())
+        self.assertIn("valor_aluguel", form_negativo.errors)
+
     def test_rejeita_leituras_base_acima_do_limite(self):
         form = ApartamentoForm(
             data={
@@ -221,6 +241,22 @@ class FluxoApartamentoTests(TestCase):
                     leitura_base_agua=valor,
                     leitura_base_gas="0",
                 )
+
+    def test_cadastro_normaliza_aluguel_e_aplica_zero_quando_ausente(self):
+        com_aluguel = cadastrar_apartamento(
+            numero="501",
+            leitura_base_agua=0,
+            leitura_base_gas=0,
+            valor_aluguel="1200.5",
+        )
+        sem_aluguel = cadastrar_apartamento(
+            numero="502",
+            leitura_base_agua=0,
+            leitura_base_gas=0,
+        )
+
+        self.assertEqual(com_aluguel.valor_aluguel, Decimal("1200.50"))
+        self.assertEqual(sem_aluguel.valor_aluguel, Decimal("0.00"))
 
     @patch(
         "apartamentos.views._salvar_formulario",
@@ -398,6 +434,13 @@ class IntegridadeApartamentoTests(TestCase):
                 leitura_base_gas=0,
             )
 
+    def test_banco_rejeita_aluguel_negativo(self):
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            Apartamento.objects.create(
+                numero="999",
+                valor_aluguel=Decimal("-0.01"),
+            )
+
 
 class SegurancaViewsApartamentoTests(TestCase):
     def setUp(self):
@@ -416,7 +459,9 @@ class SegurancaViewsApartamentoTests(TestCase):
             reverse("leituras:nova", args=[999]),
             reverse("faturas:lista"),
             reverse("faturas:gerar"),
+            reverse("faturas:valor_aluguel_leitura"),
             reverse("faturas:detalhes", args=[999]),
+            reverse("faturas:alterar_valores", args=[999]),
             reverse("faturas:pdf", args=[999]),
         ]
 

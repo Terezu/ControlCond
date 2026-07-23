@@ -1,4 +1,4 @@
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
@@ -17,11 +17,13 @@ def cadastrar_apartamento(
     leitura_base_gas,
     bloco=None,
     observacoes=None,
+    valor_aluguel=Decimal("0.00"),
 ):
     """Cria e retorna um apartamento."""
     numero = _normalizar_numero(numero)
     bloco = _normalizar_texto_opcional(bloco)
     observacoes = _normalizar_texto_opcional(observacoes)
+    valor_aluguel = _normalizar_valor_aluguel(valor_aluguel)
     leitura_base_agua, leitura_base_gas = _validar_leituras_base(
         leitura_base_agua,
         leitura_base_gas,
@@ -31,6 +33,7 @@ def cadastrar_apartamento(
         numero=numero,
         bloco=bloco,
         observacoes=observacoes,
+        valor_aluguel=valor_aluguel,
         leitura_base_agua=leitura_base_agua,
         leitura_base_gas=leitura_base_gas,
     )
@@ -47,6 +50,7 @@ def editar_apartamento(
     leitura_base_gas,
     bloco=None,
     observacoes=None,
+    valor_aluguel=Decimal("0.00"),
 ):
     try:
         apartamento = (
@@ -59,6 +63,7 @@ def editar_apartamento(
     numero = _normalizar_numero(numero)
     bloco = _normalizar_texto_opcional(bloco)
     observacoes = _normalizar_texto_opcional(observacoes)
+    valor_aluguel = _normalizar_valor_aluguel(valor_aluguel)
     leitura_base_agua, leitura_base_gas = _validar_leituras_base(
         leitura_base_agua,
         leitura_base_gas,
@@ -67,13 +72,14 @@ def editar_apartamento(
     apartamento.numero = numero
     apartamento.bloco = bloco
     apartamento.observacoes = observacoes
+    apartamento.valor_aluguel = valor_aluguel
     apartamento.leitura_base_agua = leitura_base_agua
     apartamento.leitura_base_gas = leitura_base_gas
     _validar_modelo(apartamento)
     _salvar_apartamento(
         apartamento,
         update_fields=[
-            "numero", "bloco", "observacoes",
+            "numero", "bloco", "observacoes", "valor_aluguel",
             "leitura_base_agua", "leitura_base_gas",
         ],
     )
@@ -119,6 +125,24 @@ def _normalizar_leitura_base(valor, recurso):
             f"A leitura-base de {recurso} excede o valor máximo permitido."
         )
     return valor
+
+
+def _normalizar_valor_aluguel(valor):
+    if valor in (None, ""):
+        valor = Decimal("0.00")
+    if isinstance(valor, bool):
+        raise ValueError("O valor do aluguel deve ser um número válido.")
+    try:
+        valor = Decimal(str(valor))
+    except (InvalidOperation, TypeError, ValueError) as exc:
+        raise ValueError(
+            "O valor do aluguel deve ser um número válido."
+        ) from exc
+    if not valor.is_finite():
+        raise ValueError("O valor do aluguel deve ser um número finito.")
+    if valor < 0:
+        raise ValueError("O valor do aluguel não pode ser negativo.")
+    return valor.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
 def _normalizar_numero(numero):

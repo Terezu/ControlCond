@@ -1,10 +1,12 @@
+from decimal import Decimal
+
 from django import forms
 from django.db.models import Exists, OuterRef
 
 from apartamentos.models import Apartamento
 from leituras.models import Leitura
 
-from .models import Fatura, ANO_MAXIMO
+from .models import ANO_MAXIMO, LIMITE_VALOR_FINANCEIRO, Fatura
 
 
 def _aplicar_estilo_bootstrap(fields):
@@ -22,6 +24,29 @@ class GerarFaturaForm(forms.Form):
         queryset=Leitura.objects.none(),
         label="Leitura",
         empty_label="Selecione uma leitura",
+    )
+    valor_aluguel = forms.DecimalField(
+        required=False,
+        label="Valor do aluguel",
+        min_value=0,
+        max_value=LIMITE_VALOR_FINANCEIRO,
+        max_digits=10,
+        decimal_places=2,
+        widget=forms.NumberInput(
+            attrs={"min": "0", "step": "0.01"}
+        ),
+    )
+    desconto = forms.DecimalField(
+        required=False,
+        label="Desconto",
+        min_value=0,
+        max_value=LIMITE_VALOR_FINANCEIRO,
+        max_digits=10,
+        decimal_places=2,
+        initial=Decimal("0.00"),
+        widget=forms.NumberInput(
+            attrs={"min": "0", "step": "0.01"}
+        ),
     )
 
     def __init__(self, *args, **kwargs):
@@ -46,6 +71,9 @@ class GerarFaturaForm(forms.Form):
         )
 
         self.fields["leitura"].label_from_instance = self.descrever_leitura
+
+    def clean_desconto(self):
+        return self.cleaned_data["desconto"] or Decimal("0.00")
 
     @staticmethod
     def descrever_leitura(leitura):
@@ -75,6 +103,40 @@ class AlterarStatusFaturaForm(forms.Form):
 
         if fatura is not None:
             self.fields["status"].initial = fatura.status
+
+
+class EditarValoresFaturaForm(forms.Form):
+    valor_aluguel = forms.DecimalField(
+        label="Valor do aluguel",
+        min_value=0,
+        max_value=LIMITE_VALOR_FINANCEIRO,
+        max_digits=10,
+        decimal_places=2,
+        widget=forms.NumberInput(
+            attrs={"min": "0", "step": "0.01"}
+        ),
+    )
+    desconto = forms.DecimalField(
+        required=False,
+        label="Desconto",
+        min_value=0,
+        max_value=LIMITE_VALOR_FINANCEIRO,
+        max_digits=10,
+        decimal_places=2,
+        widget=forms.NumberInput(
+            attrs={"min": "0", "step": "0.01"}
+        ),
+    )
+
+    def __init__(self, *args, fatura=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        _aplicar_estilo_bootstrap(self.fields)
+        if fatura is not None:
+            self.fields["valor_aluguel"].initial = fatura.valor_aluguel
+            self.fields["desconto"].initial = fatura.desconto
+
+    def clean_desconto(self):
+        return self.cleaned_data["desconto"] or Decimal("0.00")
 
 
 class FiltrarFaturasForm(forms.Form):

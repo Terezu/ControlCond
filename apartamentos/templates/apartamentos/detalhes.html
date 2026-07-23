@@ -28,6 +28,10 @@
                             <p class="detail-label">Gás</p>
                             <p class="detail-value">{{ apartamento.leitura_base_gas|default_if_none:"Não informada" }}</p>
                         </div>
+                        <div class="col-12 col-sm-6">
+                            <p class="detail-label">Aluguel padrão</p>
+                            <p class="detail-value">R$ {{ apartamento.valor_aluguel|floatformat:2 }}</p>
+                        </div>
                     </div>
                 </div>
             </section>

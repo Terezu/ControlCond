@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -12,6 +12,7 @@ from leituras.models import Leitura
 
 
 ANO_MAXIMO = 9999
+LIMITE_VALOR_FINANCEIRO = Decimal("99999999.99")
 
 
 class Fatura(models.Model):
@@ -63,6 +64,24 @@ class Fatura(models.Model):
         decimal_places=2,
         default=Decimal("0.00"),
         validators=[MinValueValidator(Decimal("0"))],
+    )
+    valor_aluguel = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        validators=[
+            MinValueValidator(Decimal("0")),
+            MaxValueValidator(LIMITE_VALOR_FINANCEIRO),
+        ],
+    )
+    desconto = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        validators=[
+            MinValueValidator(Decimal("0")),
+            MaxValueValidator(LIMITE_VALOR_FINANCEIRO),
+        ],
     )
 
     valor_m3_gas_emissao = models.DecimalField(
@@ -147,9 +166,42 @@ class Fatura(models.Model):
                 name="fatura_valor_total_nao_negativo",
             ),
             models.CheckConstraint(
+                condition=models.Q(valor_aluguel__gte=0),
+                name="fatura_aluguel_nao_negativo",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(
+                    valor_aluguel__lte=LIMITE_VALOR_FINANCEIRO
+                ),
+                name="fatura_aluguel_no_limite",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(desconto__gte=0),
+                name="fatura_desconto_nao_negativo",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(
+                    desconto__lte=LIMITE_VALOR_FINANCEIRO
+                ),
+                name="fatura_desconto_no_limite",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(
+                    desconto__lte=(
+                        models.F("valor_agua")
+                        + models.F("valor_gas")
+                        + models.F("valor_aluguel")
+                    )
+                ),
+                name="fatura_desconto_no_subtotal",
+            ),
+            models.CheckConstraint(
                 condition=models.Q(
                     valor_total=Round(
-                        models.F("valor_agua") + models.F("valor_gas"),
+                        models.F("valor_agua")
+                        + models.F("valor_gas")
+                        + models.F("valor_aluguel")
+                        - models.F("desconto"),
                         precision=2,
                     )
                 ),
@@ -208,16 +260,82 @@ class Fatura(models.Model):
     def __str__(self):
         return f"Fatura {self.mes:02d}/{self.ano} - {self.apartamento}"
 
+    @staticmethod
+    def calcular_composicao_financeira(
+        valor_agua,
+        valor_gas,
+        valor_aluguel,
+        desconto,
+    ):
+        centavos = Decimal("0.01")
+        valores = tuple(
+            valor.quantize(centavos, rounding=ROUND_HALF_UP)
+            for valor in (
+                valor_agua,
+                valor_gas,
+                valor_aluguel,
+                desconto,
+            )
+        )
+        valor_agua, valor_gas, valor_aluguel, desconto = valores
+        subtotal = (valor_agua + valor_gas + valor_aluguel).quantize(
+            centavos,
+            rounding=ROUND_HALF_UP,
+        )
+        if subtotal > LIMITE_VALOR_FINANCEIRO:
+            raise ValidationError(
+                {"valor_total": "O subtotal excede o limite permitido."}
+            )
+        if desconto > subtotal:
+            raise ValidationError(
+                {"desconto": "O desconto não pode ultrapassar o subtotal."}
+            )
+        return subtotal, (subtotal - desconto).quantize(
+            centavos,
+            rounding=ROUND_HALF_UP,
+        )
+
+    @property
+    def subtotal(self):
+        subtotal, _ = self.calcular_composicao_financeira(
+            self.valor_agua,
+            self.valor_gas,
+            self.valor_aluguel,
+            self.desconto,
+        )
+        return subtotal
+
+    def recalcular_valor_total(self):
+        _, self.valor_total = self.calcular_composicao_financeira(
+            self.valor_agua,
+            self.valor_gas,
+            self.valor_aluguel,
+            self.desconto,
+        )
+        return self.valor_total
+
     def clean(self):
         super().clean()
 
         erros = {}
         valores = (self.valor_agua, self.valor_gas, self.valor_total)
         if all(isinstance(valor, Decimal) for valor in valores):
-            total_esperado = self.valor_agua + self.valor_gas
-            if self.valor_total != total_esperado:
+            try:
+                _, total_esperado = self.calcular_composicao_financeira(
+                    self.valor_agua,
+                    self.valor_gas,
+                    self.valor_aluguel,
+                    self.desconto,
+                )
+            except ValidationError as exc:
+                erros.update(exc.message_dict)
+                total_esperado = None
+            if (
+                total_esperado is not None
+                and self.valor_total != total_esperado
+            ):
                 erros["valor_total"] = (
-                    "O valor total deve ser igual à soma dos valores de água e gás."
+                    "O valor total deve corresponder ao subtotal menos o desconto."
                 )
 
         if self.leitura_id is not None:

@@ -24,6 +24,7 @@ def _salvar_formulario(form, apartamento_id=None):
         "numero": dados["numero"],
         "bloco": dados["bloco"],
         "observacoes": dados["observacoes"],
+        "valor_aluguel": dados["valor_aluguel"],
         "leitura_base_agua": dados["leitura_base_agua"],
         "leitura_base_gas": dados["leitura_base_gas"],
     }

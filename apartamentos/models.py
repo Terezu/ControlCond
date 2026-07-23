@@ -7,12 +7,24 @@ from django.db.models.functions import Coalesce, Lower, Trim
 
 
 LIMITE_LEITURA = Decimal("999999.99")
+LIMITE_VALOR_MONETARIO = Decimal("99999999.99")
 
 
 class Apartamento(models.Model):
     numero = models.CharField(max_length=20)
     bloco = models.CharField(max_length=50, blank=True, null=True)
     observacoes = models.TextField(blank=True, null=True)
+    valor_aluguel = models.DecimalField(
+        "Valor padrão do aluguel",
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        blank=True,
+        validators=[
+            MinValueValidator(Decimal("0")),
+            MaxValueValidator(LIMITE_VALOR_MONETARIO),
+        ],
+    )
 
     leitura_base_agua = models.DecimalField(
         max_digits=10,
@@ -45,6 +57,16 @@ class Apartamento(models.Model):
                 violation_error_message=(
                     "Já existe um apartamento com este número e bloco."
                 ),
+            ),
+            models.CheckConstraint(
+                condition=models.Q(valor_aluguel__gte=0),
+                name="apartamento_aluguel_nao_negativo",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(
+                    valor_aluguel__lte=LIMITE_VALOR_MONETARIO
+                ),
+                name="apartamento_aluguel_no_limite",
             ),
             models.CheckConstraint(
                 condition=(

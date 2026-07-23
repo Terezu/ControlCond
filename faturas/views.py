@@ -1,6 +1,6 @@
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
-from django.http import FileResponse, Http404
+from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import redirect, render
 from django.utils.text import slugify
 from django.views.decorators.cache import never_cache
@@ -9,11 +9,13 @@ from django.core.paginator import Paginator
 
 from .forms import (
     AlterarStatusFaturaForm,
+    EditarValoresFaturaForm,
     FiltrarFaturasForm,
     GerarFaturaForm,
 )
 from .services import (
     consultar_fatura,
+    consultar_valor_aluguel_leitura,
     editar_fatura,
     gerar_fatura_mensal,
     listar_faturas,
@@ -85,6 +87,7 @@ def detalhes_fatura(request, fatura_id):
         raise Http404(str(erro)) from erro
 
     form_status = AlterarStatusFaturaForm(fatura=fatura)
+    form_valores = EditarValoresFaturaForm(fatura=fatura)
 
     return render(
         request,
@@ -92,6 +95,7 @@ def detalhes_fatura(request, fatura_id):
         {
             "fatura": fatura,
             "form_status": form_status,
+            "form_valores": form_valores,
         },
     )
 
@@ -144,6 +148,42 @@ def alterar_status_fatura(request, fatura_id):
         fatura_id=fatura.id,
     )
 
+
+@staff_member_required
+@never_cache
+@require_http_methods(["POST"])
+def alterar_valores_fatura(request, fatura_id):
+    try:
+        fatura = consultar_fatura(fatura_id)
+    except ValueError as erro:
+        raise Http404(str(erro)) from erro
+
+    form = EditarValoresFaturaForm(
+        request.POST,
+        fatura=fatura,
+    )
+    if not form.is_valid():
+        messages.error(
+            request,
+            "Verifique o valor do aluguel e o desconto informados.",
+        )
+        return redirect("faturas:detalhes", fatura_id=fatura.id)
+
+    try:
+        editar_fatura(
+            fatura.id,
+            valor_aluguel=form.cleaned_data["valor_aluguel"],
+            desconto=form.cleaned_data["desconto"],
+        )
+    except ValueError as erro:
+        messages.error(request, str(erro))
+    else:
+        messages.success(
+            request,
+            "Valores financeiros da fatura atualizados com sucesso.",
+        )
+    return redirect("faturas:detalhes", fatura_id=fatura.id)
+
 @staff_member_required
 @never_cache
 @require_http_methods(["GET", "POST"])
@@ -157,9 +197,13 @@ def gerar_fatura(request):
             leitura = form.cleaned_data["leitura"]
 
             try:
-                fatura = gerar_fatura_mensal(leitura.id)
+                fatura = gerar_fatura_mensal(
+                    leitura.id,
+                    valor_aluguel=form.cleaned_data["valor_aluguel"],
+                    desconto=form.cleaned_data["desconto"],
+                )
             except ValueError as erro:
-                form.add_error("leitura", str(erro))
+                form.add_error(None, str(erro))
 
                 apartamento = leitura.apartamento
 
@@ -192,6 +236,24 @@ def gerar_fatura(request):
             "form": form,
             "apartamento_sem_leitura_base": apartamento_sem_leitura_base,
         },
+    )
+
+
+@staff_member_required
+@never_cache
+@require_safe
+def valor_aluguel_leitura(request):
+    leitura_id = request.GET.get("leitura")
+    try:
+        leitura_id = int(leitura_id)
+        valor = consultar_valor_aluguel_leitura(leitura_id)
+    except (TypeError, ValueError):
+        return JsonResponse(
+            {"erro": "Leitura não encontrada."},
+            status=404,
+        )
+    return JsonResponse(
+        {"valor_aluguel": format(valor, ".2f")}
     )
 
 @staff_member_required
