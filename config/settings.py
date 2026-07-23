@@ -102,6 +102,7 @@ INSTALLED_APPS = [
     "apartamentos.apps.ApartamentosConfig",
     "leituras.apps.LeiturasConfig",
     "faturas.apps.FaturasConfig",
+    "configuracoes.apps.ConfiguracoesConfig",
     "dashboard",
 ]
 
@@ -199,6 +200,9 @@ STATIC_URL = 'static/'
 STATICFILES_DIRS = [
     BASE_DIR / "static",
 ]
+
+MEDIA_URL = "media/"
+MEDIA_ROOT = BASE_DIR / "media"
 
 # As telas operacionais usam o login já fornecido pelo painel administrativo.
 LOGIN_URL = "/admin/login/"
