@@ -164,6 +164,14 @@ class CalculosGasTests(SimpleTestCase):
 
         self.assertEqual(valor, Decimal("31.53"))
 
+    def test_valor_gas_aceita_tarifa_decimal_explicita(self):
+        valor = calcular_valor_gas(
+            Decimal("3"),
+            Decimal("25.50"),
+        )
+
+        self.assertEqual(valor, Decimal("76.50"))
+
     def test_calcular_gas_retorna_dados_completos(self):
         resultado = calcular_gas(
             leitura_anterior=20,

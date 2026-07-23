@@ -7,6 +7,7 @@ from django.db.models.functions import Round
 
 from apartamentos.models import Apartamento
 from calculos.services import calcular_agua, calcular_gas
+from configuracoes.models import LIMITE_VALOR_GAS
 from leituras.models import Leitura
 
 
@@ -62,6 +63,16 @@ class Fatura(models.Model):
         decimal_places=2,
         default=Decimal("0.00"),
         validators=[MinValueValidator(Decimal("0"))],
+    )
+
+    valor_m3_gas_emissao = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        default=Decimal("21.02"),
+        validators=[
+            MinValueValidator(Decimal("0")),
+            MaxValueValidator(LIMITE_VALOR_GAS),
+        ],
     )
 
     status = models.CharField(
@@ -151,6 +162,16 @@ class Fatura(models.Model):
                 name="fatura_status_valido",
             ),
             models.CheckConstraint(
+                condition=models.Q(valor_m3_gas_emissao__gte=0),
+                name="fatura_tarifa_gas_nao_negativa",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(
+                    valor_m3_gas_emissao__lte=LIMITE_VALOR_GAS
+                ),
+                name="fatura_tarifa_gas_no_limite",
+            ),
+            models.CheckConstraint(
                 condition=(
                     models.Q(
                         leitura_agua_anterior__isnull=True,
@@ -233,7 +254,11 @@ class Fatura(models.Model):
                 self.leitura_gas_atual,
                 self.consumo_gas,
                 self.valor_gas,
-                calcular_gas,
+                lambda anterior, atual: calcular_gas(
+                    anterior,
+                    atual,
+                    self.valor_m3_gas_emissao,
+                ),
             ),
         )
         for (

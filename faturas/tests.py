@@ -5,12 +5,14 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
+from django.core.files.base import ContentFile
 from django.db import IntegrityError, transaction
 from django.db.models.deletion import ProtectedError
 from django.test import TestCase
 from django.urls import reverse
 
 from apartamentos.models import Apartamento
+from configuracoes.services import atualizar_configuracao, obter_configuracao
 from leituras.models import Leitura
 
 from .forms import (
@@ -19,7 +21,7 @@ from .forms import (
     GerarFaturaForm,
 )
 from .models import Fatura
-from .pdf import obter_leituras_fatura
+from .pdf import gerar_pdf_fatura, obter_leituras_fatura
 from .services import (
     cadastrar_fatura,
     gerar_fatura_mensal,
@@ -226,6 +228,59 @@ class GerarFaturaMensalTests(TestCase):
         self.assertEqual(
             fatura.status,
             Fatura.Status.PENDENTE,
+        )
+
+    def test_tarifa_configurada_do_gas_e_usada_e_fica_registrada(self):
+        atualizar_configuracao(
+            {"valor_m3_gas": Decimal("30.00")}
+        )
+        self.configurar_leituras_base()
+        leitura = self.criar_leitura(
+            mes=1,
+            ano=2026,
+            leitura_agua=Decimal("1.00"),
+            leitura_gas=Decimal("2.00"),
+        )
+
+        fatura = gerar_fatura_mensal(leitura.id)
+
+        self.assertEqual(fatura.valor_gas, Decimal("60.00"))
+        self.assertEqual(
+            fatura.valor_m3_gas_emissao,
+            Decimal("30.00"),
+        )
+
+    def test_alterar_tarifa_afeta_apenas_novas_faturas(self):
+        self.configurar_leituras_base()
+        leitura_janeiro = self.criar_leitura(
+            mes=1,
+            ano=2026,
+            leitura_agua=Decimal("1.00"),
+            leitura_gas=Decimal("1.00"),
+        )
+        fatura_janeiro = gerar_fatura_mensal(leitura_janeiro.id)
+
+        atualizar_configuracao(
+            {"valor_m3_gas": Decimal("25.00")}
+        )
+        leitura_fevereiro = self.criar_leitura(
+            mes=2,
+            ano=2026,
+            leitura_agua=Decimal("2.00"),
+            leitura_gas=Decimal("2.00"),
+        )
+        fatura_fevereiro = gerar_fatura_mensal(leitura_fevereiro.id)
+        fatura_janeiro.refresh_from_db()
+
+        self.assertEqual(fatura_janeiro.valor_gas, Decimal("21.02"))
+        self.assertEqual(
+            fatura_janeiro.valor_m3_gas_emissao,
+            Decimal("21.02"),
+        )
+        self.assertEqual(fatura_fevereiro.valor_gas, Decimal("25.00"))
+        self.assertEqual(
+            fatura_fevereiro.valor_m3_gas_emissao,
+            Decimal("25.00"),
         )
 
     def test_primeira_fatura_usa_leitura_base_do_apartamento(self):
@@ -489,6 +544,118 @@ class GerarFaturaMensalTests(TestCase):
             conteudo = caminho.read_bytes()
 
         self.assertTrue(conteudo.startswith(b"%PDF"))
+
+    def test_pdf_funciona_com_configuracao_incompleta_e_sem_logo(self):
+        fatura = Fatura.objects.create(
+            apartamento=self.apartamento,
+            mes=1,
+            ano=2026,
+            consumo_agua=0,
+            consumo_gas=0,
+            apartamento_numero_emissao=self.apartamento.numero,
+        )
+
+        arquivo = gerar_pdf_fatura(
+            fatura,
+            configuracao=obter_configuracao(),
+        )
+        try:
+            self.assertTrue(arquivo.read(4).startswith(b"%PDF"))
+        finally:
+            arquivo.close()
+
+    def test_pdf_usa_dados_configurados(self):
+        configuracao = atualizar_configuracao(
+            {
+                "nome": "Condomínio Teste",
+                "cnpj": "04.252.011/0001-10",
+                "endereco": "Rua Principal, 100",
+                "cep": "80000-000",
+                "cidade": "Curitiba",
+                "estado": "PR",
+                "telefone": "(41) 3333-3333",
+                "email": "condominio@example.com",
+                "administradora_nome": "Administradora Teste",
+                "administradora_responsavel": "Maria",
+                "administradora_telefone": "(41) 99999-9999",
+                "administradora_email": "admin@example.com",
+                "observacoes_padrao": "Pague até o vencimento.",
+                "texto_rodape": "Documento do condomínio.",
+                "valor_m3_gas": Decimal("21.02"),
+            }
+        )
+        fatura = Fatura.objects.create(
+            apartamento=self.apartamento,
+            mes=1,
+            ano=2026,
+            consumo_agua=0,
+            consumo_gas=0,
+            apartamento_numero_emissao=self.apartamento.numero,
+        )
+
+        with patch("faturas.pdf.canvas.Canvas") as canvas_mock:
+            pdf_mock = canvas_mock.return_value
+            pdf_mock.stringWidth.return_value = 0
+            gerar_pdf_fatura(fatura, configuracao=configuracao)
+
+        textos = [
+            chamada.args[2]
+            for chamada in pdf_mock.drawString.call_args_list
+        ]
+        conteudo = " ".join(textos)
+        for esperado in (
+            "Condomínio Teste",
+            "04.252.011/0001-10",
+            "Rua Principal, 100",
+            "80000-000",
+            "Curitiba",
+            "(41) 3333-3333",
+            "condominio@example.com",
+            "Administradora Teste",
+            "Maria",
+            "(41) 99999-9999",
+            "admin@example.com",
+            "Pague até o vencimento.",
+            "Documento do condomínio.",
+        ):
+            with self.subTest(esperado=esperado):
+                self.assertIn(esperado, conteudo)
+
+    def test_pdf_ignora_logo_ausente_ou_invalida(self):
+        configuracao = obter_configuracao()
+        fatura = Fatura.objects.create(
+            apartamento=self.apartamento,
+            mes=1,
+            ano=2026,
+            consumo_agua=0,
+            consumo_gas=0,
+            apartamento_numero_emissao=self.apartamento.numero,
+        )
+
+        configuracao.logo.name = "configuracoes/logos/ausente.png"
+        arquivo_sem_logo = gerar_pdf_fatura(
+            fatura,
+            configuracao=configuracao,
+        )
+        arquivo_sem_logo.close()
+
+        with TemporaryDirectory() as pasta:
+            with self.settings(MEDIA_ROOT=pasta):
+                configuracao.logo.save(
+                    "invalida.png",
+                    ContentFile(b"isto nao e uma imagem"),
+                    save=True,
+                )
+                arquivo_logo_invalida = gerar_pdf_fatura(
+                    fatura,
+                    configuracao=configuracao,
+                )
+                try:
+                    self.assertTrue(
+                        arquivo_logo_invalida.read(4).startswith(b"%PDF")
+                    )
+                finally:
+                    arquivo_logo_invalida.close()
 
     def test_banco_rejeita_total_diferente_da_soma(self):
         with self.assertRaises(IntegrityError), transaction.atomic():

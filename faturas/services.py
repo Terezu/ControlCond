@@ -6,6 +6,7 @@ from django.db import IntegrityError, models, transaction
 
 from apartamentos.models import Apartamento
 from calculos.services import calcular_agua, calcular_gas
+from configuracoes.services import obter_configuracao
 from leituras.models import Leitura
 
 from .models import ANO_MAXIMO, Fatura
@@ -95,7 +96,7 @@ def _normalizar_decimal(
     return valor
 
 
-def _calcular_dados_da_leitura(leitura_atual):
+def _calcular_dados_da_leitura(leitura_atual, valor_m3_gas):
     if (
         leitura_atual.leitura_agua is None
         or leitura_atual.leitura_gas is None
@@ -140,6 +141,7 @@ def _calcular_dados_da_leitura(leitura_atual):
     resultado_gas = calcular_gas(
         leitura_gas_anterior,
         leitura_atual.leitura_gas,
+        valor_m3_gas,
     )
     return {
         "consumo_agua": resultado_agua["consumo"],
@@ -183,6 +185,7 @@ def cadastrar_fatura(
     leitura_gas_atual=None,
 ):
     apartamento = _consultar_apartamento_para_atualizacao(apartamento_id)
+    valor_m3_gas = obter_configuracao().valor_m3_gas
 
     if (
         isinstance(mes, bool)
@@ -259,7 +262,10 @@ def cadastrar_fatura(
     )
 
     if leitura is not None:
-        dados_calculados = _calcular_dados_da_leitura(leitura)
+        dados_calculados = _calcular_dados_da_leitura(
+            leitura,
+            valor_m3_gas,
+        )
         retratos_informados = {
             "leitura_agua_anterior": _normalizar_decimal(
                 leitura_agua_anterior,
@@ -366,6 +372,7 @@ def cadastrar_fatura(
         valor_agua=valor_agua,
         valor_gas=valor_gas,
         valor_total=valor_agua + valor_gas,
+        valor_m3_gas_emissao=valor_m3_gas,
         status=status,
         apartamento_numero_emissao=apartamento.numero,
         apartamento_bloco_emissao=apartamento.bloco,

@@ -20,7 +20,9 @@ FAIXAS_TARIFA_AGUA = (
     (10, Decimal("17.80")),
     (None, Decimal("30.12")),
 )
-VALOR_M3_GAS = Decimal("21.02")
+# Padrão legado para chamadas matemáticas isoladas. No fluxo operacional,
+# faturas.services sempre informa a tarifa obtida de ConfiguracaoCondominio.
+VALOR_M3_GAS_PADRAO = Decimal("21.02")
 
 
 def _decimal_finito(valor, descricao):
@@ -118,24 +120,34 @@ def calcular_consumo_gas(leitura_anterior, leitura_atual):
     return _calcular_consumo(leitura_anterior, leitura_atual, "gás")
 
 
-def calcular_valor_gas(consumo_gas):
+def calcular_valor_gas(consumo_gas, valor_m3_gas=VALOR_M3_GAS_PADRAO):
     consumo = _decimal_finito(consumo_gas, "O consumo de gás")
     if consumo < 0:
         raise ValueError("O consumo de gás não pode ser negativo.")
+    valor_m3_gas = _decimal_finito(
+        valor_m3_gas,
+        "O valor do m³ do gás",
+    )
+    if valor_m3_gas < 0:
+        raise ValueError("O valor do m³ do gás não pode ser negativo.")
 
     try:
-        return (consumo * VALOR_M3_GAS).quantize(
+        return (consumo * valor_m3_gas).quantize(
             Decimal("0.01"), rounding=ROUND_HALF_UP
         )
     except InvalidOperation as exc:
         raise ValueError("O consumo de gás excede o limite calculável.") from exc
 
 
-def calcular_gas(leitura_anterior, leitura_atual):
+def calcular_gas(
+    leitura_anterior,
+    leitura_atual,
+    valor_m3_gas=VALOR_M3_GAS_PADRAO,
+):
     consumo = calcular_consumo_gas(leitura_anterior, leitura_atual)
     return {
         "leitura_anterior": leitura_anterior,
         "leitura_atual": leitura_atual,
         "consumo": consumo,
-        "valor": calcular_valor_gas(consumo),
+        "valor": calcular_valor_gas(consumo, valor_m3_gas),
     }
