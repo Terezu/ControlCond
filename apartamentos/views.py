@@ -1,12 +1,13 @@
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.http import Http404
+from django.core.paginator import Paginator
 from django.shortcuts import redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods, require_safe
 
-from .forms import ApartamentoForm
+from .forms import ApartamentoForm, FiltrarApartamentosForm
 from .services import (
     cadastrar_apartamento,
     consultar_apartamento,
@@ -152,11 +153,28 @@ def editar_dados_apartamento(request, apartamento_id):
 @never_cache
 @require_safe
 def lista_apartamentos(request):
+    form_filtros = FiltrarApartamentosForm(request.GET or None)
+    filtros = {}
+
+    if form_filtros.is_valid():
+        filtros = {
+            "numero": form_filtros.cleaned_data["numero"],
+            "bloco": form_filtros.cleaned_data["bloco"],
+        }
+
+    paginator = Paginator(listar_apartamentos(**filtros), 10)
+    pagina_apartamentos = paginator.get_page(request.GET.get("page"))
+    parametros_filtros = request.GET.copy()
+    parametros_filtros.pop("page", None)
+
     return render(
         request,
         "apartamentos/lista.html",
         {
-            "apartamentos": listar_apartamentos(),
+            "apartamentos": pagina_apartamentos,
+            "pagina_apartamentos": pagina_apartamentos,
+            "form_filtros": form_filtros,
+            "parametros_filtros": parametros_filtros.urlencode(),
         },
     )
 

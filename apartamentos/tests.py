@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError, transaction
 from django.db.models.deletion import ProtectedError
 from django.test import TestCase
 from django.urls import reverse
@@ -11,8 +12,8 @@ from faturas.models import Fatura
 from leituras.models import Leitura
 
 from .models import Apartamento
-from .forms import ApartamentoForm
-from .services import cadastrar_apartamento, editar_apartamento
+from .forms import ApartamentoForm, FiltrarApartamentosForm
+from .services import cadastrar_apartamento, editar_apartamento, listar_apartamentos
 
 
 class ApartamentoFormTests(TestCase):
@@ -37,6 +38,33 @@ class ApartamentoFormTests(TestCase):
         self.assertFalse(form.is_valid())
         self.assertIn("leitura_base_agua", form.errors)
         self.assertIn("leitura_base_gas", form.errors)
+
+    def test_formulario_de_filtros_mantem_valores_informados(self):
+        form = FiltrarApartamentosForm({"numero": "10", "bloco": "A"})
+
+        self.assertTrue(form.is_valid())
+        self.assertEqual(form.cleaned_data["numero"], "10")
+        self.assertEqual(form.cleaned_data["bloco"], "A")
+
+
+class FiltrosApartamentoTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.apartamento_101a = Apartamento.objects.create(numero="101", bloco="A")
+        cls.apartamento_102a = Apartamento.objects.create(numero="102", bloco="A")
+        cls.apartamento_101b = Apartamento.objects.create(numero="101", bloco="B")
+
+    def test_servico_combina_numero_e_bloco(self):
+        resultados = list(
+            listar_apartamentos(numero="101", bloco="A")
+        )
+
+        self.assertEqual(resultados, [self.apartamento_101a])
+
+    def test_filtro_de_numero_permite_correspondencia_parcial(self):
+        resultados = list(listar_apartamentos(numero="02"))
+
+        self.assertEqual(resultados, [self.apartamento_102a])
 
     def test_aceita_leituras_base_zero(self):
         form = ApartamentoForm(
@@ -246,6 +274,21 @@ class ApresentacaoApartamentoTests(TestCase):
             reverse("apartamentos:detalhes", args=[apartamento.id]),
         )
 
+    def test_lista_filtra_e_mantem_parametros_preenchidos(self):
+        Apartamento.objects.create(numero="101", bloco="A")
+        Apartamento.objects.create(numero="202", bloco="B")
+
+        resposta = self.client.get(
+            reverse("apartamentos:lista"),
+            {"numero": "101", "bloco": "A"},
+        )
+
+        self.assertContains(resposta, "Apartamento 101")
+        self.assertNotContains(resposta, "Apartamento 202")
+        self.assertContains(resposta, 'value="101"')
+        self.assertContains(resposta, 'value="A"')
+        self.assertContains(resposta, "Limpar filtros")
+
     def test_formulario_usa_componente_de_campo_e_mantem_cancelamento(self):
         resposta = self.client.get(reverse("apartamentos:novo"))
 
@@ -312,6 +355,48 @@ class ProtecaoApartamentoTest(TestCase):
             self.apartamento.delete()
 
         self.assertTrue(Fatura.objects.filter(pk=fatura.pk).exists())
+
+
+class IntegridadeApartamentoTests(TestCase):
+    def test_banco_impede_numero_duplicado_sem_bloco(self):
+        Apartamento.objects.create(numero="101", bloco=None)
+
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            Apartamento.objects.create(numero="101", bloco=None)
+
+    def test_banco_impede_duplicidade_independente_de_maiusculas(self):
+        Apartamento.objects.create(numero="101", bloco="A")
+
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            Apartamento.objects.create(numero="101", bloco="a")
+
+    def test_banco_rejeita_numero_e_textos_nao_normalizados(self):
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            Apartamento.objects.create(numero=" 101 ")
+
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            Apartamento.objects.create(numero="101", bloco=" ")
+
+    def test_service_normaliza_textos_e_rejeita_duplicidade(self):
+        apartamento = cadastrar_apartamento(
+            numero=" 101 ",
+            bloco=" A ",
+            observacoes=" Medidor externo ",
+            leitura_base_agua=0,
+            leitura_base_gas=0,
+        )
+
+        self.assertEqual(apartamento.numero, "101")
+        self.assertEqual(apartamento.bloco, "A")
+        self.assertEqual(apartamento.observacoes, "Medidor externo")
+
+        with self.assertRaisesRegex(ValueError, "Já existe"):
+            cadastrar_apartamento(
+                numero="101",
+                bloco="a",
+                leitura_base_agua=0,
+                leitura_base_gas=0,
+            )
 
 
 class SegurancaViewsApartamentoTests(TestCase):

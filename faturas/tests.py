@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models.deletion import ProtectedError
 from django.test import TestCase
@@ -501,6 +502,51 @@ class GerarFaturaMensalTests(TestCase):
                 valor_gas=Decimal("5.00"),
                 valor_total=Decimal("99.00"),
             )
+
+    def test_banco_rejeita_retrato_de_leituras_incompleto_ou_regressivo(self):
+        casos = [
+            {
+                "leitura_agua_anterior": Decimal("10.00"),
+                "leitura_agua_atual": None,
+            },
+            {
+                "leitura_gas_anterior": Decimal("10.00"),
+                "leitura_gas_atual": Decimal("9.99"),
+            },
+        ]
+        for indice, retrato in enumerate(casos, start=1):
+            with self.subTest(retrato=retrato):
+                with self.assertRaises(IntegrityError), transaction.atomic():
+                    Fatura.objects.create(
+                        apartamento=self.apartamento,
+                        mes=indice,
+                        ano=2026,
+                        consumo_agua=0,
+                        consumo_gas=0,
+                        **retrato,
+                    )
+
+    def test_modelo_rejeita_consumo_e_valor_divergentes_das_leituras(self):
+        fatura = Fatura(
+            apartamento=self.apartamento,
+            mes=1,
+            ano=2026,
+            consumo_agua=999,
+            consumo_gas=1,
+            valor_agua=Decimal("1.00"),
+            valor_gas=Decimal("21.02"),
+            valor_total=Decimal("22.02"),
+            leitura_agua_anterior=Decimal("0.00"),
+            leitura_agua_atual=Decimal("1.00"),
+            leitura_gas_anterior=Decimal("0.00"),
+            leitura_gas_atual=Decimal("1.00"),
+        )
+
+        with self.assertRaises(ValidationError) as contexto:
+            fatura.full_clean()
+
+        self.assertIn("consumo_agua", contexto.exception.message_dict)
+        self.assertIn("valor_agua", contexto.exception.message_dict)
 
     def test_formulario_exibe_apenas_leituras_aptas_a_faturamento(self):
         incompleta = self.criar_leitura(

@@ -1,7 +1,7 @@
 from decimal import Decimal, InvalidOperation
 
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Prefetch
 
 from faturas.models import Fatura
@@ -10,6 +10,7 @@ from leituras.models import Leitura
 from .models import LIMITE_LEITURA, Apartamento
 
 
+@transaction.atomic
 def cadastrar_apartamento(
     numero,
     leitura_base_agua,
@@ -34,7 +35,7 @@ def cadastrar_apartamento(
         leitura_base_gas=leitura_base_gas,
     )
     _validar_modelo(apartamento)
-    apartamento.save(force_insert=True)
+    _salvar_apartamento(apartamento, force_insert=True)
     return apartamento
 
 
@@ -69,14 +70,12 @@ def editar_apartamento(
     apartamento.leitura_base_agua = leitura_base_agua
     apartamento.leitura_base_gas = leitura_base_gas
     _validar_modelo(apartamento)
-    apartamento.save(
+    _salvar_apartamento(
+        apartamento,
         update_fields=[
-            "numero",
-            "bloco",
-            "observacoes",
-            "leitura_base_agua",
-            "leitura_base_gas",
-        ]
+            "numero", "bloco", "observacoes",
+            "leitura_base_agua", "leitura_base_gas",
+        ],
     )
     return apartamento
 
@@ -141,9 +140,26 @@ def _normalizar_texto_opcional(valor):
 
 def _validar_modelo(apartamento):
     try:
-        apartamento.full_clean(validate_unique=False, validate_constraints=False)
+        apartamento.full_clean(validate_unique=False)
     except ValidationError as exc:
         raise ValueError(" ".join(exc.messages)) from exc
+
+
+def _salvar_apartamento(apartamento, **kwargs):
+    try:
+        with transaction.atomic():
+            apartamento.save(**kwargs)
+    except IntegrityError as exc:
+        if Apartamento.objects.filter(
+            numero__iexact=apartamento.numero,
+            bloco__iexact=apartamento.bloco,
+        ).exclude(pk=apartamento.pk).exists():
+            raise ValueError(
+                "Já existe um apartamento com este número e bloco."
+            ) from exc
+        raise ValueError(
+            "Os dados do apartamento violam uma regra de integridade."
+        ) from exc
 
 
 def consultar_apartamento(apartamento_id):
@@ -174,8 +190,15 @@ def consultar_detalhes_apartamento(apartamento_id):
 
 
 
-def listar_apartamentos():
-    return Apartamento.objects.order_by("bloco", "numero", "id")
+def listar_apartamentos(*, numero=None, bloco=None):
+    apartamentos = Apartamento.objects.all()
+
+    if numero:
+        apartamentos = apartamentos.filter(numero__icontains=numero.strip())
+    if bloco:
+        apartamentos = apartamentos.filter(bloco__iexact=bloco.strip())
+
+    return apartamentos.order_by("bloco", "numero", "id")
 
 
 @transaction.atomic

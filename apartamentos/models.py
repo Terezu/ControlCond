@@ -3,6 +3,7 @@ from decimal import Decimal
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.db.models.functions import Coalesce, Lower, Trim
 
 
 LIMITE_LEITURA = Decimal("999999.99")
@@ -37,6 +38,45 @@ class Apartamento(models.Model):
         db_table = "apartamentos"
         ordering = ["bloco", "numero"]
         constraints = [
+            models.UniqueConstraint(
+                Lower("numero"),
+                Coalesce(Lower("bloco"), models.Value("")),
+                name="apartamento_unico_por_numero_e_bloco",
+                violation_error_message=(
+                    "Já existe um apartamento com este número e bloco."
+                ),
+            ),
+            models.CheckConstraint(
+                condition=(
+                    ~models.Q(numero="")
+                    & models.Q(numero=Trim("numero"))
+                ),
+                name="apartamento_numero_valido",
+                violation_error_message=(
+                    "O número do apartamento é obrigatório e não pode "
+                    "conter espaços nas extremidades."
+                ),
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(bloco__isnull=True)
+                    | (
+                        ~models.Q(bloco="")
+                        & models.Q(bloco=Trim("bloco"))
+                    )
+                ),
+                name="apartamento_bloco_normalizado",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(observacoes__isnull=True)
+                    | (
+                        ~models.Q(observacoes="")
+                        & models.Q(observacoes=Trim("observacoes"))
+                    )
+                ),
+                name="apartamento_observacoes_normalizadas",
+            ),
             models.CheckConstraint(
                 condition=(
                     models.Q(leitura_base_agua__isnull=True)
@@ -74,6 +114,18 @@ class Apartamento(models.Model):
 
     def clean(self):
         super().clean()
+
+        if isinstance(self.numero, str):
+            self.numero = self.numero.strip()
+        if isinstance(self.bloco, str):
+            self.bloco = self.bloco.strip() or None
+        if isinstance(self.observacoes, str):
+            self.observacoes = self.observacoes.strip() or None
+
+        if not self.numero:
+            raise ValidationError(
+                {"numero": "O número do apartamento é obrigatório."}
+            )
 
         if not self.pk:
             return

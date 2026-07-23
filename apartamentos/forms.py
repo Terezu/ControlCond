@@ -1,10 +1,6 @@
-from decimal import Decimal
-
 from django import forms
 
-from .models import Apartamento
-
-LIMITE_LEITURA = Decimal("999999.99")
+from .models import LIMITE_LEITURA, Apartamento
 
 
 class ApartamentoForm(forms.ModelForm):
@@ -40,26 +36,20 @@ class ApartamentoForm(forms.ModelForm):
         for field in self.fields.values():
             field.widget.attrs.update({"class": "form-control"})
 
-    def clean_leitura_base_agua(self):
-        valor = self.cleaned_data["leitura_base_agua"]
-        if valor < 0:
-            raise forms.ValidationError(
-                "A leitura-base de água não pode ser negativa."
-            )
-        if valor > LIMITE_LEITURA:
-            raise forms.ValidationError(
-                "A leitura-base de água excede o valor máximo permitido."
-            )
-        return valor
+class FiltrarApartamentosForm(forms.Form):
+    numero = forms.CharField(
+        required=False,
+        label="Número do apartamento",
+        max_length=20,
+    )
+    bloco = forms.CharField(
+        required=False,
+        label="Bloco",
+        max_length=50,
+    )
 
-    def clean_leitura_base_gas(self):
-        valor = self.cleaned_data["leitura_base_gas"]
-        if valor < 0:
-            raise forms.ValidationError(
-                "A leitura-base de gás não pode ser negativa."
-            )
-        if valor > LIMITE_LEITURA:
-            raise forms.ValidationError(
-                "A leitura-base de gás excede o valor máximo permitido."
-            )
-        return valor
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        for field in self.fields.values():
+            field.widget.attrs.update({"class": "form-control"})

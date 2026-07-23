@@ -10,6 +10,8 @@ from decimal import (
 # Tarifa residencial normal de água e esgoto de Curitiba, vigente desde
 # 17/05/2026. Fonte: https://www.sanepar.com.br/tarifas. O primeiro valor é a
 # cobrança total até 5 m³; os seguintes são valores por m³ em cada faixa.
+# Os números 5, 5, 5 e 10 não são os limites finais.
+# Eles representam quantos metros cúbicos cabem em cada faixa. None significa “sem limite”.
 TARIFA_AGUA_ATE_5_M3 = Decimal("101.91")
 FAIXAS_TARIFA_AGUA = (
     (5, Decimal("3.15")),

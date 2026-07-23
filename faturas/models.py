@@ -6,6 +6,7 @@ from django.db import models
 from django.db.models.functions import Round
 
 from apartamentos.models import Apartamento
+from calculos.services import calcular_agua, calcular_gas
 from leituras.models import Leitura
 
 
@@ -149,6 +150,38 @@ class Fatura(models.Model):
                 ),
                 name="fatura_status_valido",
             ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        leitura_agua_anterior__isnull=True,
+                        leitura_agua_atual__isnull=True,
+                    )
+                    | models.Q(
+                        leitura_agua_anterior__isnull=False,
+                        leitura_agua_atual__isnull=False,
+                        leitura_agua_atual__gte=models.F(
+                            "leitura_agua_anterior"
+                        ),
+                    )
+                ),
+                name="fatura_leituras_agua_coerentes",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        leitura_gas_anterior__isnull=True,
+                        leitura_gas_atual__isnull=True,
+                    )
+                    | models.Q(
+                        leitura_gas_anterior__isnull=False,
+                        leitura_gas_atual__isnull=False,
+                        leitura_gas_atual__gte=models.F(
+                            "leitura_gas_anterior"
+                        ),
+                    )
+                ),
+                name="fatura_leituras_gas_coerentes",
+            ),
         ]
     
     def __str__(self):
@@ -181,6 +214,57 @@ class Fatura(models.Model):
                 erros["leitura"] = (
                     "A leitura deve pertencer ao mesmo apartamento, mês e ano "
                     "da fatura."
+                )
+
+        calculos = (
+            (
+                "agua",
+                "água",
+                self.leitura_agua_anterior,
+                self.leitura_agua_atual,
+                self.consumo_agua,
+                self.valor_agua,
+                calcular_agua,
+            ),
+            (
+                "gas",
+                "gás",
+                self.leitura_gas_anterior,
+                self.leitura_gas_atual,
+                self.consumo_gas,
+                self.valor_gas,
+                calcular_gas,
+            ),
+        )
+        for (
+            campo_recurso,
+            recurso,
+            leitura_anterior,
+            leitura_atual,
+            consumo,
+            valor,
+            calcular,
+        ) in calculos:
+            if leitura_anterior is None and leitura_atual is None:
+                continue
+            if leitura_anterior is None or leitura_atual is None:
+                erros[f"leitura_{campo_recurso}_atual"] = (
+                    f"As leituras anterior e atual de {recurso} devem ser "
+                    "informadas em conjunto."
+                )
+                continue
+            try:
+                resultado = calcular(leitura_anterior, leitura_atual)
+            except ValueError as exc:
+                erros[f"leitura_{campo_recurso}_atual"] = str(exc)
+                continue
+            if consumo != resultado["consumo"]:
+                erros[f"consumo_{campo_recurso}"] = (
+                    f"O consumo de {recurso} não corresponde às leituras."
+                )
+            if valor != resultado["valor"]:
+                erros[f"valor_{campo_recurso}"] = (
+                    f"O valor de {recurso} não corresponde ao consumo."
                 )
 
         if erros:

@@ -182,7 +182,14 @@ def _validar_leitura(leitura):
         raise ValueError(" ".join(exc.messages)) from exc
 
 
-def listar_leituras(apartamento=None):
+def listar_leituras(
+    apartamento=None,
+    *,
+    apartamento_id=None,
+    bloco=None,
+    mes=None,
+    ano=None,
+):
     """
     Retorna as leituras, opcionalmente filtradas por apartamento,
     da mais recente para a mais antiga.
@@ -190,6 +197,14 @@ def listar_leituras(apartamento=None):
     leituras = Leitura.objects.select_related("apartamento")
     if apartamento is not None:
         leituras = leituras.filter(apartamento=apartamento)
+    if apartamento_id is not None:
+        leituras = leituras.filter(apartamento_id=apartamento_id)
+    if bloco:
+        leituras = leituras.filter(apartamento__bloco__iexact=bloco.strip())
+    if mes is not None:
+        leituras = leituras.filter(mes=mes)
+    if ano is not None:
+        leituras = leituras.filter(ano=ano)
     return leituras.order_by("-ano", "-mes", "-id")
 
 

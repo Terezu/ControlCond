@@ -5,15 +5,57 @@
 {% block content %}
     {% include "components/page_header.html" with titulo="Leituras" subtitulo="Consulte as medições registradas para os apartamentos." %}
 
-    <div class="card shadow-sm">
+    <section class="card shadow-sm mb-5" aria-labelledby="titulo-filtros">
         <div class="card-header bg-light py-3">
-            <h2 class="h5 mb-1">Leituras cadastradas</h2>
-            <p class="text-secondary small mb-0">As medições mais recentes aparecem primeiro.</p>
+            <h2 id="titulo-filtros" class="h5 mb-1">Filtros</h2>
+            <p class="text-secondary small mb-0">Refine a consulta por unidade, bloco ou período.</p>
+        </div>
+        <div class="card-body">
+            <form method="get">
+                {% if form_filtros.non_field_errors %}
+                    <div class="alert alert-danger" role="alert">
+                        {{ form_filtros.non_field_errors }}
+                    </div>
+                {% endif %}
+
+                <div class="row align-items-end">
+                    <div class="col-12 col-md-6 col-xl-4">
+                        {% include "components/form_field.html" with field=form_filtros.apartamento %}
+                    </div>
+                    <div class="col-12 col-md-6 col-xl-3">
+                        {% include "components/form_field.html" with field=form_filtros.bloco %}
+                    </div>
+                    <div class="col-6 col-md-6 col-xl-2">
+                        {% include "components/form_field.html" with field=form_filtros.mes %}
+                    </div>
+                    <div class="col-6 col-md-6 col-xl-3">
+                        {% include "components/form_field.html" with field=form_filtros.ano %}
+                    </div>
+                </div>
+
+                {% url "leituras:lista" as url_limpar_filtros %}
+                {% include "components/filter_actions.html" with url_limpar=url_limpar_filtros %}
+            </form>
+        </div>
+    </section>
+
+    <section class="card shadow-sm" aria-labelledby="titulo-lista-leituras">
+        <div class="card-header bg-light py-3 d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-2">
+            <div>
+                <h2 id="titulo-lista-leituras" class="h5 mb-1">Leituras cadastradas</h2>
+                <p class="text-secondary small mb-0">As medições mais recentes aparecem primeiro.</p>
+            </div>
+            <span class="badge text-bg-secondary">
+                {{ pagina_leituras.paginator.count }}
+                {% if pagina_leituras.paginator.count == 1 %}leitura{% else %}leituras{% endif %}
+            </span>
         </div>
 
         <div class="card-body p-0">
             {% url "apartamentos:lista" as url_apartamentos %}
             {% include "components/data_table.html" with template_cabecalho="components/table_headers/leitura.html" linhas=leituras template_linha="components/table_rows/leitura.html" empty_titulo="Nenhuma leitura cadastrada" empty_texto="Escolha um apartamento para registrar a primeira medição." empty_icone="bi-droplet" empty_url_acao=url_apartamentos empty_texto_acao="Ver apartamentos" empty_icone_acao="bi-buildings" %}
         </div>
-    </div>
+
+        {% include "components/pagination.html" with pagina=pagina_leituras parametros_filtros=parametros_filtros aria_label="Paginação de leituras" %}
+    </section>
 {% endblock %}
