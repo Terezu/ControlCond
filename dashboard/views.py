@@ -1,5 +1,8 @@
+from django.contrib.admin.views.decorators import staff_member_required
 from django.db.models import Sum
 from django.shortcuts import render
+from django.views.decorators.cache import never_cache
+from django.views.decorators.http import require_safe
 
 from apartamentos.models import Apartamento
 from faturas.models import Fatura
@@ -19,6 +22,9 @@ def formatar_valor_monetario(valor):
     return f"R$ {valor_formatado}"
 
 
+@staff_member_required
+@never_cache
+@require_safe
 def dashboard(request):
     total_apartamentos = Apartamento.objects.count()
     total_leituras = Leitura.objects.count()
