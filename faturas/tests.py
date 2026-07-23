@@ -1028,6 +1028,146 @@ class FaturaPresentationTests(TestCase):
         self.assertContains(resposta, "faturas/js/gerar_fatura.js")
         self.assertContains(resposta, reverse("faturas:lista"))
 
+    def test_geracao_por_leitura_abre_formulario_pre_preenchido(self):
+        apartamento = Apartamento.objects.create(
+            numero="302",
+            valor_aluguel=Decimal("1250.50"),
+            leitura_base_agua=Decimal("0.00"),
+            leitura_base_gas=Decimal("0.00"),
+        )
+        leitura = Leitura.objects.create(
+            apartamento=apartamento,
+            mes=1,
+            ano=2026,
+            leitura_agua=Decimal("1.00"),
+            leitura_gas=Decimal("1.00"),
+        )
+
+        resposta = self.client.get(
+            reverse("faturas:gerar"),
+            {"leitura": leitura.id},
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        form = resposta.context["form"]
+        self.assertEqual(form.initial["leitura"], leitura)
+        self.assertEqual(
+            form.initial["valor_aluguel"],
+            Decimal("1250.50"),
+        )
+        self.assertEqual(form.initial["desconto"], Decimal("0.00"))
+        self.assertContains(
+            resposta,
+            f'<option value="{leitura.id}" selected>',
+            html=False,
+        )
+
+    def test_geracao_por_leitura_cria_uma_fatura_e_redireciona(self):
+        apartamento = Apartamento.objects.create(
+            numero="304",
+            valor_aluguel=Decimal("900.00"),
+            leitura_base_agua=Decimal("0.00"),
+            leitura_base_gas=Decimal("0.00"),
+        )
+        leitura = Leitura.objects.create(
+            apartamento=apartamento,
+            mes=1,
+            ano=2026,
+            leitura_agua=Decimal("1.00"),
+            leitura_gas=Decimal("1.00"),
+        )
+
+        resposta = self.client.post(
+            reverse("faturas:gerar"),
+            {
+                "leitura": leitura.id,
+                "valor_aluguel": "850.00",
+                "desconto": "10.00",
+            },
+        )
+
+        fatura = Fatura.objects.get(
+            apartamento=apartamento,
+            mes=1,
+            ano=2026,
+        )
+        self.assertRedirects(
+            resposta,
+            reverse("faturas:detalhes", args=[fatura.id]),
+        )
+        self.assertEqual(Fatura.objects.count(), 1)
+        self.assertEqual(fatura.valor_aluguel, Decimal("850.00"))
+        self.assertEqual(fatura.desconto, Decimal("10.00"))
+
+    def test_tentativa_duplicada_redireciona_para_fatura_existente(self):
+        apartamento = Apartamento.objects.create(numero="305")
+        leitura = Leitura.objects.create(
+            apartamento=apartamento,
+            mes=1,
+            ano=2026,
+            leitura_agua=Decimal("1.00"),
+            leitura_gas=Decimal("1.00"),
+        )
+        fatura = Fatura.objects.create(
+            apartamento=apartamento,
+            leitura=leitura,
+            mes=1,
+            ano=2026,
+            consumo_agua=0,
+            consumo_gas=0,
+        )
+
+        resposta_get = self.client.get(
+            reverse("faturas:gerar"),
+            {"leitura": leitura.id},
+        )
+        resposta_post = self.client.post(
+            reverse("faturas:gerar"),
+            {
+                "leitura": leitura.id,
+                "valor_aluguel": "0.00",
+                "desconto": "0.00",
+            },
+        )
+
+        destino = reverse("faturas:detalhes", args=[fatura.id])
+        self.assertRedirects(resposta_get, destino)
+        self.assertRedirects(resposta_post, destino)
+        self.assertEqual(Fatura.objects.count(), 1)
+
+    def test_url_manual_com_leitura_inexistente_retorna_erro_amigavel(self):
+        resposta = self.client.get(
+            reverse("faturas:gerar"),
+            {"leitura": 999999},
+            follow=True,
+        )
+
+        self.assertRedirects(resposta, reverse("leituras:lista"))
+        self.assertContains(resposta, "Leitura não encontrada.")
+
+    def test_geracao_sem_leitura_anterior_exibe_orientacao(self):
+        apartamento = Apartamento.objects.create(numero="306")
+        leitura = Leitura.objects.create(
+            apartamento=apartamento,
+            mes=1,
+            ano=2026,
+            leitura_agua=Decimal("1.00"),
+            leitura_gas=Decimal("1.00"),
+        )
+
+        resposta = self.client.post(
+            reverse("faturas:gerar"),
+            {
+                "leitura": leitura.id,
+                "valor_aluguel": "0.00",
+                "desconto": "0.00",
+            },
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Leituras-base necessárias")
+        self.assertFalse(Fatura.objects.filter(leitura=leitura).exists())
+
     def test_endpoint_retorna_aluguel_da_unidade(self):
         apartamento = Apartamento.objects.create(
             numero="303",

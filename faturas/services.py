@@ -588,6 +588,36 @@ def consultar_valor_aluguel_leitura(leitura_id):
         raise ValueError("Leitura não encontrada.") from exc
 
 
+def obter_contexto_geracao_fatura(leitura_id):
+    """
+    Retorna a leitura solicitada e, quando houver, a fatura da competência.
+
+    A competência é a referência oficial para detectar duplicidade. O vínculo
+    direto com a leitura permanece disponível na fatura retornada para que
+    inconsistências históricas possam ser identificadas sem criar outra fatura.
+    """
+    try:
+        leitura = (
+            Leitura.objects
+            .select_related("apartamento")
+            .get(pk=leitura_id)
+        )
+    except (Leitura.DoesNotExist, TypeError, ValueError) as exc:
+        raise ValueError("Leitura não encontrada.") from exc
+
+    fatura = (
+        Fatura.objects
+        .select_related("apartamento", "leitura")
+        .filter(
+            apartamento_id=leitura.apartamento_id,
+            mes=leitura.mes,
+            ano=leitura.ano,
+        )
+        .first()
+    )
+    return leitura, fatura
+
+
 @transaction.atomic
 def gerar_fatura_mensal(
     leitura_id,

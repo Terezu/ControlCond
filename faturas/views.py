@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.http import FileResponse, Http404, JsonResponse
@@ -19,6 +21,7 @@ from .services import (
     editar_fatura,
     gerar_fatura_mensal,
     listar_faturas,
+    obter_contexto_geracao_fatura,
 )
 from .pdf import gerar_pdf_fatura
 
@@ -191,6 +194,24 @@ def gerar_fatura(request):
     apartamento_sem_leitura_base = None
 
     if request.method == "POST":
+        leitura_id = request.POST.get("leitura")
+        if leitura_id:
+            try:
+                _, fatura_existente = obter_contexto_geracao_fatura(
+                    leitura_id,
+                )
+            except ValueError:
+                fatura_existente = None
+            if fatura_existente is not None:
+                messages.info(
+                    request,
+                    "A fatura desta leitura já foi gerada.",
+                )
+                return redirect(
+                    "faturas:detalhes",
+                    fatura_id=fatura_existente.id,
+                )
+
         form = GerarFaturaForm(request.POST)
 
         if form.is_valid():
@@ -203,6 +224,23 @@ def gerar_fatura(request):
                     desconto=form.cleaned_data["desconto"],
                 )
             except ValueError as erro:
+                try:
+                    _, fatura_existente = obter_contexto_geracao_fatura(
+                        leitura.id,
+                    )
+                except ValueError:
+                    fatura_existente = None
+
+                if fatura_existente is not None:
+                    messages.info(
+                        request,
+                        "A fatura desta leitura já foi gerada.",
+                    )
+                    return redirect(
+                        "faturas:detalhes",
+                        fatura_id=fatura_existente.id,
+                    )
+
                 form.add_error(None, str(erro))
 
                 apartamento = leitura.apartamento
@@ -227,7 +265,35 @@ def gerar_fatura(request):
                     fatura_id=fatura.id,
                 )
     else:
-        form = GerarFaturaForm()
+        leitura_id = request.GET.get("leitura")
+        if leitura_id:
+            try:
+                leitura, fatura_existente = obter_contexto_geracao_fatura(
+                    leitura_id,
+                )
+            except ValueError as erro:
+                messages.error(request, str(erro))
+                return redirect("leituras:lista")
+
+            if fatura_existente is not None:
+                messages.info(
+                    request,
+                    "A fatura desta leitura já foi gerada.",
+                )
+                return redirect(
+                    "faturas:detalhes",
+                    fatura_id=fatura_existente.id,
+                )
+
+            form = GerarFaturaForm(
+                initial={
+                    "leitura": leitura,
+                    "valor_aluguel": leitura.apartamento.valor_aluguel,
+                    "desconto": Decimal("0.00"),
+                },
+            )
+        else:
+            form = GerarFaturaForm()
 
     return render(
         request,

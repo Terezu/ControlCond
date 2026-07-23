@@ -1,5 +1,6 @@
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
+from django.db.models import OuterRef, Subquery
 
 from apartamentos.models import Apartamento
 from apartamentos.services import consultar_apartamento
@@ -194,7 +195,27 @@ def listar_leituras(
     Retorna as leituras, opcionalmente filtradas por apartamento,
     da mais recente para a mais antiga.
     """
-    leituras = Leitura.objects.select_related("apartamento")
+    # A subconsulta resolve a fatura correspondente à competência na mesma
+    # consulta da listagem, sem uma busca adicional para cada linha.
+    from faturas.models import Fatura
+
+    fatura_da_competencia = (
+        Fatura.objects
+        .filter(
+            apartamento_id=OuterRef("apartamento_id"),
+            mes=OuterRef("mes"),
+            ano=OuterRef("ano"),
+        )
+        .order_by("id")
+        .values("id")[:1]
+    )
+    leituras = (
+        Leitura.objects
+        .select_related("apartamento")
+        .annotate(
+            fatura_competencia_id=Subquery(fatura_da_competencia),
+        )
+    )
     if apartamento is not None:
         leituras = leituras.filter(apartamento=apartamento)
     if apartamento_id is not None:
