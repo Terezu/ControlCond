@@ -9,6 +9,9 @@ from configuracoes.services import obter_configuracao
 
 MARGEM_ESQUERDA = 50
 ESPACO_PADRAO = 20
+LARGURA_MAXIMA_LOGO = 247.5
+ALTURA_MAXIMA_LOGO = 123.75
+ESPACO_ENTRE_LOGO_E_CABECALHO = 20
 
 
 def formatar_decimal(valor):
@@ -68,12 +71,12 @@ def _desenhar_logo(pdf, configuracao, largura, y):
         imagem = ImageReader(str(caminho))
         pdf.drawImage(
             imagem,
-            largura - MARGEM_ESQUERDA - 110,
-            y - 55,
-            width=110,
-            height=55,
+            largura - MARGEM_ESQUERDA - LARGURA_MAXIMA_LOGO,
+            y - ALTURA_MAXIMA_LOGO,
+            width=LARGURA_MAXIMA_LOGO,
+            height=ALTURA_MAXIMA_LOGO,
             preserveAspectRatio=True,
-            anchor="c",
+            anchor="ne",
             mask="auto",
         )
     except Exception:
@@ -84,13 +87,37 @@ def _desenhar_logo(pdf, configuracao, largura, y):
 
 def desenhar_cabecalho(pdf, fatura, configuracao, largura, y):
     _desenhar_logo(pdf, configuracao, largura, y)
-
-    pdf.setFont("Helvetica-Bold", 18)
-    pdf.drawString(
-        MARGEM_ESQUERDA,
-        y,
-        configuracao.nome or "CONTROLCOND",
+    limite_texto_cabecalho = (
+        largura
+        - (2 * MARGEM_ESQUERDA)
+        - LARGURA_MAXIMA_LOGO
+        - ESPACO_ENTRE_LOGO_E_CABECALHO
     )
+
+    tamanho_nome = 18
+    nome_condominio = configuracao.nome or "CONTROLCOND"
+    while (
+        tamanho_nome > 10
+        and pdf.stringWidth(
+            nome_condominio,
+            "Helvetica-Bold",
+            tamanho_nome,
+        ) > limite_texto_cabecalho
+    ):
+        tamanho_nome -= 1
+
+    linhas_nome = _quebrar_texto(
+        pdf,
+        nome_condominio,
+        limite_texto_cabecalho,
+        "Helvetica-Bold",
+        tamanho_nome,
+    )
+    pdf.setFont("Helvetica-Bold", tamanho_nome)
+    for indice, linha_nome in enumerate(linhas_nome):
+        if indice:
+            y -= tamanho_nome + 2
+        pdf.drawString(MARGEM_ESQUERDA, y, linha_nome)
 
     dados_condominio = [
         _juntar_partes(
@@ -109,7 +136,17 @@ def desenhar_cabecalho(pdf, fatura, configuracao, largura, y):
     for linha in dados_condominio:
         if linha:
             y -= 12
-            pdf.drawString(MARGEM_ESQUERDA, y, linha)
+            linhas_cabecalho = _quebrar_texto(
+                pdf,
+                linha,
+                limite_texto_cabecalho,
+                "Helvetica",
+                8,
+            )
+            for trecho in linhas_cabecalho:
+                pdf.drawString(MARGEM_ESQUERDA, y, trecho)
+                y -= 10
+            y += 10
 
     y -= 30
 
