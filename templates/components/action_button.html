@@ -1,0 +1,10 @@
+<a
+    href="{{ url }}{% if parametro_nome and parametro_valor is not None %}?{{ parametro_nome }}={{ parametro_valor|urlencode }}{% endif %}"
+    class="btn {{ classe|default:'btn-primary' }}"
+    {% if aria_label %}aria-label="{{ aria_label }}"{% endif %}
+>
+    {% if icone %}
+        <i class="bi {{ icone }} me-1" aria-hidden="true"></i>
+    {% endif %}
+    {{ texto }}
+</a>

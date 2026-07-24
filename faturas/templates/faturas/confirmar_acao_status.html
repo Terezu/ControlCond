@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}{{ rotulo }} | ControlCond{% endblock %}
+
+{% block content %}
+    {% include "components/page_header.html" with titulo=rotulo subtitulo="Revise a ação antes de confirmar." %}
+
+    <section class="card shadow-sm mx-auto" style="max-width: 720px;" aria-labelledby="titulo-confirmacao">
+        <div class="card-header bg-light py-3">
+            <h2 id="titulo-confirmacao" class="h5 mb-0">{{ titulo }}</h2>
+        </div>
+        <div class="card-body">
+            <p class="mb-2">
+                Apartamento {{ fatura.apartamento_numero_emissao }} —
+                {{ fatura.mes|stringformat:"02d" }}/{{ fatura.ano }}
+            </p>
+            <div class="alert alert-warning" role="alert">{{ aviso }}</div>
+
+            <form method="post" action="{% url url_acao fatura.id %}" novalidate>
+                {% csrf_token %}
+                {% if form %}
+                    {% include "components/form_field.html" with field=form.motivo %}
+                {% endif %}
+                <div class="d-flex flex-column flex-sm-row justify-content-end gap-2">
+                    <a class="btn btn-outline-secondary" href="{% url 'faturas:detalhes' fatura.id %}">Voltar</a>
+                    <button type="submit" class="btn btn-primary">{{ rotulo }}</button>
+                </div>
+            </form>
+        </div>
+    </section>
+{% endblock %}

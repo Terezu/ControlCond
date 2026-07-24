@@ -1,0 +1,22 @@
+<tr>
+    <td>
+        <a href="{% url 'apartamentos:detalhes' linha.apartamento_id %}" class="fw-semibold text-decoration-none">
+            {{ linha.apartamento }}
+        </a>
+    </td>
+    <td>{{ linha.mes|stringformat:"02d" }}/{{ linha.ano }}</td>
+    <td>{{ linha.leitura_agua|default_if_none:"Não informada" }}</td>
+    <td>{{ linha.leitura_gas|default_if_none:"Não informada" }}</td>
+    <td>{{ linha.data_registro|date:"d/m/Y H:i" }}</td>
+    <td class="text-end text-nowrap">
+        {% if linha.fatura_competencia_id %}
+            {% url "faturas:detalhes" linha.fatura_competencia_id as url_acao %}
+            {% include "components/action_button.html" with url=url_acao texto="Ver fatura" icone="bi-eye" classe="btn-outline-primary btn-sm" aria_label="Ver fatura desta leitura" %}
+        {% else %}
+            {% url "faturas:gerar" as url_gerar_fatura %}
+            {% include "components/action_button.html" with url=url_gerar_fatura parametro_nome="leitura" parametro_valor=linha.id texto="Gerar fatura" icone="bi-receipt" classe="btn-primary btn-sm" aria_label="Gerar fatura desta leitura" %}
+        {% endif %}
+        {% url "leituras:excluir" linha.id as url_excluir_leitura %}
+        {% include "components/action_button.html" with url=url_excluir_leitura texto="Excluir" icone="bi-trash" classe="btn-outline-danger btn-sm ms-1" aria_label="Excluir esta leitura" %}
+    </td>
+</tr>

@@ -1,0 +1,6 @@
+<tr>
+    <td class="fw-semibold">{{ linha.mes|stringformat:"02d" }}/{{ linha.ano }}</td>
+    <td>{{ linha.leitura_agua|default_if_none:"Não informada" }}</td>
+    <td>{{ linha.leitura_gas|default_if_none:"Não informada" }}</td>
+    <td>{{ linha.data_registro|date:"d/m/Y H:i" }}</td>
+</tr>
