@@ -1,4 +1,5 @@
 from decimal import Decimal
+from io import BytesIO
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -16,17 +17,21 @@ from configuracoes.services import atualizar_configuracao, obter_configuracao
 from leituras.models import Leitura
 
 from .forms import (
-    AlterarStatusFaturaForm,
     FiltrarFaturasForm,
     GerarFaturaForm,
+    MotivoAlteracaoStatusForm,
 )
-from .models import Fatura
+from .models import Fatura, HistoricoStatusFatura
 from .pdf import gerar_pdf_fatura, obter_leituras_fatura
 from .services import (
+    RegraNegocioFaturaError,
     cadastrar_fatura,
+    cancelar_fatura,
     editar_fatura,
+    estornar_pagamento,
     gerar_fatura_mensal,
-    gerar_pdf_fatura as salvar_pdf_fatura,
+    marcar_fatura_como_paga,
+    reabrir_fatura,
 )
 
 
@@ -635,7 +640,7 @@ class GerarFaturaMensalTests(TestCase):
         self.assertEqual(fatura.valor_gas, Decimal("21.02"))
         self.assertEqual(fatura.leitura_agua_atual, Decimal("1.00"))
 
-    def test_gerador_em_disco_reutiliza_o_pdf_canonico(self):
+    def test_gerador_escreve_no_destino_em_memoria(self):
         fatura = Fatura.objects.create(
             apartamento=self.apartamento,
             mes=1,
@@ -645,9 +650,10 @@ class GerarFaturaMensalTests(TestCase):
             apartamento_numero_emissao=self.apartamento.numero,
         )
 
-        with TemporaryDirectory() as pasta:
-            caminho = salvar_pdf_fatura(fatura.id, pasta)
-            conteudo = caminho.read_bytes()
+        destino = BytesIO()
+        gerar_pdf_fatura(fatura, destino)
+        destino.seek(0)
+        conteudo = destino.read()
 
         self.assertTrue(conteudo.startswith(b"%PDF"))
 
@@ -661,14 +667,14 @@ class GerarFaturaMensalTests(TestCase):
             apartamento_numero_emissao=self.apartamento.numero,
         )
 
-        arquivo = gerar_pdf_fatura(
+        destino = BytesIO()
+        gerar_pdf_fatura(
             fatura,
+            destino,
             configuracao=obter_configuracao(),
         )
-        try:
-            self.assertTrue(arquivo.read(4).startswith(b"%PDF"))
-        finally:
-            arquivo.close()
+        destino.seek(0)
+        self.assertTrue(destino.read(4).startswith(b"%PDF"))
 
     def test_pdf_exibe_aluguel_subtotal_desconto_e_total_persistidos(self):
         fatura = Fatura.objects.create(
@@ -690,6 +696,7 @@ class GerarFaturaMensalTests(TestCase):
             pdf_mock.stringWidth.return_value = 0
             gerar_pdf_fatura(
                 fatura,
+                BytesIO(),
                 configuracao=obter_configuracao(),
             )
 
@@ -744,7 +751,11 @@ class GerarFaturaMensalTests(TestCase):
         with patch("faturas.pdf.canvas.Canvas") as canvas_mock:
             pdf_mock = canvas_mock.return_value
             pdf_mock.stringWidth.return_value = 0
-            gerar_pdf_fatura(fatura, configuracao=configuracao)
+            gerar_pdf_fatura(
+                fatura,
+                BytesIO(),
+                configuracao=configuracao,
+            )
 
         textos = [
             chamada.args[2]
@@ -781,11 +792,12 @@ class GerarFaturaMensalTests(TestCase):
         )
 
         configuracao.logo.name = "configuracoes/logos/ausente.png"
-        arquivo_sem_logo = gerar_pdf_fatura(
+        destino_sem_logo = BytesIO()
+        gerar_pdf_fatura(
             fatura,
+            destino_sem_logo,
             configuracao=configuracao,
         )
-        arquivo_sem_logo.close()
 
         with TemporaryDirectory() as pasta:
             with self.settings(MEDIA_ROOT=pasta):
@@ -794,16 +806,16 @@ class GerarFaturaMensalTests(TestCase):
                     ContentFile(b"isto nao e uma imagem"),
                     save=True,
                 )
-                arquivo_logo_invalida = gerar_pdf_fatura(
+                destino_logo_invalida = BytesIO()
+                gerar_pdf_fatura(
                     fatura,
+                    destino_logo_invalida,
                     configuracao=configuracao,
                 )
-                try:
-                    self.assertTrue(
-                        arquivo_logo_invalida.read(4).startswith(b"%PDF")
-                    )
-                finally:
-                    arquivo_logo_invalida.close()
+                destino_logo_invalida.seek(0)
+                self.assertTrue(
+                    destino_logo_invalida.read(4).startswith(b"%PDF")
+                )
 
     def test_banco_rejeita_total_diferente_da_soma(self):
         with self.assertRaises(IntegrityError), transaction.atomic():
@@ -936,7 +948,9 @@ class FaturaFormPresentationTests(TestCase):
     def test_widgets_preservam_restricoes_e_recebem_estilo_bootstrap(self):
         filtros = FiltrarFaturasForm()
         geracao = GerarFaturaForm()
-        status = AlterarStatusFaturaForm()
+        motivo = MotivoAlteracaoStatusForm(
+            acao="estornar_pagamento"
+        )
 
         self.assertEqual(filtros.fields["ano"].widget.attrs["min"], 2000)
         self.assertEqual(filtros.fields["ano"].widget.attrs["max"], 9999)
@@ -949,8 +963,8 @@ class FaturaFormPresentationTests(TestCase):
             "form-select",
         )
         self.assertEqual(
-            status.fields["status"].widget.attrs["class"],
-            "form-select",
+            motivo.fields["motivo"].widget.attrs["class"],
+            "form-control",
         )
 
     def test_desconto_vazio_e_normalizado_para_zero(self):
@@ -973,6 +987,478 @@ class FaturaFormPresentationTests(TestCase):
         self.assertTrue(form.is_valid(), form.errors)
         self.assertIsNone(form.cleaned_data["valor_aluguel"])
         self.assertEqual(form.cleaned_data["desconto"], Decimal("0.00"))
+
+
+class DownloadPdfFaturaTests(TestCase):
+    def setUp(self):
+        usuario = get_user_model().objects.create_user(
+            username="operador-download-pdf",
+            password="senha-de-teste",
+            is_staff=True,
+        )
+        self.client.force_login(usuario)
+        apartamento = Apartamento.objects.create(
+            numero="101 / Sul",
+            bloco="A",
+        )
+        self.fatura = Fatura.objects.create(
+            apartamento=apartamento,
+            mes=7,
+            ano=2026,
+            consumo_agua=0,
+            consumo_gas=0,
+            valor_aluguel=Decimal("1000.00"),
+            valor_total=Decimal("1000.00"),
+            apartamento_numero_emissao=apartamento.numero,
+            apartamento_bloco_emissao=apartamento.bloco,
+        )
+
+    def baixar(self):
+        return self.client.get(
+            reverse("faturas:baixar_pdf", args=[self.fatura.id])
+        )
+
+    def test_download_retorna_pdf_como_anexo_sem_criar_fatura(self):
+        quantidade_antes = Fatura.objects.count()
+
+        resposta = self.baixar()
+        conteudo = b"".join(resposta.streaming_content)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta["Content-Type"], "application/pdf")
+        self.assertIn("attachment", resposta["Content-Disposition"])
+        self.assertIn(
+            "fatura-apartamento-101-sul-07-2026.pdf",
+            resposta["Content-Disposition"],
+        )
+        self.assertTrue(conteudo.startswith(b"%PDF"))
+        self.assertEqual(Fatura.objects.count(), quantidade_antes)
+
+    def test_dois_downloads_consecutivos_funcionam(self):
+        for _ in range(2):
+            resposta = self.baixar()
+            conteudo = b"".join(resposta.streaming_content)
+
+            self.assertEqual(resposta.status_code, 200)
+            self.assertTrue(conteudo.startswith(b"%PDF"))
+
+        self.assertEqual(Fatura.objects.count(), 1)
+
+    def test_fatura_inexistente_retorna_404(self):
+        resposta = self.client.get(
+            reverse("faturas:baixar_pdf", args=[999999])
+        )
+
+        self.assertEqual(resposta.status_code, 404)
+
+    @patch("faturas.views.gerar_pdf_fatura")
+    def test_download_usa_valores_atualizados_do_banco(self, gerar_pdf):
+        self.fatura.valor_aluguel = Decimal("1250.00")
+        self.fatura.valor_total = Decimal("1250.00")
+        self.fatura.save(update_fields=["valor_aluguel", "valor_total"])
+
+        def escrever_pdf(*, fatura, destino):
+            self.assertEqual(fatura.valor_aluguel, Decimal("1250.00"))
+            self.assertEqual(fatura.valor_total, Decimal("1250.00"))
+            destino.write(b"%PDF-1.4 atualizado")
+
+        gerar_pdf.side_effect = escrever_pdf
+
+        resposta = self.baixar()
+        conteudo = b"".join(resposta.streaming_content)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(conteudo, b"%PDF-1.4 atualizado")
+        gerar_pdf.assert_called_once()
+
+
+class RegrasStatusFaturaTests(TestCase):
+    def setUp(self):
+        self.usuario = get_user_model().objects.create_user(
+            username="operador-status",
+            password="senha-de-teste",
+            is_staff=True,
+        )
+        self.client.force_login(self.usuario)
+        self.apartamento = Apartamento.objects.create(numero="501")
+
+    def criar_fatura(self, status=Fatura.Status.PENDENTE, mes=1):
+        return Fatura.objects.create(
+            apartamento=self.apartamento,
+            mes=mes,
+            ano=2026,
+            consumo_agua=0,
+            consumo_gas=0,
+            valor_aluguel=Decimal("100.00"),
+            valor_total=Decimal("100.00"),
+            status=status,
+            apartamento_numero_emissao=self.apartamento.numero,
+        )
+
+    def test_transicoes_permitidas_registram_datas_historico_e_usuario(self):
+        casos = (
+            (
+                marcar_fatura_como_paga,
+                Fatura.Status.PAGA,
+                HistoricoStatusFatura.Acao.PAGAMENTO_CONFIRMADO,
+                "data_pagamento",
+            ),
+            (
+                cancelar_fatura,
+                Fatura.Status.CANCELADA,
+                HistoricoStatusFatura.Acao.FATURA_CANCELADA,
+                "data_cancelamento",
+            ),
+        )
+        for mes, (service, novo_status, acao, campo_data) in enumerate(
+            casos,
+            start=1,
+        ):
+            with self.subTest(novo_status=novo_status):
+                fatura = self.criar_fatura(mes=mes)
+                quantidade_antes = Fatura.objects.count()
+
+                atualizada, alterada = service(
+                    fatura.id,
+                    usuario=self.usuario,
+                )
+
+                self.assertTrue(alterada)
+                self.assertEqual(atualizada.status, novo_status)
+                self.assertIsNotNone(getattr(atualizada, campo_data))
+                self.assertEqual(Fatura.objects.count(), quantidade_antes)
+                evento = atualizada.historico_status.get()
+                self.assertEqual(
+                    evento.status_anterior,
+                    Fatura.Status.PENDENTE,
+                )
+                self.assertEqual(evento.novo_status, novo_status)
+                self.assertEqual(evento.acao, acao)
+                self.assertEqual(evento.motivo, "")
+                self.assertEqual(evento.usuario, self.usuario)
+                self.assertIsNotNone(evento.criado_em)
+
+    def test_estorno_e_reabertura_exigem_motivo_e_limpam_datas(self):
+        paga = self.criar_fatura(mes=1)
+        marcar_fatura_como_paga(paga.id, usuario=self.usuario)
+        cancelada = self.criar_fatura(mes=2)
+        cancelar_fatura(cancelada.id, usuario=self.usuario)
+
+        casos = (
+            (
+                paga,
+                estornar_pagamento,
+                "Pagamento marcado na fatura errada.",
+                HistoricoStatusFatura.Acao.PAGAMENTO_ESTORNADO,
+                "data_pagamento",
+            ),
+            (
+                cancelada,
+                reabrir_fatura,
+                "Cancelamento lançado por engano.",
+                HistoricoStatusFatura.Acao.FATURA_REABERTA,
+                "data_cancelamento",
+            ),
+        )
+        for fatura, service, motivo, acao, campo_data in casos:
+            with self.subTest(acao=acao):
+                atualizada, alterada = service(
+                    fatura.id,
+                    motivo,
+                    usuario=self.usuario,
+                )
+
+                self.assertTrue(alterada)
+                self.assertEqual(
+                    atualizada.status,
+                    Fatura.Status.PENDENTE,
+                )
+                self.assertIsNone(getattr(atualizada, campo_data))
+                evento = atualizada.historico_status.first()
+                self.assertEqual(evento.acao, acao)
+                self.assertEqual(evento.motivo, motivo)
+                self.assertEqual(evento.usuario, self.usuario)
+                editar_fatura(
+                    atualizada.id,
+                    valor_aluguel=Decimal("150.00"),
+                )
+                atualizada.refresh_from_db()
+                self.assertEqual(
+                    atualizada.valor_aluguel,
+                    Decimal("150.00"),
+                )
+
+    def test_motivo_invalido_e_bloqueado_no_service(self):
+        casos = (None, "", "   ", "abc", "x" * 501)
+        for mes, motivo in enumerate(casos, start=1):
+            with self.subTest(motivo=motivo):
+                fatura = self.criar_fatura(
+                    status=Fatura.Status.PAGA,
+                    mes=mes,
+                )
+                with self.assertRaises(RegraNegocioFaturaError):
+                    estornar_pagamento(fatura.id, motivo)
+                fatura.refresh_from_db()
+                self.assertEqual(fatura.status, Fatura.Status.PAGA)
+                self.assertFalse(fatura.historico_status.exists())
+
+    def test_transicoes_diretas_entre_encerradas_sao_bloqueadas(self):
+        paga = self.criar_fatura(status=Fatura.Status.PAGA, mes=1)
+        cancelada = self.criar_fatura(
+            status=Fatura.Status.CANCELADA,
+            mes=2,
+        )
+
+        with self.assertRaises(RegraNegocioFaturaError):
+            cancelar_fatura(paga.id)
+        with self.assertRaises(RegraNegocioFaturaError):
+            marcar_fatura_como_paga(cancelada.id)
+
+        self.assertFalse(HistoricoStatusFatura.objects.exists())
+
+    def test_repeticao_da_mesma_acao_nao_duplica_historico(self):
+        pendente = self.criar_fatura(mes=3)
+        _, alterada = estornar_pagamento(pendente.id, None)
+        self.assertFalse(alterada)
+        self.assertFalse(pendente.historico_status.exists())
+
+        paga = self.criar_fatura(mes=1)
+        marcar_fatura_como_paga(paga.id, usuario=self.usuario)
+        _, alterada = marcar_fatura_como_paga(
+            paga.id,
+            usuario=self.usuario,
+        )
+        self.assertFalse(alterada)
+        self.assertEqual(paga.historico_status.count(), 1)
+
+        cancelada = self.criar_fatura(mes=2)
+        cancelar_fatura(cancelada.id, usuario=self.usuario)
+        _, alterada = cancelar_fatura(
+            cancelada.id,
+            usuario=self.usuario,
+        )
+        self.assertFalse(alterada)
+        self.assertEqual(cancelada.historico_status.count(), 1)
+
+    def test_duas_requisicoes_iguais_criam_um_unico_historico(self):
+        fatura = self.criar_fatura()
+        url = reverse("faturas:marcar_como_paga", args=[fatura.id])
+
+        primeira = self.client.post(url)
+        segunda = self.client.post(url)
+
+        self.assertEqual(primeira.status_code, 302)
+        self.assertEqual(segunda.status_code, 302)
+        self.assertEqual(fatura.historico_status.count(), 1)
+        self.assertEqual(Fatura.objects.count(), 1)
+
+    def test_edicao_financeira_obedece_ao_status(self):
+        pendente = self.criar_fatura(mes=1)
+        editar_fatura(
+            pendente.id,
+            valor_aluguel=Decimal("120.00"),
+            desconto=Decimal("10.00"),
+        )
+        pendente.refresh_from_db()
+        self.assertEqual(pendente.valor_total, Decimal("110.00"))
+
+        for mes, status in enumerate(
+            (Fatura.Status.PAGA, Fatura.Status.CANCELADA),
+            start=2,
+        ):
+            with self.subTest(status=status):
+                fatura = self.criar_fatura(status=status, mes=mes)
+                with self.assertRaisesRegex(
+                    RegraNegocioFaturaError,
+                    status,
+                ):
+                    editar_fatura(
+                        fatura.id,
+                        valor_aluguel=Decimal("999.00"),
+                    )
+                fatura.refresh_from_db()
+                self.assertEqual(
+                    fatura.valor_aluguel,
+                    Decimal("100.00"),
+                )
+
+    def test_endpoints_de_acao_rejeitam_get(self):
+        fatura = self.criar_fatura()
+        endpoints = (
+            "marcar_como_paga",
+            "cancelar",
+            "estornar_pagamento",
+            "reabrir",
+        )
+        for endpoint in endpoints:
+            with self.subTest(endpoint=endpoint):
+                resposta = self.client.get(
+                    reverse(f"faturas:{endpoint}", args=[fatura.id])
+                )
+                self.assertEqual(resposta.status_code, 405)
+
+    def test_post_invalido_nao_altera_fatura(self):
+        fatura = self.criar_fatura(status=Fatura.Status.PAGA)
+        resposta = self.client.post(
+            reverse("faturas:estornar_pagamento", args=[fatura.id]),
+            {"motivo": "   "},
+        )
+        fatura.refresh_from_db()
+        self.assertRedirects(
+            resposta,
+            reverse(
+                "faturas:confirmar_estornar_pagamento",
+                args=[fatura.id],
+            ),
+        )
+        self.assertEqual(fatura.status, Fatura.Status.PAGA)
+        self.assertFalse(fatura.historico_status.exists())
+
+    def test_endpoint_especifico_ignora_status_arbitrario(self):
+        fatura = self.criar_fatura()
+        self.client.post(
+            reverse("faturas:marcar_como_paga", args=[fatura.id]),
+            {"status": Fatura.Status.CANCELADA},
+        )
+
+        fatura.refresh_from_db()
+        self.assertEqual(fatura.status, Fatura.Status.PAGA)
+        self.assertEqual(
+            fatura.historico_status.get().novo_status,
+            Fatura.Status.PAGA,
+        )
+
+    def test_confirmacao_exibe_mensagem_e_formulario_adequados(self):
+        paga = self.criar_fatura(status=Fatura.Status.PAGA)
+        resposta = self.client.get(
+            reverse(
+                "faturas:confirmar_estornar_pagamento",
+                args=[paga.id],
+            )
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Estornar pagamento da fatura?")
+        self.assertContains(
+            resposta,
+            "A fatura voltará ao status pendente",
+        )
+        self.assertContains(resposta, 'name="motivo"')
+        self.assertContains(
+            resposta,
+            reverse("faturas:estornar_pagamento", args=[paga.id]),
+        )
+
+    def test_endpoints_exigem_autenticacao_de_equipe(self):
+        fatura = self.criar_fatura()
+        self.client.logout()
+        url = reverse("faturas:marcar_como_paga", args=[fatura.id])
+
+        resposta = self.client.post(url)
+
+        self.assertRedirects(
+            resposta,
+            f"/admin/login/?next={url}",
+        )
+
+    def test_id_inexistente_retorna_404(self):
+        resposta = self.client.post(
+            reverse("faturas:marcar_como_paga", args=[999999])
+        )
+        self.assertEqual(resposta.status_code, 404)
+
+    def test_post_financeiro_nao_edita_fatura_encerrada(self):
+        for mes, status in enumerate(
+            (Fatura.Status.PAGA, Fatura.Status.CANCELADA),
+            start=1,
+        ):
+            with self.subTest(status=status):
+                fatura = self.criar_fatura(status=status, mes=mes)
+
+                resposta = self.client.post(
+                    reverse(
+                        "faturas:alterar_valores",
+                        args=[fatura.id],
+                    ),
+                    {
+                        "valor_aluguel": "999.00",
+                        "desconto": "0.00",
+                    },
+                    follow=True,
+                )
+
+                fatura.refresh_from_db()
+                self.assertEqual(
+                    fatura.valor_aluguel,
+                    Decimal("100.00"),
+                )
+                self.assertContains(
+                    resposta,
+                    (
+                        "Não é possível editar valores de uma fatura "
+                        f"{status}."
+                    ),
+                )
+
+    def test_template_exibe_apenas_acoes_compativeis_com_status(self):
+        pendente = self.criar_fatura(mes=1)
+        resposta_pendente = self.client.get(
+            reverse("faturas:detalhes", args=[pendente.id])
+        )
+        self.assertContains(resposta_pendente, "Marcar como paga")
+        self.assertContains(resposta_pendente, "Cancelar fatura")
+        self.assertContains(resposta_pendente, "Editar valores da fatura")
+
+        paga = self.criar_fatura(status=Fatura.Status.PAGA, mes=2)
+        resposta_paga = self.client.get(
+            reverse("faturas:detalhes", args=[paga.id])
+        )
+        self.assertNotContains(resposta_paga, "Marcar como paga")
+        self.assertNotContains(resposta_paga, "Cancelar fatura")
+        self.assertContains(resposta_paga, "Estornar pagamento")
+        self.assertNotContains(
+            resposta_paga,
+            reverse("faturas:alterar_valores", args=[paga.id]),
+        )
+        self.assertContains(
+            resposta_paga,
+            "valores financeiros estão bloqueados para edição",
+        )
+
+        cancelada = self.criar_fatura(
+            status=Fatura.Status.CANCELADA,
+            mes=3,
+        )
+        resposta_cancelada = self.client.get(
+            reverse("faturas:detalhes", args=[cancelada.id])
+        )
+        self.assertContains(resposta_cancelada, "Reabrir fatura")
+        self.assertNotContains(resposta_cancelada, "Estornar pagamento")
+
+    def test_historico_e_motivo_aparecem_nos_detalhes(self):
+        fatura = self.criar_fatura()
+        marcar_fatura_como_paga(fatura.id, usuario=self.usuario)
+        estornar_pagamento(
+            fatura.id,
+            "Pagamento lançado na unidade errada.",
+            usuario=self.usuario,
+        )
+
+        resposta = self.client.get(
+            reverse("faturas:detalhes", args=[fatura.id])
+        )
+
+        self.assertContains(resposta, "Histórico de status")
+        self.assertContains(resposta, "Pagamento estornado")
+        self.assertContains(
+            resposta,
+            "Pagamento lançado na unidade errada.",
+        )
+        self.assertContains(resposta, self.usuario.username)
+        self.assertContains(
+            resposta,
+            "Editar valores da fatura",
+        )
 
 
 class FaturaPresentationTests(TestCase):
@@ -1014,7 +1500,10 @@ class FaturaPresentationTests(TestCase):
         self.assertContains(resposta, "Apartamento 101")
         self.assertContains(resposta, "07/2026")
         self.assertContains(resposta, reverse("faturas:detalhes", args=[7]))
-        self.assertContains(resposta, reverse("faturas:pdf", args=[7]))
+        self.assertContains(
+            resposta,
+            reverse("faturas:baixar_pdf", args=[7]),
+        )
 
     def test_geracao_usa_formulario_padrao_e_mantem_cancelamento(self):
         resposta = self.client.get(reverse("faturas:gerar"))
@@ -1244,6 +1733,11 @@ class FaturaPresentationTests(TestCase):
             leitura_agua_atual=Decimal("20.00"),
             leitura_gas_anterior=Decimal("5.00"),
             leitura_gas_atual=Decimal("9.00"),
+            historico_status=SimpleNamespace(
+                select_related=lambda *args: SimpleNamespace(
+                    all=lambda: []
+                )
+            ),
         )
 
         resposta = self.client.get(reverse("faturas:detalhes", args=[7]))
@@ -1252,5 +1746,18 @@ class FaturaPresentationTests(TestCase):
         self.assertTemplateUsed(resposta, "faturas/detalhes.html")
         self.assertContains(resposta, "Apartamento 101")
         self.assertContains(resposta, "Paga")
-        self.assertContains(resposta, reverse("faturas:pdf", args=[7]))
-        self.assertContains(resposta, reverse("faturas:alterar_status", args=[7]))
+        self.assertContains(
+            resposta,
+            reverse("faturas:baixar_pdf", args=[7]),
+        )
+        self.assertContains(
+            resposta,
+            reverse(
+                "faturas:confirmar_estornar_pagamento",
+                args=[7],
+            ),
+        )
+        self.assertContains(
+            resposta,
+            "valores financeiros estão bloqueados para edição",
+        )

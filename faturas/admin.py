@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Fatura
+from .models import Fatura, HistoricoStatusFatura
 
 
 @admin.register(Fatura)
@@ -20,6 +20,8 @@ class FaturaAdmin(admin.ModelAdmin):
         "valor_total",
         "data_geracao",
         "data_emissao",
+        "data_pagamento",
+        "data_cancelamento",
         "apartamento_numero_emissao",
         "apartamento_bloco_emissao",
         "leitura_agua_anterior",
@@ -28,7 +30,49 @@ class FaturaAdmin(admin.ModelAdmin):
         "leitura_gas_atual",
     )
 
+    def get_readonly_fields(self, request, obj=None):
+        campos = self.readonly_fields
+        if obj is not None and obj.status != Fatura.Status.PENDENTE:
+            return (*campos, "valor_aluguel", "desconto", "status")
+        return campos
+
     def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(HistoricoStatusFatura)
+class HistoricoStatusFaturaAdmin(admin.ModelAdmin):
+    list_display = (
+        "fatura",
+        "acao",
+        "status_anterior",
+        "novo_status",
+        "usuario",
+        "criado_em",
+    )
+    list_filter = ("acao", "status_anterior", "novo_status")
+    search_fields = (
+        "fatura__apartamento_numero_emissao",
+        "motivo",
+        "usuario__username",
+    )
+    readonly_fields = (
+        "fatura",
+        "status_anterior",
+        "novo_status",
+        "acao",
+        "motivo",
+        "usuario",
+        "criado_em",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
         return False
 
     def has_delete_permission(self, request, obj=None):

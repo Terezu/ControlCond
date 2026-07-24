@@ -462,7 +462,7 @@ class SegurancaViewsApartamentoTests(TestCase):
             reverse("faturas:valor_aluguel_leitura"),
             reverse("faturas:detalhes", args=[999]),
             reverse("faturas:alterar_valores", args=[999]),
-            reverse("faturas:pdf", args=[999]),
+            reverse("faturas:baixar_pdf", args=[999]),
         ]
 
         for url in urls:
@@ -531,7 +531,7 @@ class SegurancaViewsApartamentoTests(TestCase):
             reverse("faturas:lista"),
             reverse("faturas:gerar"),
             reverse("faturas:detalhes", args=[fatura.id]),
-            reverse("faturas:pdf", args=[fatura.id]),
+            reverse("faturas:baixar_pdf", args=[fatura.id]),
         ]
 
         for url in urls:

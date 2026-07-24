@@ -1,5 +1,6 @@
 from decimal import Decimal, ROUND_HALF_UP
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
@@ -102,6 +103,8 @@ class Fatura(models.Model):
 
     data_geracao = models.DateTimeField(auto_now_add=True)
     data_emissao = models.DateTimeField(auto_now_add=True)
+    data_pagamento = models.DateTimeField(blank=True, null=True)
+    data_cancelamento = models.DateTimeField(blank=True, null=True)
 
     # Retrato imutável dos dados usados na emissão. A leitura e o apartamento
     # podem ser corrigidos no futuro sem reescrever o documento já emitido.
@@ -412,3 +415,50 @@ class Fatura(models.Model):
 
         if erros:
             raise ValidationError(erros)
+
+
+class HistoricoStatusFatura(models.Model):
+    class Acao(models.TextChoices):
+        PAGAMENTO_CONFIRMADO = (
+            "pagamento_confirmado",
+            "Pagamento confirmado",
+        )
+        FATURA_CANCELADA = "fatura_cancelada", "Fatura cancelada"
+        PAGAMENTO_ESTORNADO = (
+            "pagamento_estornado",
+            "Pagamento estornado",
+        )
+        FATURA_REABERTA = "fatura_reaberta", "Fatura reaberta"
+
+    fatura = models.ForeignKey(
+        Fatura,
+        on_delete=models.CASCADE,
+        related_name="historico_status",
+    )
+    status_anterior = models.CharField(
+        max_length=20,
+        choices=Fatura.Status.choices,
+    )
+    novo_status = models.CharField(
+        max_length=20,
+        choices=Fatura.Status.choices,
+    )
+    acao = models.CharField(max_length=30, choices=Acao.choices)
+    motivo = models.TextField(blank=True, max_length=500)
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="alteracoes_status_faturas",
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "historico_status_faturas"
+        ordering = ["-criado_em", "-id"]
+
+    def __str__(self):
+        return (
+            f"{self.get_acao_display()} - Fatura {self.fatura_id}"
+        )

@@ -1,15 +1,54 @@
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
-from pathlib import Path
-
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, models, transaction
+from django.utils import timezone
 
 from apartamentos.models import Apartamento
 from calculos.services import calcular_agua, calcular_gas
 from configuracoes.services import obter_configuracao
 from leituras.models import Leitura
 
-from .models import ANO_MAXIMO, Fatura
+from .models import ANO_MAXIMO, Fatura, HistoricoStatusFatura
+
+
+class RegraNegocioFaturaError(ValidationError):
+    """Indica uma operação incompatível com o estado atual da fatura."""
+
+
+TRANSICOES_STATUS_PERMITIDAS = {
+    Fatura.Status.PENDENTE: {
+        Fatura.Status.PAGA,
+        Fatura.Status.CANCELADA,
+    },
+    Fatura.Status.PAGA: {Fatura.Status.PENDENTE},
+    Fatura.Status.CANCELADA: {Fatura.Status.PENDENTE},
+}
+
+
+def validar_transicao_status(status_atual, novo_status):
+    if novo_status not in Fatura.Status.values:
+        raise RegraNegocioFaturaError("Status de fatura inválido.")
+    if status_atual == novo_status:
+        return False
+    if novo_status not in TRANSICOES_STATUS_PERMITIDAS.get(
+        status_atual,
+        set(),
+    ):
+        atual = dict(Fatura.Status.choices).get(status_atual, status_atual)
+        novo = dict(Fatura.Status.choices)[novo_status]
+        raise RegraNegocioFaturaError(
+            f"A transição de {atual.lower()} para {novo.lower()} "
+            "não é permitida."
+        )
+    return True
+
+
+def validar_edicao_financeira(fatura):
+    if fatura.status != Fatura.Status.PENDENTE:
+        status = fatura.get_status_display().lower()
+        raise RegraNegocioFaturaError(
+            f"Não é possível editar valores de uma fatura {status}."
+        )
 
 
 def _consultar_apartamento_para_atualizacao(apartamento_id):
@@ -487,16 +526,9 @@ def listar_faturas(
     return queryset.order_by("-ano", "-mes", "-id")
 
 
-@transaction.atomic
-def editar_fatura(
-    fatura_id,
-    *,
-    status=None,
-    valor_aluguel=None,
-    desconto=None,
-):
+def _consultar_fatura_para_atualizacao(fatura_id):
     try:
-        fatura = (
+        return (
             Fatura.objects
             .select_for_update()
             .select_related("apartamento", "leitura")
@@ -505,14 +537,152 @@ def editar_fatura(
     except Fatura.DoesNotExist as exc:
         raise ValueError("Fatura não encontrada.") from exc
 
-    campos_atualizados = []
-    if status is not None:
-        if status not in Fatura.Status.values:
-            raise ValueError("Status de fatura inválido.")
-        fatura.status = status
-        campos_atualizados.append("status")
 
+def _normalizar_motivo(motivo, acao):
+    motivo = (motivo or "").strip()
+    rotulo = (
+        "estorno"
+        if acao == HistoricoStatusFatura.Acao.PAGAMENTO_ESTORNADO
+        else "reabertura"
+    )
+    if not motivo:
+        raise RegraNegocioFaturaError(
+            f"Informe o motivo d{'o' if rotulo == 'estorno' else 'a'} "
+            f"{rotulo}."
+        )
+    if len(motivo) < 5:
+        raise RegraNegocioFaturaError(
+            "O motivo deve ter pelo menos 5 caracteres."
+        )
+    if len(motivo) > 500:
+        raise RegraNegocioFaturaError(
+            "O motivo deve ter no máximo 500 caracteres."
+        )
+    return motivo
+
+
+@transaction.atomic
+def _executar_acao_status(
+    fatura_id,
+    *,
+    status_origem,
+    novo_status,
+    acao,
+    usuario=None,
+    motivo="",
+    exige_motivo=False,
+):
+    fatura = _consultar_fatura_para_atualizacao(fatura_id)
+    if fatura.status == novo_status:
+        return fatura, False
+    validar_transicao_status(fatura.status, novo_status)
+    if fatura.status != status_origem:
+        raise RegraNegocioFaturaError(
+            "A ação solicitada não corresponde ao status atual da fatura."
+        )
+    motivo = (
+        _normalizar_motivo(motivo, acao)
+        if exige_motivo
+        else ""
+    )
+    status_anterior = fatura.status
+    agora = timezone.now()
+    campos_atualizados = ["status"]
+    fatura.status = novo_status
+
+    if novo_status == Fatura.Status.PAGA:
+        fatura.data_pagamento = agora
+        fatura.data_cancelamento = None
+        campos_atualizados.extend(
+            ["data_pagamento", "data_cancelamento"]
+        )
+    elif novo_status == Fatura.Status.CANCELADA:
+        fatura.data_cancelamento = agora
+        fatura.data_pagamento = None
+        campos_atualizados.extend(
+            ["data_cancelamento", "data_pagamento"]
+        )
+    elif status_anterior == Fatura.Status.PAGA:
+        fatura.data_pagamento = None
+        campos_atualizados.append("data_pagamento")
+    elif status_anterior == Fatura.Status.CANCELADA:
+        fatura.data_cancelamento = None
+        campos_atualizados.append("data_cancelamento")
+
+    fatura.save(update_fields=campos_atualizados)
+    if usuario is not None and not getattr(
+        usuario,
+        "is_authenticated",
+        False,
+    ):
+        usuario = None
+    HistoricoStatusFatura.objects.create(
+        fatura=fatura,
+        status_anterior=status_anterior,
+        novo_status=novo_status,
+        acao=acao,
+        motivo=motivo,
+        usuario=usuario,
+    )
+    return fatura, True
+
+
+def marcar_fatura_como_paga(fatura_id, usuario=None):
+    return _executar_acao_status(
+        fatura_id,
+        status_origem=Fatura.Status.PENDENTE,
+        novo_status=Fatura.Status.PAGA,
+        acao=HistoricoStatusFatura.Acao.PAGAMENTO_CONFIRMADO,
+        usuario=usuario,
+    )
+
+
+def cancelar_fatura(fatura_id, usuario=None):
+    return _executar_acao_status(
+        fatura_id,
+        status_origem=Fatura.Status.PENDENTE,
+        novo_status=Fatura.Status.CANCELADA,
+        acao=HistoricoStatusFatura.Acao.FATURA_CANCELADA,
+        usuario=usuario,
+    )
+
+
+def estornar_pagamento(fatura_id, motivo, usuario=None):
+    return _executar_acao_status(
+        fatura_id,
+        status_origem=Fatura.Status.PAGA,
+        novo_status=Fatura.Status.PENDENTE,
+        acao=HistoricoStatusFatura.Acao.PAGAMENTO_ESTORNADO,
+        motivo=motivo,
+        usuario=usuario,
+        exige_motivo=True,
+    )
+
+
+def reabrir_fatura(fatura_id, motivo, usuario=None):
+    return _executar_acao_status(
+        fatura_id,
+        status_origem=Fatura.Status.CANCELADA,
+        novo_status=Fatura.Status.PENDENTE,
+        acao=HistoricoStatusFatura.Acao.FATURA_REABERTA,
+        motivo=motivo,
+        usuario=usuario,
+        exige_motivo=True,
+    )
+
+
+@transaction.atomic
+def editar_fatura(
+    fatura_id,
+    *,
+    valor_aluguel=None,
+    desconto=None,
+):
+    fatura = _consultar_fatura_para_atualizacao(fatura_id)
+
+    campos_atualizados = []
     if valor_aluguel is not None or desconto is not None:
+        validar_edicao_financeira(fatura)
         if valor_aluguel is not None:
             fatura.valor_aluguel = _normalizar_valor_financeiro(
                 valor_aluguel,
@@ -635,28 +805,3 @@ def gerar_fatura_mensal(
         valor_aluguel=valor_aluguel,
         desconto=desconto,
     )
-
-
-def gerar_pdf_fatura(fatura_id, pasta_pdfs=None):
-    """Gera o mesmo PDF da interface web e o salva em uma pasta local."""
-    from django.conf import settings
-
-    from .pdf import gerar_pdf_fatura as renderizar_pdf_fatura
-
-    fatura = consultar_fatura(fatura_id)
-    if pasta_pdfs is None:
-        pasta_pdfs = Path(settings.BASE_DIR) / "faturas_geradas"
-    else:
-        pasta_pdfs = Path(pasta_pdfs)
-    pasta_pdfs.mkdir(parents=True, exist_ok=True)
-
-    caminho_pdf = pasta_pdfs / (
-        f"fatura_{fatura.id}_{fatura.mes}_{fatura.ano}.pdf"
-    )
-    arquivo_pdf = renderizar_pdf_fatura(fatura)
-    try:
-        with caminho_pdf.open("wb") as destino:
-            destino.write(arquivo_pdf.getbuffer())
-    finally:
-        arquivo_pdf.close()
-    return caminho_pdf

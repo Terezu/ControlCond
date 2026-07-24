@@ -1,16 +1,13 @@
 import argparse
 import os
+from io import BytesIO
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Gera em disco o PDF de uma fatura existente."
+        description="Valida em memória o PDF de uma fatura existente."
     )
     parser.add_argument("fatura_id", type=int, help="ID da fatura")
-    parser.add_argument(
-        "--pasta",
-        help="Pasta de destino (por padrão, faturas_geradas no projeto)",
-    )
     argumentos = parser.parse_args()
 
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
@@ -19,13 +16,17 @@ def main():
 
     django.setup()
 
-    from faturas.services import gerar_pdf_fatura
+    from faturas.pdf import gerar_pdf_fatura
+    from faturas.services import consultar_fatura
 
     try:
-        caminho = gerar_pdf_fatura(argumentos.fatura_id, argumentos.pasta)
+        fatura = consultar_fatura(argumentos.fatura_id)
     except ValueError as exc:
         parser.error(str(exc))
-    print("PDF gerado em:", caminho)
+
+    buffer = BytesIO()
+    gerar_pdf_fatura(fatura=fatura, destino=buffer)
+    print(f"PDF validado em memória: {buffer.tell()} bytes")
 
 
 if __name__ == "__main__":

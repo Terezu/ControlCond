@@ -1,29 +1,36 @@
 from decimal import Decimal
+from io import BytesIO
 
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
+from django.core.paginator import Paginator
 from django.http import FileResponse, Http404, JsonResponse
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.text import slugify
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods, require_safe
-from django.core.paginator import Paginator
 
 from .forms import (
-    AlterarStatusFaturaForm,
     EditarValoresFaturaForm,
     FiltrarFaturasForm,
     GerarFaturaForm,
+    MotivoAlteracaoStatusForm,
 )
+from .models import Fatura
+from .pdf import gerar_pdf_fatura
 from .services import (
+    RegraNegocioFaturaError,
+    cancelar_fatura,
     consultar_fatura,
     consultar_valor_aluguel_leitura,
     editar_fatura,
+    estornar_pagamento,
     gerar_fatura_mensal,
     listar_faturas,
+    marcar_fatura_como_paga,
     obter_contexto_geracao_fatura,
+    reabrir_fatura,
 )
-from .pdf import gerar_pdf_fatura
 
 
 @staff_member_required
@@ -89,67 +96,191 @@ def detalhes_fatura(request, fatura_id):
     except ValueError as erro:
         raise Http404(str(erro)) from erro
 
-    form_status = AlterarStatusFaturaForm(fatura=fatura)
     form_valores = EditarValoresFaturaForm(fatura=fatura)
+    historico_status = fatura.historico_status.select_related(
+        "usuario"
+    ).all()
 
     return render(
         request,
         "faturas/detalhes.html",
         {
             "fatura": fatura,
-            "form_status": form_status,
             "form_valores": form_valores,
+            "historico_status": historico_status,
         },
     )
 
 
-@staff_member_required
-@never_cache
-@require_http_methods(["POST"])
-def alterar_status_fatura(request, fatura_id):
-    try:
-        fatura = consultar_fatura(fatura_id)
-    except ValueError as erro:
-        raise Http404(str(erro)) from erro
+ACOES_STATUS = {
+    "marcar_como_paga": {
+        "titulo": "Confirmar pagamento da fatura?",
+        "aviso": (
+            "Após a confirmação, os valores da fatura ficarão "
+            "bloqueados para edição."
+        ),
+        "rotulo": "Marcar como paga",
+        "status_origem": Fatura.Status.PENDENTE,
+        "service": marcar_fatura_como_paga,
+        "mensagem_sucesso": "Pagamento da fatura confirmado.",
+        "url_acao": "faturas:marcar_como_paga",
+    },
+    "cancelar": {
+        "titulo": "Confirmar cancelamento da fatura?",
+        "aviso": (
+            "Após a confirmação, os valores da fatura ficarão "
+            "bloqueados para edição."
+        ),
+        "rotulo": "Cancelar fatura",
+        "status_origem": Fatura.Status.PENDENTE,
+        "service": cancelar_fatura,
+        "mensagem_sucesso": "Fatura cancelada.",
+        "url_acao": "faturas:cancelar",
+    },
+    "estornar_pagamento": {
+        "titulo": "Estornar pagamento da fatura?",
+        "aviso": (
+            "A fatura voltará ao status pendente e poderá ser "
+            "editada novamente."
+        ),
+        "rotulo": "Estornar pagamento",
+        "status_origem": Fatura.Status.PAGA,
+        "service": estornar_pagamento,
+        "mensagem_sucesso": "Pagamento estornado.",
+        "url_acao": "faturas:estornar_pagamento",
+        "exige_motivo": True,
+    },
+    "reabrir": {
+        "titulo": "Reabrir fatura cancelada?",
+        "aviso": (
+            "A fatura voltará ao status pendente e poderá ser "
+            "editada novamente."
+        ),
+        "rotulo": "Reabrir fatura",
+        "status_origem": Fatura.Status.CANCELADA,
+        "service": reabrir_fatura,
+        "mensagem_sucesso": "Fatura reaberta.",
+        "url_acao": "faturas:reabrir",
+        "exige_motivo": True,
+    },
+}
 
-    form = AlterarStatusFaturaForm(
-        request.POST,
-        fatura=fatura,
+
+def _obter_fatura_acao(fatura_id):
+    return get_object_or_404(
+        Fatura.objects.select_related("apartamento", "leitura"),
+        pk=fatura_id,
     )
 
-    if not form.is_valid():
+
+def _redirecionar_detalhes(fatura):
+    return redirect("faturas:detalhes", fatura_id=fatura.id)
+
+
+def _mensagem_formulario(form):
+    return next(
+        (
+            str(erro)
+            for erros in form.errors.values()
+            for erro in erros
+        ),
+        "Verifique os dados informados.",
+    )
+
+
+def _confirmar_acao_status(request, fatura_id, acao):
+    fatura = _obter_fatura_acao(fatura_id)
+    configuracao = ACOES_STATUS[acao]
+    if fatura.status != configuracao["status_origem"]:
         messages.error(
             request,
-            "Não foi possível alterar o status da fatura.",
+            "A ação solicitada não corresponde ao status atual da fatura.",
         )
-
-        return redirect(
-            "faturas:detalhes",
-            fatura_id=fatura.id,
-        )
-
-    novo_status = form.cleaned_data["status"]
-
-    try:
-        editar_fatura(
-            fatura.id,
-            status=novo_status,
-        )
-    except ValueError as erro:
-        messages.error(request, str(erro))
-    else:
-        messages.success(
-            request,
-            (
-                "Status da fatura alterado para "
-                f"“{dict(fatura.Status.choices)[novo_status]}”."
-            ),
-        )
-
-    return redirect(
-        "faturas:detalhes",
-        fatura_id=fatura.id,
+        return _redirecionar_detalhes(fatura)
+    form = (
+        MotivoAlteracaoStatusForm(acao=acao)
+        if configuracao.get("exige_motivo")
+        else None
     )
+    return render(
+        request,
+        "faturas/confirmar_acao_status.html",
+        {
+            "fatura": fatura,
+            "form": form,
+            **configuracao,
+        },
+    )
+
+
+def _executar_acao_status(request, fatura_id, acao):
+    fatura = _obter_fatura_acao(fatura_id)
+    configuracao = ACOES_STATUS[acao]
+    motivo = None
+    if configuracao.get("exige_motivo"):
+        form = MotivoAlteracaoStatusForm(request.POST, acao=acao)
+        if not form.is_valid():
+            messages.error(request, _mensagem_formulario(form))
+            return redirect(
+                f"faturas:confirmar_{acao}",
+                fatura_id=fatura.id,
+            )
+        motivo = form.cleaned_data["motivo"]
+    try:
+        argumentos = {"usuario": request.user}
+        if configuracao.get("exige_motivo"):
+            argumentos["motivo"] = motivo
+        _, alterada = configuracao["service"](
+            fatura.id,
+            **argumentos,
+        )
+    except (RegraNegocioFaturaError, ValueError) as erro:
+        mensagem = (
+            erro.messages[0]
+            if isinstance(erro, RegraNegocioFaturaError)
+            else str(erro)
+        )
+        messages.error(request, mensagem)
+    else:
+        if alterada:
+            messages.success(
+                request,
+                configuracao["mensagem_sucesso"],
+            )
+        else:
+            messages.info(
+                request,
+                "A fatura já está com o status solicitado.",
+            )
+    return _redirecionar_detalhes(fatura)
+
+
+def _criar_views_acao(acao):
+    @staff_member_required
+    @never_cache
+    @require_safe
+    def confirmar(request, fatura_id):
+        return _confirmar_acao_status(request, fatura_id, acao)
+
+    @staff_member_required
+    @never_cache
+    @require_http_methods(["POST"])
+    def executar(request, fatura_id):
+        return _executar_acao_status(request, fatura_id, acao)
+
+    return confirmar, executar
+
+
+(
+    confirmar_marcar_como_paga,
+    marcar_como_paga,
+) = _criar_views_acao("marcar_como_paga")
+confirmar_cancelar, cancelar = _criar_views_acao("cancelar")
+(
+    confirmar_estornar_pagamento,
+    estornar_pagamento_fatura,
+) = _criar_views_acao("estornar_pagamento")
+confirmar_reabrir, reabrir = _criar_views_acao("reabrir")
 
 
 @staff_member_required
@@ -166,9 +297,17 @@ def alterar_valores_fatura(request, fatura_id):
         fatura=fatura,
     )
     if not form.is_valid():
+        mensagem = next(
+            (
+                str(erro)
+                for erros in form.errors.values()
+                for erro in erros
+            ),
+            "Verifique o valor do aluguel e o desconto informados.",
+        )
         messages.error(
             request,
-            "Verifique o valor do aluguel e o desconto informados.",
+            mensagem,
         )
         return redirect("faturas:detalhes", fatura_id=fatura.id)
 
@@ -178,8 +317,13 @@ def alterar_valores_fatura(request, fatura_id):
             valor_aluguel=form.cleaned_data["valor_aluguel"],
             desconto=form.cleaned_data["desconto"],
         )
-    except ValueError as erro:
-        messages.error(request, str(erro))
+    except (RegraNegocioFaturaError, ValueError) as erro:
+        mensagem = (
+            erro.messages[0]
+            if isinstance(erro, RegraNegocioFaturaError)
+            else str(erro)
+        )
+        messages.error(request, mensagem)
     else:
         messages.success(
             request,
@@ -325,23 +469,26 @@ def valor_aluguel_leitura(request):
 @staff_member_required
 @never_cache
 @require_safe
-def visualizar_pdf_fatura(request, fatura_id):
-    try:
-        fatura = consultar_fatura(fatura_id)
-    except ValueError as erro:
-        raise Http404(str(erro)) from erro
+def baixar_pdf_fatura(request, fatura_id):
+    fatura = get_object_or_404(
+        Fatura.objects.select_related("apartamento", "leitura"),
+        id=fatura_id,
+    )
+    buffer = BytesIO()
+    gerar_pdf_fatura(fatura=fatura, destino=buffer)
+    buffer.seek(0)
 
-    arquivo_pdf = gerar_pdf_fatura(fatura)
-
+    apartamento = slugify(
+        str(fatura.apartamento_numero_emissao)
+    ) or str(fatura.id)
     nome_arquivo = (
-        f"fatura_"
-        f"{slugify(fatura.apartamento_numero_emissao) or fatura.id}_"
-        f"{fatura.mes:02d}_"
-        f"{fatura.ano}.pdf"
+        f"fatura-apartamento-{apartamento}-"
+        f"{fatura.mes:02d}-{fatura.ano}.pdf"
     )
 
     return FileResponse(
-        arquivo_pdf,
-        content_type="application/pdf",
+        buffer,
+        as_attachment=True,
         filename=nome_arquivo,
+        content_type="application/pdf",
     )

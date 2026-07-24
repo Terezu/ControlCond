@@ -10,13 +10,10 @@
             <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Voltar para faturas
         </a>
         <a
-            href="{% url 'faturas:pdf' fatura.id %}"
+            href="{% url 'faturas:baixar_pdf' fatura.id %}"
             class="btn btn-sm btn-outline-primary align-self-start"
-            target="_blank"
-            rel="noopener noreferrer"
         >
-            <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Visualizar PDF
-            <span class="visually-hidden">em uma nova aba</span>
+            <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Baixar PDF
         </a>
     </div>
 
@@ -108,20 +105,26 @@
             <h2 id="titulo-editar-valores" class="h5 mb-0">Editar valores da fatura</h2>
         </div>
         <div class="card-body">
-            <form method="post" action="{% url 'faturas:alterar_valores' fatura.id %}" novalidate>
-                {% csrf_token %}
-                <div class="row align-items-end">
-                    <div class="col-12 col-md-5">
-                        {% include "components/form_field.html" with field=form_valores.valor_aluguel %}
+            {% if fatura.status == "pendente" %}
+                <form method="post" action="{% url 'faturas:alterar_valores' fatura.id %}" novalidate>
+                    {% csrf_token %}
+                    <div class="row align-items-end">
+                        <div class="col-12 col-md-5">
+                            {% include "components/form_field.html" with field=form_valores.valor_aluguel %}
+                        </div>
+                        <div class="col-12 col-md-5">
+                            {% include "components/form_field.html" with field=form_valores.desconto %}
+                        </div>
+                        <div class="col-12 col-md-2 mb-3">
+                            <button type="submit" class="btn btn-primary w-100">Salvar</button>
+                        </div>
                     </div>
-                    <div class="col-12 col-md-5">
-                        {% include "components/form_field.html" with field=form_valores.desconto %}
-                    </div>
-                    <div class="col-12 col-md-2 mb-3">
-                        <button type="submit" class="btn btn-primary w-100">Salvar</button>
-                    </div>
+                </form>
+            {% else %}
+                <div class="alert alert-secondary mb-0" role="status">
+                    Esta fatura está {{ fatura.get_status_display|lower }} e seus valores financeiros estão bloqueados para edição.
                 </div>
-            </form>
+            {% endif %}
         </div>
     </section>
 
@@ -164,21 +167,58 @@
                     <h2 id="titulo-alterar-status" class="h5 mb-0">Alterar status</h2>
                 </div>
                 <div class="card-body">
-                    <form method="post" action="{% url 'faturas:alterar_status' fatura.id %}" novalidate>
-                        {% csrf_token %}
-
-                        {% if form_status.non_field_errors %}
-                            <div class="alert alert-danger" role="alert">{{ form_status.non_field_errors }}</div>
-                        {% endif %}
-
-                        {% include "components/form_field.html" with field=form_status.status %}
-
-                        <button type="submit" class="btn btn-primary w-100">
-                            <i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>Atualizar status
-                        </button>
-                    </form>
+                    {% if fatura.status == "pendente" %}
+                        <div class="d-grid gap-2">
+                            <a class="btn btn-success" href="{% url 'faturas:confirmar_marcar_como_paga' fatura.id %}">
+                                Marcar como paga
+                            </a>
+                            <a class="btn btn-outline-danger" href="{% url 'faturas:confirmar_cancelar' fatura.id %}">
+                                Cancelar fatura
+                            </a>
+                        </div>
+                    {% elif fatura.status == "paga" %}
+                        <a class="btn btn-outline-warning w-100" href="{% url 'faturas:confirmar_estornar_pagamento' fatura.id %}">
+                            Estornar pagamento
+                        </a>
+                    {% else %}
+                        <a class="btn btn-outline-primary w-100" href="{% url 'faturas:confirmar_reabrir' fatura.id %}">
+                            Reabrir fatura
+                        </a>
+                    {% endif %}
                 </div>
             </section>
         </div>
     </div>
+
+    <section class="card shadow-sm mt-4" aria-labelledby="titulo-historico-status">
+        <div class="card-header bg-light py-3">
+            <h2 id="titulo-historico-status" class="h5 mb-1">Histórico de status</h2>
+            <p class="text-secondary small mb-0">Alterações registradas da mais recente para a mais antiga.</p>
+        </div>
+        <div class="card-body">
+            {% if historico_status %}
+                <div class="list-group list-group-flush">
+                    {% for evento in historico_status %}
+                        <article class="list-group-item px-0">
+                            <div class="d-flex flex-column flex-sm-row justify-content-between gap-1">
+                                <strong>{{ evento.get_acao_display }}</strong>
+                                <time class="text-secondary small">{{ evento.criado_em|date:"d/m/Y H:i" }}</time>
+                            </div>
+                            <p class="mb-1">
+                                {{ evento.get_status_anterior_display }} → {{ evento.get_novo_status_display }}
+                            </p>
+                            {% if evento.motivo %}
+                                <p class="mb-1"><strong>Motivo:</strong> {{ evento.motivo }}</p>
+                            {% endif %}
+                            <p class="text-secondary small mb-0">
+                                <strong>Usuário:</strong> {{ evento.usuario.get_username|default:"Sistema" }}
+                            </p>
+                        </article>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p class="text-secondary mb-0">Nenhuma alteração de status registrada.</p>
+            {% endif %}
+        </div>
+    </section>
 {% endblock %}

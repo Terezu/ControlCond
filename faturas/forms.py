@@ -7,6 +7,10 @@ from apartamentos.models import Apartamento
 from leituras.models import Leitura
 
 from .models import ANO_MAXIMO, LIMITE_VALOR_FINANCEIRO, Fatura
+from .services import (
+    RegraNegocioFaturaError,
+    validar_edicao_financeira,
+)
 
 
 def _aplicar_estilo_bootstrap(fields):
@@ -91,18 +95,31 @@ class GerarFaturaForm(forms.Form):
             f"Gás: {leitura.leitura_gas}"
         )
 
-class AlterarStatusFaturaForm(forms.Form):
-    status = forms.ChoiceField(
-        choices=Fatura.Status.choices,
-        label="Novo status",
+class MotivoAlteracaoStatusForm(forms.Form):
+    motivo = forms.CharField(
+        label="Motivo",
+        min_length=5,
+        max_length=500,
+        strip=True,
+        widget=forms.Textarea(attrs={"rows": 4}),
+        error_messages={
+            "min_length": "O motivo deve ter pelo menos 5 caracteres.",
+            "max_length": "O motivo deve ter no máximo 500 caracteres.",
+        },
     )
 
-    def __init__(self, *args, fatura=None, **kwargs):
+    def __init__(self, *args, acao=None, **kwargs):
         super().__init__(*args, **kwargs)
         _aplicar_estilo_bootstrap(self.fields)
-
-        if fatura is not None:
-            self.fields["status"].initial = fatura.status
+        descricao = (
+            "estorno"
+            if acao == "estornar_pagamento"
+            else "reabertura"
+        )
+        artigo = "do" if descricao == "estorno" else "da"
+        self.fields["motivo"].error_messages["required"] = (
+            f"Informe o motivo {artigo} {descricao}."
+        )
 
 
 class EditarValoresFaturaForm(forms.Form):
@@ -130,6 +147,7 @@ class EditarValoresFaturaForm(forms.Form):
 
     def __init__(self, *args, fatura=None, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fatura = fatura
         _aplicar_estilo_bootstrap(self.fields)
         if fatura is not None:
             self.fields["valor_aluguel"].initial = fatura.valor_aluguel
@@ -137,6 +155,15 @@ class EditarValoresFaturaForm(forms.Form):
 
     def clean_desconto(self):
         return self.cleaned_data["desconto"] or Decimal("0.00")
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if self.fatura is not None:
+            try:
+                validar_edicao_financeira(self.fatura)
+            except RegraNegocioFaturaError as exc:
+                raise forms.ValidationError(exc.messages[0]) from exc
+        return cleaned_data
 
 
 class FiltrarFaturasForm(forms.Form):

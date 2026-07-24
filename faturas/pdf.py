@@ -1,4 +1,3 @@
-from io import BytesIO
 from pathlib import Path
 
 from reportlab.lib import colors
@@ -545,10 +544,9 @@ def desenhar_rodape(pdf, configuracao, largura):
     )
 
 
-def gerar_pdf_fatura(fatura, configuracao=None):
-    buffer = BytesIO()
+def gerar_pdf_fatura(fatura, destino, configuracao=None):
     configuracao = configuracao or obter_configuracao()
-    pdf = canvas.Canvas(buffer, pagesize=A4)
+    pdf = canvas.Canvas(destino, pagesize=A4)
     largura, altura = A4
 
     pdf.setTitle(
@@ -575,5 +573,3 @@ def gerar_pdf_fatura(fatura, configuracao=None):
 
     pdf.showPage()
     pdf.save()
-    buffer.seek(0)
-    return buffer
