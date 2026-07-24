@@ -29,10 +29,137 @@ from .services import (
     cancelar_fatura,
     editar_fatura,
     estornar_pagamento,
+    executar_fechamento_mensal,
     gerar_fatura_mensal,
     marcar_fatura_como_paga,
     reabrir_fatura,
 )
+
+
+class FechamentoMensalServiceTests(TestCase):
+    def criar_apartamento(self, numero, *, com_leitura=True):
+        apartamento = Apartamento.objects.create(
+            numero=numero,
+            leitura_base_agua=Decimal("0.00"),
+            leitura_base_gas=Decimal("0.00"),
+        )
+        if com_leitura:
+            Leitura.objects.create(
+                apartamento=apartamento,
+                mes=7,
+                ano=2026,
+                leitura_agua=Decimal("1.00"),
+                leitura_gas=Decimal("1.00"),
+            )
+        return apartamento
+
+    def test_nenhum_apartamento_retorna_resumo_zerado(self):
+        resultado = executar_fechamento_mensal(7, 2026)
+
+        self.assertEqual(resultado.apartamentos_analisados, 0)
+        self.assertEqual(resultado.faturas_geradas, 0)
+        self.assertEqual(resultado.faturas_existentes, 0)
+        self.assertEqual(resultado.total_sem_leitura, 0)
+
+    def test_um_apartamento_com_leitura_gera_fatura(self):
+        apartamento = self.criar_apartamento("101")
+
+        resultado = executar_fechamento_mensal(7, 2026)
+
+        self.assertEqual(resultado.apartamentos_analisados, 1)
+        self.assertEqual(resultado.faturas_geradas, 1)
+        self.assertTrue(
+            Fatura.objects.filter(
+                apartamento=apartamento,
+                mes=7,
+                ano=2026,
+            ).exists()
+        )
+
+    def test_varios_apartamentos_classificam_resultado_corretamente(self):
+        novo = self.criar_apartamento("101")
+        existente = self.criar_apartamento("102")
+        sem_leitura = self.criar_apartamento(
+            "103",
+            com_leitura=False,
+        )
+        leitura_existente = existente.leituras.get(mes=7, ano=2026)
+        gerar_fatura_mensal(leitura_existente.id)
+
+        resultado = executar_fechamento_mensal(7, 2026)
+
+        self.assertEqual(resultado.apartamentos_analisados, 3)
+        self.assertEqual(resultado.faturas_geradas, 1)
+        self.assertEqual(resultado.faturas_existentes, 1)
+        self.assertEqual(resultado.total_sem_leitura, 1)
+        self.assertEqual(
+            resultado.apartamentos_sem_leitura,
+            (sem_leitura,),
+        )
+        self.assertTrue(novo.faturas.filter(mes=7, ano=2026).exists())
+
+    def test_todas_existentes_nao_gera_novamente(self):
+        for numero in ("101", "102"):
+            apartamento = self.criar_apartamento(numero)
+            leitura = apartamento.leituras.get(mes=7, ano=2026)
+            gerar_fatura_mensal(leitura.id)
+
+        resultado = executar_fechamento_mensal(7, 2026)
+
+        self.assertEqual(resultado.faturas_geradas, 0)
+        self.assertEqual(resultado.faturas_existentes, 2)
+        self.assertEqual(Fatura.objects.count(), 2)
+
+    def test_execucao_repetida_e_idempotente(self):
+        self.criar_apartamento("101")
+        self.criar_apartamento("102")
+
+        primeira = executar_fechamento_mensal(7, 2026)
+        segunda = executar_fechamento_mensal(7, 2026)
+
+        self.assertEqual(primeira.faturas_geradas, 2)
+        self.assertEqual(segunda.faturas_geradas, 0)
+        self.assertEqual(segunda.faturas_existentes, 2)
+        self.assertEqual(Fatura.objects.count(), 2)
+
+    def test_reutiliza_service_de_geracao_individual(self):
+        self.criar_apartamento("101")
+
+        with patch(
+            "faturas.services.gerar_fatura_mensal",
+            wraps=gerar_fatura_mensal,
+        ) as gerar:
+            executar_fechamento_mensal(7, 2026)
+
+        gerar.assert_called_once()
+
+    def test_mes_e_ano_invalidos_sao_rejeitados(self):
+        for mes, ano in ((0, 2026), (13, 2026), (7, 0), (7, 10000)):
+            with self.subTest(mes=mes, ano=ano):
+                with self.assertRaises(ValueError):
+                    executar_fechamento_mensal(mes, ano)
+
+    def test_erro_inesperado_reverte_todo_o_lote(self):
+        self.criar_apartamento("101")
+        self.criar_apartamento("102")
+        original = gerar_fatura_mensal
+        chamadas = 0
+
+        def gerar_com_falha(leitura_id):
+            nonlocal chamadas
+            chamadas += 1
+            if chamadas == 2:
+                raise RuntimeError("falha simulada")
+            return original(leitura_id)
+
+        with patch(
+            "faturas.services.gerar_fatura_mensal",
+            side_effect=gerar_com_falha,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "falha simulada"):
+                executar_fechamento_mensal(7, 2026)
+
+        self.assertFalse(Fatura.objects.exists())
 
 
 class GerarFaturaMensalTests(TestCase):
@@ -1504,6 +1631,61 @@ class FaturaPresentationTests(TestCase):
             resposta,
             reverse("faturas:baixar_pdf", args=[7]),
         )
+
+    def test_tela_fechamento_mensal_usa_post_e_exibe_resumo(self):
+        apartamento = Apartamento.objects.create(
+            numero="601",
+            leitura_base_agua=Decimal("0.00"),
+            leitura_base_gas=Decimal("0.00"),
+        )
+        Leitura.objects.create(
+            apartamento=apartamento,
+            mes=7,
+            ano=2026,
+            leitura_agua=Decimal("1.00"),
+            leitura_gas=Decimal("1.00"),
+        )
+        url = reverse("faturas:fechamento_mensal")
+
+        resposta_get = self.client.get(url)
+        resposta_post = self.client.post(
+            url,
+            {"mes": "7", "ano": "2026"},
+        )
+
+        self.assertEqual(resposta_get.status_code, 200)
+        self.assertContains(resposta_get, "Fechamento Mensal")
+        self.assertContains(resposta_get, "Executar fechamento")
+        self.assertEqual(resposta_post.status_code, 200)
+        self.assertContains(resposta_post, "Fechamento concluído")
+        self.assertContains(resposta_post, "Faturas geradas")
+        self.assertContains(resposta_post, ">1<", html=False)
+        self.assertEqual(Fatura.objects.count(), 1)
+
+    def test_fechamento_lista_apartamentos_sem_leitura(self):
+        Apartamento.objects.create(numero="602")
+
+        resposta = self.client.post(
+            reverse("faturas:fechamento_mensal"),
+            {"mes": "7", "ano": "2026"},
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Pendências")
+        self.assertContains(resposta, "Apartamento 602")
+        self.assertContains(resposta, "Total sem leitura: 1")
+
+    def test_post_invalido_nao_executa_fechamento(self):
+        Apartamento.objects.create(numero="603")
+
+        resposta = self.client.post(
+            reverse("faturas:fechamento_mensal"),
+            {"mes": "99", "ano": "0"},
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertFalse(Fatura.objects.exists())
+        self.assertNotContains(resposta, "Fechamento concluído")
 
     def test_geracao_usa_formulario_padrao_e_mantem_cancelamento(self):
         resposta = self.client.get(reverse("faturas:gerar"))

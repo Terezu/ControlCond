@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from django import forms
 from django.db.models import Exists, OuterRef
+from django.utils import timezone
 
 from apartamentos.models import Apartamento
 from leituras.models import Leitura
@@ -94,6 +95,30 @@ class GerarFaturaForm(forms.Form):
             f"Água: {leitura.leitura_agua} | "
             f"Gás: {leitura.leitura_gas}"
         )
+
+
+class FechamentoMensalForm(forms.Form):
+    mes = forms.TypedChoiceField(
+        label="Mês",
+        choices=[
+            (numero, f"{numero:02d}")
+            for numero in range(1, 13)
+        ],
+        coerce=int,
+    )
+    ano = forms.IntegerField(
+        label="Ano",
+        min_value=2000,
+        max_value=ANO_MAXIMO,
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        _aplicar_estilo_bootstrap(self.fields)
+        hoje = timezone.localdate()
+        self.fields["mes"].initial = hoje.month
+        self.fields["ano"].initial = hoje.year
+
 
 class MotivoAlteracaoStatusForm(forms.Form):
     motivo = forms.CharField(

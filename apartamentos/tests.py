@@ -459,6 +459,7 @@ class SegurancaViewsApartamentoTests(TestCase):
             reverse("leituras:nova", args=[999]),
             reverse("faturas:lista"),
             reverse("faturas:gerar"),
+            reverse("faturas:fechamento_mensal"),
             reverse("faturas:valor_aluguel_leitura"),
             reverse("faturas:detalhes", args=[999]),
             reverse("faturas:alterar_valores", args=[999]),

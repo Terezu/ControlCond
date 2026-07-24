@@ -12,6 +12,7 @@ from django.views.decorators.http import require_http_methods, require_safe
 
 from .forms import (
     EditarValoresFaturaForm,
+    FechamentoMensalForm,
     FiltrarFaturasForm,
     GerarFaturaForm,
     MotivoAlteracaoStatusForm,
@@ -24,6 +25,7 @@ from .services import (
     consultar_fatura,
     consultar_valor_aluguel_leitura,
     editar_fatura,
+    executar_fechamento_mensal,
     estornar_pagamento,
     gerar_fatura_mensal,
     listar_faturas,
@@ -281,6 +283,38 @@ confirmar_cancelar, cancelar = _criar_views_acao("cancelar")
     estornar_pagamento_fatura,
 ) = _criar_views_acao("estornar_pagamento")
 confirmar_reabrir, reabrir = _criar_views_acao("reabrir")
+
+
+@staff_member_required
+@never_cache
+@require_http_methods(["GET", "POST"])
+def fechamento_mensal(request):
+    resultado = None
+    form = FechamentoMensalForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        try:
+            resultado = executar_fechamento_mensal(
+                form.cleaned_data["mes"],
+                form.cleaned_data["ano"],
+            )
+        except ValueError as erro:
+            form.add_error(None, str(erro))
+        except Exception:
+            form.add_error(
+                None,
+                (
+                    "Não foi possível concluir o fechamento. "
+                    "Nenhuma fatura do lote foi mantida."
+                ),
+            )
+    return render(
+        request,
+        "faturas/fechamento_mensal.html",
+        {
+            "form": form,
+            "resultado": resultado,
+        },
+    )
 
 
 @staff_member_required

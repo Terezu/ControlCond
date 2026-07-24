@@ -8,6 +8,11 @@ urlpatterns = [
     path("", views.lista_faturas, name="lista"),
     path("gerar/", views.gerar_fatura, name="gerar"),
     path(
+        "fechamento-mensal/",
+        views.fechamento_mensal,
+        name="fechamento_mensal",
+    ),
+    path(
         "valor-aluguel-leitura/",
         views.valor_aluguel_leitura,
         name="valor_aluguel_leitura",

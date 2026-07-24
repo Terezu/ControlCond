@@ -1,71 +1,68 @@
+from urllib.parse import urlencode
+
 from django.contrib.admin.views.decorators import staff_member_required
-from django.db.models import Sum
 from django.shortcuts import render
+from django.urls import reverse
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_safe
 
-from apartamentos.models import Apartamento
-from faturas.models import Fatura
-from leituras.models import Leitura
-
-
-def formatar_valor_monetario(valor):
-    valor_formatado = f"{valor:,.2f}"
-
-    valor_formatado = (
-        valor_formatado
-        .replace(",", "_")
-        .replace(".", ",")
-        .replace("_", ".")
-    )
-
-    return f"R$ {valor_formatado}"
+from .forms import FiltroCompetenciaDashboardForm
+from .services import obter_resumo_dashboard
 
 
 @staff_member_required
 @never_cache
 @require_safe
 def dashboard(request):
-    total_apartamentos = Apartamento.objects.count()
-    total_leituras = Leitura.objects.count()
-
-    faturas_pendentes = Fatura.objects.filter(
-        status=Fatura.Status.PENDENTE
+    competencia_padrao = (
+        FiltroCompetenciaDashboardForm.competencia_atual()
     )
+    if request.GET:
+        form = FiltroCompetenciaDashboardForm(request.GET)
+        competencia = (
+            form.cleaned_data
+            if form.is_valid()
+            else competencia_padrao
+        )
+    else:
+        form = FiltroCompetenciaDashboardForm(
+            initial=competencia_padrao
+        )
+        competencia = competencia_padrao
 
-    total_faturas_pendentes = faturas_pendentes.count()
-
-    valor_total_pendente = (
-        faturas_pendentes.aggregate(
-            total=Sum("valor_total")
-        )["total"]
-        or 0
+    resumo = obter_resumo_dashboard(
+        competencia["mes"],
+        competencia["ano"],
     )
-
-    ultimas_faturas = (
-        Fatura.objects
-        .select_related("apartamento")
-        .order_by("-ano", "-mes", "-id")[:5]
-    )
-
-    context = {
-        "total_apartamentos": total_apartamentos,
-        "total_leituras": total_leituras,
-        "total_faturas_pendentes": total_faturas_pendentes,
-        "valor_total_pendente_formatado": (
-            formatar_valor_monetario(valor_total_pendente)
+    base_faturas = reverse("faturas:lista")
+    parametros = {"mes": resumo.mes, "ano": resumo.ano}
+    links = {
+        "apartamentos": reverse("apartamentos:lista"),
+        "faturas_pendentes": (
+            f"{base_faturas}?{urlencode({
+                **parametros,
+                'status': 'pendente',
+            })}"
         ),
-        "ultimas_faturas": ultimas_faturas,
-        "cabecalhos_ultimas_faturas": [
-            "Apartamento",
-            "Competência",
-            "Valor",
-            "Status",
-        ],
+        "faturas_pagas": (
+            f"{base_faturas}?{urlencode({
+                **parametros,
+                'status': 'paga',
+            })}"
+        ),
+        "faturas_canceladas": (
+            f"{base_faturas}?{urlencode({
+                **parametros,
+                'status': 'cancelada',
+            })}"
+        ),
     }
-
     return render(
         request,
         "dashboard/inicio.html",
-        context,
+        {
+            "form_competencia": form,
+            "resumo": resumo,
+            "links": links,
+        },
     )

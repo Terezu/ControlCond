@@ -1,6 +1,10 @@
+import logging
+from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, models, transaction
+from django.db.models import Prefetch
 from django.utils import timezone
 
 from apartamentos.models import Apartamento
@@ -9,6 +13,21 @@ from configuracoes.services import obter_configuracao
 from leituras.models import Leitura
 
 from .models import ANO_MAXIMO, Fatura, HistoricoStatusFatura
+
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ResultadoFechamento:
+    apartamentos_analisados: int
+    faturas_geradas: int
+    faturas_existentes: int
+    apartamentos_sem_leitura: tuple
+
+    @property
+    def total_sem_leitura(self):
+        return len(self.apartamentos_sem_leitura)
 
 
 class RegraNegocioFaturaError(ValidationError):
@@ -805,3 +824,88 @@ def gerar_fatura_mensal(
         valor_aluguel=valor_aluguel,
         desconto=desconto,
     )
+
+
+@transaction.atomic
+def executar_fechamento_mensal(mes, ano):
+    if isinstance(mes, bool) or not isinstance(mes, int) or not 1 <= mes <= 12:
+        raise ValueError("O mês deve estar entre 1 e 12.")
+    if (
+        isinstance(ano, bool)
+        or not isinstance(ano, int)
+        or ano < 2000
+        or ano > ANO_MAXIMO
+    ):
+        raise ValueError("Informe um ano válido.")
+
+    logger.info(
+        "Fechamento mensal iniciado para %02d/%d.",
+        mes,
+        ano,
+    )
+    leituras_competencia = Leitura.objects.filter(
+        mes=mes,
+        ano=ano,
+    ).select_related("apartamento")
+    faturas_competencia = Fatura.objects.filter(
+        mes=mes,
+        ano=ano,
+    )
+    apartamentos = list(
+        Apartamento.objects
+        .select_for_update()
+        .order_by("id")
+        .prefetch_related(
+            Prefetch(
+                "leituras",
+                queryset=leituras_competencia,
+                to_attr="leituras_fechamento",
+            ),
+            Prefetch(
+                "faturas",
+                queryset=faturas_competencia,
+                to_attr="faturas_fechamento",
+            ),
+        )
+    )
+
+    geradas = 0
+    existentes = 0
+    sem_leitura = []
+    try:
+        for apartamento in apartamentos:
+            if not apartamento.leituras_fechamento:
+                sem_leitura.append(apartamento)
+                continue
+            if apartamento.faturas_fechamento:
+                existentes += 1
+                continue
+            gerar_fatura_mensal(
+                apartamento.leituras_fechamento[0].id
+            )
+            geradas += 1
+    except Exception:
+        logger.exception(
+            "Fechamento mensal falhou para %02d/%d; "
+            "a transação será revertida.",
+            mes,
+            ano,
+        )
+        raise
+
+    resultado = ResultadoFechamento(
+        apartamentos_analisados=len(apartamentos),
+        faturas_geradas=geradas,
+        faturas_existentes=existentes,
+        apartamentos_sem_leitura=tuple(sem_leitura),
+    )
+    logger.info(
+        "Fechamento mensal concluído para %02d/%d: "
+        "%d faturas geradas, %d já existentes e %d pendências.",
+        mes,
+        ano,
+        resultado.faturas_geradas,
+        resultado.faturas_existentes,
+        resultado.total_sem_leitura,
+    )
+    return resultado
