@@ -1,11 +1,16 @@
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import OuterRef, Subquery
+from django.db.models.deletion import ProtectedError
 
 from apartamentos.models import Apartamento
 from apartamentos.services import consultar_apartamento
 
 from .models import ANO_MAXIMO, Leitura
+
+
+class ExclusaoLeituraBloqueadaError(ValueError):
+    """Indica que uma leitura já está vinculada a uma fatura."""
 
 
 @transaction.atomic
@@ -254,7 +259,16 @@ def buscar_ultimas_leituras(apartamento_id, limite=12):
 def excluir_leitura(leitura_id):
     leitura = _consultar_leitura_para_atualizacao(leitura_id)
     if leitura.faturas.exists():
-        raise ValueError(
-            "A leitura não pode ser excluída porque está vinculada a uma fatura."
+        raise ExclusaoLeituraBloqueadaError(
+            "Esta leitura não pode ser excluída porque já foi utilizada "
+            "para gerar uma fatura. Exclua primeiro a fatura correspondente."
         )
-    leitura.delete()
+    identificacao = str(leitura)
+    try:
+        leitura.delete()
+    except ProtectedError as exc:
+        raise ExclusaoLeituraBloqueadaError(
+            "Esta leitura não pode ser excluída porque possui uma "
+            "fatura vinculada."
+        ) from exc
+    return identificacao

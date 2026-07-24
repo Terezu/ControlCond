@@ -6,9 +6,12 @@
     {% url "apartamentos:editar" apartamento.id as url_editar_apartamento %}
     {% include "components/page_header.html" with titulo=apartamento subtitulo="Dados da unidade, leituras e histórico de faturamento." url_acao=url_editar_apartamento texto_acao="Editar apartamento" icone_acao="bi-pencil" %}
 
-    <div class="d-flex mb-4">
+    <div class="d-flex flex-column flex-sm-row justify-content-between gap-2 mb-4">
         <a href="{% url 'apartamentos:lista' %}" class="btn btn-sm btn-outline-secondary">
             <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Voltar para apartamentos
+        </a>
+        <a href="{% url 'apartamentos:excluir' apartamento.id %}" class="btn btn-sm btn-outline-danger">
+            <i class="bi bi-trash me-1" aria-hidden="true"></i>Excluir apartamento
         </a>
     </div>
 

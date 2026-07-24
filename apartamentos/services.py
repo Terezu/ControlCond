@@ -3,11 +3,16 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import Prefetch
+from django.db.models.deletion import ProtectedError
 
 from faturas.models import Fatura
 from leituras.models import Leitura
 
 from .models import LIMITE_LEITURA, Apartamento
+
+
+class ExclusaoApartamentoBloqueadaError(ValueError):
+    """Indica que um apartamento ainda possui registros vinculados."""
 
 
 @transaction.atomic
@@ -235,4 +240,33 @@ def excluir_apartamento(apartamento_id):
         )
     except Apartamento.DoesNotExist as exc:
         raise ValueError("Apartamento não encontrado.") from exc
-    apartamento.delete()
+
+    quantidade_leituras = apartamento.leituras.count()
+    quantidade_faturas = apartamento.faturas.count()
+    if quantidade_leituras or quantidade_faturas:
+        leitura = (
+            "leitura"
+            if quantidade_leituras == 1
+            else "leituras"
+        )
+        fatura = (
+            "fatura"
+            if quantidade_faturas == 1
+            else "faturas"
+        )
+        raise ExclusaoApartamentoBloqueadaError(
+            f"{apartamento} não pode ser excluído porque possui "
+            f"{quantidade_leituras} {leitura} e "
+            f"{quantidade_faturas} {fatura} cadastradas. "
+            "Exclua primeiro os registros vinculados."
+        )
+
+    identificacao = str(apartamento)
+    try:
+        apartamento.delete()
+    except ProtectedError as exc:
+        raise ExclusaoApartamentoBloqueadaError(
+            f"{identificacao} não pode ser excluído porque ainda possui "
+            "registros vinculados."
+        ) from exc
+    return identificacao

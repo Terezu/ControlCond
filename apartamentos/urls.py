@@ -13,6 +13,11 @@ urlpatterns = [
         name="editar",
     ),
     path(
+        "<int:apartamento_id>/excluir/",
+        views.confirmar_exclusao_apartamento,
+        name="excluir",
+    ),
+    path(
         "<int:apartamento_id>/",
         views.detalhes_apartamento,
         name="detalhes"

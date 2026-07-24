@@ -46,7 +46,7 @@
                     <span class="dashboard-card-icon"><i class="bi bi-graph-up-arrow" aria-hidden="true"></i></span>
                     <span class="dashboard-hero-label">Valor faturado</span>
                     <p class="dashboard-hero-value">{{ resumo.valor_faturado|moeda_br }}</p>
-                    <small>Receita prevista da competência</small>
+                    <small>Receita prevista do mês</small>
                 </div>
             </article>
         </div>
@@ -86,7 +86,7 @@
 {% if resumo.total_apartamentos == 0 %}
     <div class="alert alert-info d-flex align-items-center gap-2 mb-5" role="status"><i class="bi bi-info-circle" aria-hidden="true"></i><span>Nenhum apartamento cadastrado. Cadastre uma unidade para iniciar o acompanhamento.</span></div>
 {% elif resumo.apartamentos_com_leitura == 0 and resumo.apartamentos_com_fatura == 0 %}
-    <div class="alert alert-info d-flex align-items-center gap-2 mb-5" role="status"><i class="bi bi-info-circle" aria-hidden="true"></i><span>Esta competência ainda não possui leituras nem faturas.</span></div>
+    <div class="alert alert-info d-flex align-items-center gap-2 mb-5" role="status"><i class="bi bi-info-circle" aria-hidden="true"></i><span>Este mês ainda não possui leituras nem faturas.</span></div>
 {% endif %}
 
 <section class="row g-4 mb-5" aria-label="Situação e pendências">
@@ -104,7 +104,7 @@
                         {% if resumo.faturas_canceladas %}<span class="is-cancelled" style="--status-weight: {{ resumo.faturas_canceladas }}"></span>{% endif %}
                     </div>
                 {% else %}
-                    <div class="dashboard-status-bar is-empty" aria-label="Nenhuma fatura na competência"></div>
+                    <div class="dashboard-status-bar is-empty" aria-label="Nenhuma fatura no mês"></div>
                 {% endif %}
                 <div class="dashboard-status-legend">
                     <a href="{{ links.faturas_pagas }}"><span><i class="is-paid" aria-hidden="true"></i>Pagas</span><strong>{{ resumo.faturas_pagas }}</strong></a>
@@ -150,7 +150,7 @@
 
 <section class="card shadow-sm dashboard-closing-card mb-5">
     <div class="dashboard-closing-icon"><i class="bi bi-calendar2-check" aria-hidden="true"></i></div>
-    <div class="flex-grow-1"><span class="dashboard-eyebrow">Ação da competência</span><h2>Fechamento mensal</h2><p>{{ resumo.competencia }}</p><div class="dashboard-closing-stats"><span><strong>{{ resumo.apartamentos_sem_leitura }}</strong> sem leitura</span><span><strong>{{ resumo.apartamentos_sem_fatura }}</strong> sem fatura</span></div></div>
+    <div class="flex-grow-1"><span class="dashboard-eyebrow">Ação do mês</span><h2>Fechamento mensal</h2><p>{{ resumo.competencia }}</p><div class="dashboard-closing-stats"><span><strong>{{ resumo.apartamentos_sem_leitura }}</strong> sem leitura</span><span><strong>{{ resumo.apartamentos_sem_fatura }}</strong> sem fatura</span></div></div>
     <a class="btn btn-primary" href="{% url 'faturas:fechamento_mensal' %}">Executar fechamento <i class="bi bi-arrow-right ms-2" aria-hidden="true"></i></a>
 </section>
 
@@ -166,7 +166,7 @@
         <div><span class="detail-label">Cobertura de leituras</span><p class="detail-value">{{ resumo.cobertura_leituras|percentual }}</p></div>
         <div><span class="detail-label">Cobertura de faturamento</span><p class="detail-value">{{ resumo.cobertura_faturamento|percentual }}</p></div>
         <div><span class="detail-label">Taxa de pagamento</span><p class="detail-value">{{ resumo.taxa_pagamento|percentual }}</p></div>
-        <div><span class="detail-label">Inadimplência operacional</span><p class="detail-value">{{ resumo.taxa_inadimplencia|percentual }}</p></div>
+        <div><span class="detail-label">Percentual não pago</span><p class="detail-value">{{ resumo.taxa_inadimplencia|percentual }}</p></div>
     </div></div>
 </section>
 {% endblock %}

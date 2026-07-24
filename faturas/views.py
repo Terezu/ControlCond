@@ -1,11 +1,13 @@
 from decimal import Decimal
 from io import BytesIO
+import logging
 
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.core.paginator import Paginator
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils.text import slugify
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods, require_safe
@@ -25,6 +27,7 @@ from .services import (
     consultar_fatura,
     consultar_valor_aluguel_leitura,
     editar_fatura,
+    excluir_fatura,
     executar_fechamento_mensal,
     estornar_pagamento,
     gerar_fatura_mensal,
@@ -33,6 +36,8 @@ from .services import (
     obter_contexto_geracao_fatura,
     reabrir_fatura,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @staff_member_required
@@ -110,6 +115,61 @@ def detalhes_fatura(request, fatura_id):
             "fatura": fatura,
             "form_valores": form_valores,
             "historico_status": historico_status,
+        },
+    )
+
+
+@staff_member_required
+@never_cache
+@require_http_methods(["GET", "POST"])
+def confirmar_exclusao_fatura(request, fatura_id):
+    try:
+        fatura = consultar_fatura(fatura_id)
+    except ValueError as exc:
+        raise Http404(str(exc)) from exc
+
+    if request.method == "POST":
+        try:
+            identificacao = excluir_fatura(fatura_id)
+        except ValueError as exc:
+            raise Http404(str(exc)) from exc
+        messages.success(
+            request,
+            f"{identificacao} foi excluída permanentemente.",
+        )
+        logger.info(
+            "Fatura excluída permanentemente",
+            extra={
+                "fatura_id": fatura_id,
+                "usuario_id": request.user.id,
+            },
+        )
+        return redirect("faturas:lista")
+
+    return render(
+        request,
+        "components/confirmar_exclusao.html",
+        {
+            "titulo": "Excluir fatura",
+            "identificacao": (
+                f"Fatura do mês {fatura.mes:02d}/{fatura.ano}"
+            ),
+            "registros": (
+                ("Apartamento", str(fatura.apartamento)),
+                ("Mês", f"{fatura.mes:02d}/{fatura.ano}"),
+                ("Valor total", f"R$ {fatura.valor_total:.2f}"),
+                ("Status atual", fatura.get_status_display()),
+            ),
+            "bloqueada": False,
+            "aviso": "Tem certeza de que deseja excluir permanentemente esta fatura?",
+            "consequencia": (
+                "Esta ação é irreversível. Após a exclusão, os dados e o "
+                "histórico de status desta fatura deixarão de existir."
+            ),
+            "url_cancelar": reverse(
+                "faturas:detalhes",
+                args=[fatura.id],
+            ),
         },
     )
 

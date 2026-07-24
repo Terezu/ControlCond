@@ -30,10 +30,111 @@ from .services import (
     editar_fatura,
     estornar_pagamento,
     executar_fechamento_mensal,
+    excluir_fatura,
     gerar_fatura_mensal,
     marcar_fatura_como_paga,
     reabrir_fatura,
 )
+
+
+class ExclusaoFaturaTests(TestCase):
+    def setUp(self):
+        self.usuario = get_user_model().objects.create_user(
+            username="operador-exclusao-fatura",
+            password="senha-de-teste",
+            is_staff=True,
+        )
+        self.client.force_login(self.usuario)
+        self.apartamento = Apartamento.objects.create(
+            numero="701",
+            leitura_base_agua=Decimal("0"),
+            leitura_base_gas=Decimal("0"),
+        )
+        self.leitura = Leitura.objects.create(
+            apartamento=self.apartamento,
+            mes=7,
+            ano=2026,
+            leitura_agua=Decimal("10"),
+            leitura_gas=Decimal("10"),
+        )
+
+    def criar_fatura(self, status=Fatura.Status.PENDENTE):
+        return Fatura.objects.create(
+            apartamento=self.apartamento,
+            leitura=self.leitura,
+            mes=7,
+            ano=2026,
+            consumo_agua=0,
+            consumo_gas=0,
+            status=status,
+            apartamento_numero_emissao=self.apartamento.numero,
+        )
+
+    def test_confirmacao_nao_exclui_por_get_e_usa_mes(self):
+        fatura = self.criar_fatura()
+        resposta = self.client.get(
+            reverse("faturas:excluir", args=[fatura.id])
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTrue(Fatura.objects.filter(pk=fatura.id).exists())
+        self.assertContains(resposta, "Fatura do mês 07/2026")
+        self.assertContains(resposta, "Excluir permanentemente")
+        self.assertContains(resposta, "Esta ação é irreversível")
+
+    def test_exclui_qualquer_status_e_preserva_apartamento_e_leitura(self):
+        for status in Fatura.Status.values:
+            with self.subTest(status=status):
+                fatura = self.criar_fatura(status)
+                resposta = self.client.post(
+                    reverse("faturas:excluir", args=[fatura.id]),
+                    follow=True,
+                )
+
+                self.assertRedirects(resposta, reverse("faturas:lista"))
+                self.assertFalse(Fatura.objects.filter(pk=fatura.id).exists())
+                self.assertTrue(
+                    Apartamento.objects.filter(pk=self.apartamento.id).exists()
+                )
+                self.assertTrue(Leitura.objects.filter(pk=self.leitura.id).exists())
+
+    def test_apos_exclusao_permite_gerar_novamente_pelas_regras_normais(self):
+        fatura = gerar_fatura_mensal(self.leitura.id)
+        self.client.post(reverse("faturas:excluir", args=[fatura.id]))
+
+        nova_fatura = gerar_fatura_mensal(self.leitura.id)
+
+        self.assertNotEqual(nova_fatura.id, fatura.id)
+        self.assertEqual(Fatura.objects.filter(mes=7, ano=2026).count(), 1)
+
+    def test_id_inexistente_retorna_404(self):
+        resposta = self.client.get(reverse("faturas:excluir", args=[999999]))
+        self.assertEqual(resposta.status_code, 404)
+
+    def test_usuario_nao_staff_nao_pode_excluir(self):
+        fatura = self.criar_fatura()
+        usuario = get_user_model().objects.create_user(
+            username="morador-exclusao-fatura",
+            password="senha-de-teste",
+        )
+        self.client.force_login(usuario)
+
+        resposta = self.client.post(
+            reverse("faturas:excluir", args=[fatura.id])
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertTrue(Fatura.objects.filter(pk=fatura.id).exists())
+
+    def test_service_exclui_diretamente_sem_remover_vinculos(self):
+        fatura = self.criar_fatura()
+
+        identificacao = excluir_fatura(fatura.id)
+
+        self.assertIn("mês 07/2026", identificacao)
+        self.assertFalse(Fatura.objects.filter(pk=fatura.id).exists())
+        self.assertTrue(Apartamento.objects.filter(pk=self.apartamento.id).exists())
+        self.assertTrue(Leitura.objects.filter(pk=self.leitura.id).exists())
 
 
 class FechamentoMensalServiceTests(TestCase):

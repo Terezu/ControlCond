@@ -9,12 +9,14 @@
         <a href="{% url 'faturas:lista' %}" class="btn btn-sm btn-outline-secondary align-self-start">
             <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Voltar para faturas
         </a>
-        <a
-            href="{% url 'faturas:baixar_pdf' fatura.id %}"
-            class="btn btn-sm btn-outline-primary align-self-start"
-        >
-            <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Baixar PDF
-        </a>
+        <div class="d-flex flex-wrap gap-2">
+            <a href="{% url 'faturas:baixar_pdf' fatura.id %}" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Baixar PDF
+            </a>
+            <a href="{% url 'faturas:excluir' fatura.id %}" class="btn btn-sm btn-outline-danger">
+                <i class="bi bi-trash me-1" aria-hidden="true"></i>Excluir fatura
+            </a>
+        </div>
     </div>
 
     <div class="row g-4">
@@ -33,7 +35,7 @@
                             </p>
                         </div>
                         <div class="col-6 col-sm-3">
-                            <p class="detail-label">Competência</p>
+                            <p class="detail-label">Mês</p>
                             <p class="detail-value">{{ fatura.mes|stringformat:"02d" }}/{{ fatura.ano }}</p>
                         </div>
                         <div class="col-6 col-sm-3">

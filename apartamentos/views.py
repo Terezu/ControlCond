@@ -1,8 +1,11 @@
+import logging
+
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.http import Http404
 from django.core.paginator import Paginator
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods, require_safe
@@ -13,8 +16,12 @@ from .services import (
     consultar_apartamento,
     consultar_detalhes_apartamento,
     editar_apartamento,
+    excluir_apartamento,
+    ExclusaoApartamentoBloqueadaError,
     listar_apartamentos,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _salvar_formulario(form, apartamento_id=None):
@@ -202,5 +209,75 @@ def detalhes_apartamento(request, apartamento_id):
             "ultima_leitura": leituras[0] if leituras else None,
             "leituras": leituras,
             "faturas": faturas,
+        },
+    )
+
+
+@staff_member_required
+@never_cache
+@require_http_methods(["GET", "POST"])
+def confirmar_exclusao_apartamento(request, apartamento_id):
+    try:
+        apartamento = consultar_detalhes_apartamento(apartamento_id)
+    except ValueError as exc:
+        raise Http404(str(exc)) from exc
+
+    quantidade_leituras = apartamento.leituras.count()
+    quantidade_faturas = apartamento.faturas.count()
+    bloqueada = bool(quantidade_leituras or quantidade_faturas)
+
+    if request.method == "POST":
+        try:
+            identificacao = excluir_apartamento(apartamento_id)
+        except ExclusaoApartamentoBloqueadaError as exc:
+            bloqueada = True
+            messages.error(request, str(exc))
+            logger.warning(
+                "Exclusão de apartamento bloqueada",
+                extra={
+                    "apartamento_id": apartamento_id,
+                    "usuario_id": request.user.id,
+                },
+            )
+        except ValueError as exc:
+            raise Http404(str(exc)) from exc
+        else:
+            messages.success(
+                request,
+                f"{identificacao} excluído permanentemente.",
+            )
+            logger.info(
+                "Apartamento excluído permanentemente",
+                extra={
+                    "apartamento_id": apartamento_id,
+                    "usuario_id": request.user.id,
+                },
+            )
+            return redirect("apartamentos:lista")
+
+    return render(
+        request,
+        "components/confirmar_exclusao.html",
+        {
+            "titulo": "Excluir apartamento",
+            "identificacao": str(apartamento),
+            "registros": (
+                ("Número", apartamento.numero),
+                ("Bloco", apartamento.bloco or "Não informado"),
+                ("Leituras cadastradas", quantidade_leituras),
+                ("Faturas cadastradas", quantidade_faturas),
+            ),
+            "bloqueada": bloqueada,
+            "mensagem_bloqueio": (
+                "Este apartamento não pode ser excluído enquanto possuir "
+                "leituras ou faturas cadastradas. Exclua primeiro os "
+                "registros vinculados."
+            ),
+            "aviso": "Tem certeza de que deseja excluir permanentemente este apartamento?",
+            "consequencia": "Esta ação é irreversível.",
+            "url_cancelar": reverse(
+                "apartamentos:detalhes",
+                args=[apartamento.id],
+            ),
         },
     )

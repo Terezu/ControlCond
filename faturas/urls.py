@@ -23,6 +23,11 @@ urlpatterns = [
         name="baixar_pdf",
     ),
     path(
+        "<int:fatura_id>/excluir/",
+        views.confirmar_exclusao_fatura,
+        name="excluir",
+    ),
+    path(
         "<int:fatura_id>/marcar-como-paga/confirmar/",
         views.confirmar_marcar_como_paga,
         name="confirmar_marcar_como_paga",

@@ -13,7 +13,113 @@ from leituras.models import Leitura
 
 from .models import Apartamento
 from .forms import ApartamentoForm, FiltrarApartamentosForm
-from .services import cadastrar_apartamento, editar_apartamento, listar_apartamentos
+from .services import (
+    ExclusaoApartamentoBloqueadaError,
+    cadastrar_apartamento,
+    editar_apartamento,
+    excluir_apartamento,
+    listar_apartamentos,
+)
+
+
+class ExclusaoApartamentoTests(TestCase):
+    def setUp(self):
+        self.usuario = get_user_model().objects.create_user(
+            username="operador-exclusao-apartamento",
+            password="senha-de-teste",
+            is_staff=True,
+        )
+        self.client.force_login(self.usuario)
+
+    def test_confirmacao_nao_exclui_por_get_e_exibe_csrf(self):
+        apartamento = Apartamento.objects.create(numero="901")
+        resposta = self.client.get(
+            reverse("apartamentos:excluir", args=[apartamento.id])
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTrue(Apartamento.objects.filter(pk=apartamento.id).exists())
+        self.assertContains(resposta, "Excluir permanentemente")
+        self.assertContains(resposta, "Esta ação é irreversível")
+        self.assertContains(resposta, "csrfmiddlewaretoken")
+
+    def test_exclui_apartamento_vazio_por_post(self):
+        apartamento = Apartamento.objects.create(numero="902")
+        resposta = self.client.post(
+            reverse("apartamentos:excluir", args=[apartamento.id]),
+            follow=True,
+        )
+
+        self.assertRedirects(resposta, reverse("apartamentos:lista"))
+        self.assertFalse(Apartamento.objects.filter(pk=apartamento.id).exists())
+        self.assertContains(resposta, "excluído permanentemente")
+
+    def test_bloqueia_apartamento_com_leitura_e_fatura_e_informa_quantidades(self):
+        apartamento = Apartamento.objects.create(numero="903")
+        leitura = Leitura.objects.create(
+            apartamento=apartamento,
+            mes=7,
+            ano=2026,
+            leitura_agua=Decimal("10"),
+        )
+        Fatura.objects.create(
+            apartamento=apartamento,
+            leitura=leitura,
+            mes=7,
+            ano=2026,
+            consumo_agua=0,
+            consumo_gas=0,
+            apartamento_numero_emissao=apartamento.numero,
+        )
+
+        resposta = self.client.post(
+            reverse("apartamentos:excluir", args=[apartamento.id])
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "1 leitura e 1 fatura")
+        self.assertTrue(Apartamento.objects.filter(pk=apartamento.id).exists())
+        self.assertTrue(Leitura.objects.filter(pk=leitura.id).exists())
+        self.assertEqual(Fatura.objects.filter(apartamento=apartamento).count(), 1)
+
+    def test_confirmacao_inexistente_retorna_404(self):
+        resposta = self.client.get(
+            reverse("apartamentos:excluir", args=[999999])
+        )
+        self.assertEqual(resposta.status_code, 404)
+
+    def test_usuario_nao_staff_nao_pode_excluir(self):
+        apartamento = Apartamento.objects.create(numero="904")
+        usuario = get_user_model().objects.create_user(
+            username="morador-exclusao-apartamento",
+            password="senha-de-teste",
+        )
+        self.client.force_login(usuario)
+
+        resposta = self.client.post(
+            reverse("apartamentos:excluir", args=[apartamento.id])
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertTrue(Apartamento.objects.filter(pk=apartamento.id).exists())
+
+    def test_service_bloqueia_diretamente_e_trata_plural(self):
+        apartamento = Apartamento.objects.create(numero="905")
+        for mes in (6, 7):
+            Leitura.objects.create(
+                apartamento=apartamento,
+                mes=mes,
+                ano=2026,
+                leitura_agua=Decimal("10"),
+            )
+
+        with self.assertRaisesRegex(
+            ExclusaoApartamentoBloqueadaError,
+            "2 leituras e 0 faturas",
+        ):
+            excluir_apartamento(apartamento.id)
+
+        self.assertTrue(Apartamento.objects.filter(pk=apartamento.id).exists())
 
 
 class ApartamentoFormTests(TestCase):

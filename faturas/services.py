@@ -736,9 +736,24 @@ def editar_fatura(
     return fatura
 
 
+@transaction.atomic
 def excluir_fatura(fatura_id):
-    fatura = consultar_fatura(fatura_id)
+    try:
+        fatura = (
+            Fatura.objects
+            .select_for_update()
+            .select_related("apartamento", "leitura")
+            .get(pk=fatura_id)
+        )
+    except Fatura.DoesNotExist as exc:
+        raise ValueError("Fatura não encontrada.") from exc
+
+    identificacao = (
+        f"Fatura do apartamento {fatura.apartamento_numero_emissao or fatura.apartamento.numero}, "
+        f"mês {fatura.mes:02d}/{fatura.ano}"
+    )
     fatura.delete()
+    return identificacao
 
 
 def buscar_leitura_anterior(leitura_atual, campo=None):
