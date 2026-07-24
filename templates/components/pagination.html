@@ -1,0 +1,39 @@
+{% if pagina.paginator.num_pages > 1 %}
+    <div class="card-footer bg-white py-3">
+        <nav aria-label="{{ aria_label }}">
+            <div class="d-flex flex-column flex-md-row align-items-center justify-content-between gap-3">
+                <p class="text-secondary small mb-0">
+                    Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}
+                </p>
+
+                <ul class="pagination pagination-sm mb-0">
+                    {% if pagina.has_previous %}
+                        <li class="page-item">
+                            <a class="page-link" href="?{% if parametros_filtros %}{{ parametros_filtros }}&{% endif %}page=1" aria-label="Primeira página">Primeira</a>
+                        </li>
+                        <li class="page-item">
+                            <a class="page-link" href="?{% if parametros_filtros %}{{ parametros_filtros }}&{% endif %}page={{ pagina.previous_page_number }}" aria-label="Página anterior">Anterior</a>
+                        </li>
+                    {% endif %}
+
+                    {% for numero in pagina.paginator.page_range %}
+                        {% if numero == pagina.number %}
+                            <li class="page-item active" aria-current="page"><span class="page-link">{{ numero }}</span></li>
+                        {% elif numero >= pagina.number|add:"-2" and numero <= pagina.number|add:"2" %}
+                            <li class="page-item"><a class="page-link" href="?{% if parametros_filtros %}{{ parametros_filtros }}&{% endif %}page={{ numero }}">{{ numero }}</a></li>
+                        {% endif %}
+                    {% endfor %}
+
+                    {% if pagina.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="?{% if parametros_filtros %}{{ parametros_filtros }}&{% endif %}page={{ pagina.next_page_number }}" aria-label="Próxima página">Próxima</a>
+                        </li>
+                        <li class="page-item">
+                            <a class="page-link" href="?{% if parametros_filtros %}{{ parametros_filtros }}&{% endif %}page={{ pagina.paginator.num_pages }}" aria-label="Última página">Última</a>
+                        </li>
+                    {% endif %}
+                </ul>
+            </div>
+        </nav>
+    </div>
+{% endif %}

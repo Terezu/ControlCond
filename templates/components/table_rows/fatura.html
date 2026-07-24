@@ -1,0 +1,27 @@
+<tr class="clickable-row">
+    <td>
+        <a
+            href="{% url 'faturas:detalhes' linha.id %}"
+            class="stretched-link text-reset text-decoration-none fw-semibold"
+            aria-label="Ver detalhes da fatura do apartamento {{ linha.apartamento_numero_emissao }}, referente a {{ linha.mes|stringformat:'02d' }}/{{ linha.ano }}"
+        >
+            Apartamento {{ linha.apartamento_numero_emissao }}
+        </a>
+        {% if linha.apartamento_bloco_emissao %}
+            <small class="d-block text-secondary">Bloco {{ linha.apartamento_bloco_emissao }}</small>
+        {% endif %}
+    </td>
+    <td>{{ linha.mes|stringformat:"02d" }}/{{ linha.ano }}</td>
+    <td class="fw-semibold">R$ {{ linha.valor_total|floatformat:2 }}</td>
+    <td>{% include "components/status_badge.html" with status=linha.status texto=linha.get_status_display %}</td>
+    <td class="text-end">
+        <a
+            href="{% url 'faturas:baixar_pdf' linha.id %}"
+            class="btn btn-sm btn-outline-secondary table-action"
+            aria-label="Baixar PDF da fatura"
+        >
+            <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i>
+            <span class="d-none d-xl-inline ms-1">Baixar PDF</span>
+        </a>
+    </td>
+</tr>

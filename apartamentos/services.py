@@ -1,8 +1,9 @@
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Prefetch
+from django.db.models.deletion import ProtectedError
 
 from faturas.models import Fatura
 from leituras.models import Leitura
@@ -10,17 +11,24 @@ from leituras.models import Leitura
 from .models import LIMITE_LEITURA, Apartamento
 
 
+class ExclusaoApartamentoBloqueadaError(ValueError):
+    """Indica que um apartamento ainda possui registros vinculados."""
+
+
+@transaction.atomic
 def cadastrar_apartamento(
     numero,
     leitura_base_agua,
     leitura_base_gas,
     bloco=None,
     observacoes=None,
+    valor_aluguel=Decimal("0.00"),
 ):
     """Cria e retorna um apartamento."""
     numero = _normalizar_numero(numero)
     bloco = _normalizar_texto_opcional(bloco)
     observacoes = _normalizar_texto_opcional(observacoes)
+    valor_aluguel = _normalizar_valor_aluguel(valor_aluguel)
     leitura_base_agua, leitura_base_gas = _validar_leituras_base(
         leitura_base_agua,
         leitura_base_gas,
@@ -30,11 +38,12 @@ def cadastrar_apartamento(
         numero=numero,
         bloco=bloco,
         observacoes=observacoes,
+        valor_aluguel=valor_aluguel,
         leitura_base_agua=leitura_base_agua,
         leitura_base_gas=leitura_base_gas,
     )
     _validar_modelo(apartamento)
-    apartamento.save(force_insert=True)
+    _salvar_apartamento(apartamento, force_insert=True)
     return apartamento
 
 
@@ -46,6 +55,7 @@ def editar_apartamento(
     leitura_base_gas,
     bloco=None,
     observacoes=None,
+    valor_aluguel=Decimal("0.00"),
 ):
     try:
         apartamento = (
@@ -58,6 +68,7 @@ def editar_apartamento(
     numero = _normalizar_numero(numero)
     bloco = _normalizar_texto_opcional(bloco)
     observacoes = _normalizar_texto_opcional(observacoes)
+    valor_aluguel = _normalizar_valor_aluguel(valor_aluguel)
     leitura_base_agua, leitura_base_gas = _validar_leituras_base(
         leitura_base_agua,
         leitura_base_gas,
@@ -66,17 +77,16 @@ def editar_apartamento(
     apartamento.numero = numero
     apartamento.bloco = bloco
     apartamento.observacoes = observacoes
+    apartamento.valor_aluguel = valor_aluguel
     apartamento.leitura_base_agua = leitura_base_agua
     apartamento.leitura_base_gas = leitura_base_gas
     _validar_modelo(apartamento)
-    apartamento.save(
+    _salvar_apartamento(
+        apartamento,
         update_fields=[
-            "numero",
-            "bloco",
-            "observacoes",
-            "leitura_base_agua",
-            "leitura_base_gas",
-        ]
+            "numero", "bloco", "observacoes", "valor_aluguel",
+            "leitura_base_agua", "leitura_base_gas",
+        ],
     )
     return apartamento
 
@@ -122,6 +132,24 @@ def _normalizar_leitura_base(valor, recurso):
     return valor
 
 
+def _normalizar_valor_aluguel(valor):
+    if valor in (None, ""):
+        valor = Decimal("0.00")
+    if isinstance(valor, bool):
+        raise ValueError("O valor do aluguel deve ser um número válido.")
+    try:
+        valor = Decimal(str(valor))
+    except (InvalidOperation, TypeError, ValueError) as exc:
+        raise ValueError(
+            "O valor do aluguel deve ser um número válido."
+        ) from exc
+    if not valor.is_finite():
+        raise ValueError("O valor do aluguel deve ser um número finito.")
+    if valor < 0:
+        raise ValueError("O valor do aluguel não pode ser negativo.")
+    return valor.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
 def _normalizar_numero(numero):
     if numero is None or isinstance(numero, bool):
         raise ValueError("O número do apartamento é obrigatório.")
@@ -141,9 +169,26 @@ def _normalizar_texto_opcional(valor):
 
 def _validar_modelo(apartamento):
     try:
-        apartamento.full_clean(validate_unique=False, validate_constraints=False)
+        apartamento.full_clean(validate_unique=False)
     except ValidationError as exc:
         raise ValueError(" ".join(exc.messages)) from exc
+
+
+def _salvar_apartamento(apartamento, **kwargs):
+    try:
+        with transaction.atomic():
+            apartamento.save(**kwargs)
+    except IntegrityError as exc:
+        if Apartamento.objects.filter(
+            numero__iexact=apartamento.numero,
+            bloco__iexact=apartamento.bloco,
+        ).exclude(pk=apartamento.pk).exists():
+            raise ValueError(
+                "Já existe um apartamento com este número e bloco."
+            ) from exc
+        raise ValueError(
+            "Os dados do apartamento violam uma regra de integridade."
+        ) from exc
 
 
 def consultar_apartamento(apartamento_id):
@@ -174,8 +219,15 @@ def consultar_detalhes_apartamento(apartamento_id):
 
 
 
-def listar_apartamentos():
-    return Apartamento.objects.order_by("bloco", "numero", "id")
+def listar_apartamentos(*, numero=None, bloco=None):
+    apartamentos = Apartamento.objects.all()
+
+    if numero:
+        apartamentos = apartamentos.filter(numero__icontains=numero.strip())
+    if bloco:
+        apartamentos = apartamentos.filter(bloco__iexact=bloco.strip())
+
+    return apartamentos.order_by("bloco", "numero", "id")
 
 
 @transaction.atomic
@@ -188,4 +240,33 @@ def excluir_apartamento(apartamento_id):
         )
     except Apartamento.DoesNotExist as exc:
         raise ValueError("Apartamento não encontrado.") from exc
-    apartamento.delete()
+
+    quantidade_leituras = apartamento.leituras.count()
+    quantidade_faturas = apartamento.faturas.count()
+    if quantidade_leituras or quantidade_faturas:
+        leitura = (
+            "leitura"
+            if quantidade_leituras == 1
+            else "leituras"
+        )
+        fatura = (
+            "fatura"
+            if quantidade_faturas == 1
+            else "faturas"
+        )
+        raise ExclusaoApartamentoBloqueadaError(
+            f"{apartamento} não pode ser excluído porque possui "
+            f"{quantidade_leituras} {leitura} e "
+            f"{quantidade_faturas} {fatura} cadastradas. "
+            "Exclua primeiro os registros vinculados."
+        )
+
+    identificacao = str(apartamento)
+    try:
+        apartamento.delete()
+    except ProtectedError as exc:
+        raise ExclusaoApartamentoBloqueadaError(
+            f"{identificacao} não pode ser excluído porque ainda possui "
+            "registros vinculados."
+        ) from exc
+    return identificacao

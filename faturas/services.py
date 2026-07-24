@@ -1,14 +1,73 @@
-from decimal import Decimal, InvalidOperation
-from pathlib import Path
+import logging
+from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, models, transaction
+from django.db.models import Prefetch
+from django.utils import timezone
 
 from apartamentos.models import Apartamento
 from calculos.services import calcular_agua, calcular_gas
+from configuracoes.services import obter_configuracao
 from leituras.models import Leitura
 
-from .models import ANO_MAXIMO, Fatura
+from .models import ANO_MAXIMO, Fatura, HistoricoStatusFatura
+
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ResultadoFechamento:
+    apartamentos_analisados: int
+    faturas_geradas: int
+    faturas_existentes: int
+    apartamentos_sem_leitura: tuple
+
+    @property
+    def total_sem_leitura(self):
+        return len(self.apartamentos_sem_leitura)
+
+
+class RegraNegocioFaturaError(ValidationError):
+    """Indica uma operação incompatível com o estado atual da fatura."""
+
+
+TRANSICOES_STATUS_PERMITIDAS = {
+    Fatura.Status.PENDENTE: {
+        Fatura.Status.PAGA,
+        Fatura.Status.CANCELADA,
+    },
+    Fatura.Status.PAGA: {Fatura.Status.PENDENTE},
+    Fatura.Status.CANCELADA: {Fatura.Status.PENDENTE},
+}
+
+
+def validar_transicao_status(status_atual, novo_status):
+    if novo_status not in Fatura.Status.values:
+        raise RegraNegocioFaturaError("Status de fatura inválido.")
+    if status_atual == novo_status:
+        return False
+    if novo_status not in TRANSICOES_STATUS_PERMITIDAS.get(
+        status_atual,
+        set(),
+    ):
+        atual = dict(Fatura.Status.choices).get(status_atual, status_atual)
+        novo = dict(Fatura.Status.choices)[novo_status]
+        raise RegraNegocioFaturaError(
+            f"A transição de {atual.lower()} para {novo.lower()} "
+            "não é permitida."
+        )
+    return True
+
+
+def validar_edicao_financeira(fatura):
+    if fatura.status != Fatura.Status.PENDENTE:
+        status = fatura.get_status_display().lower()
+        raise RegraNegocioFaturaError(
+            f"Não é possível editar valores de uma fatura {status}."
+        )
 
 
 def _consultar_apartamento_para_atualizacao(apartamento_id):
@@ -95,7 +154,24 @@ def _normalizar_decimal(
     return valor
 
 
-def _calcular_dados_da_leitura(leitura_atual):
+def _normalizar_valor_financeiro(valor, descricao, *, padrao=None):
+    if valor in (None, ""):
+        if padrao is None:
+            raise ValueError(f"{descricao} é obrigatório.")
+        valor = padrao
+    valor = _normalizar_decimal(valor, descricao)
+    try:
+        return valor.quantize(
+            Decimal("0.01"),
+            rounding=ROUND_HALF_UP,
+        )
+    except InvalidOperation as exc:
+        raise ValueError(
+            f"{descricao} excede o limite permitido."
+        ) from exc
+
+
+def _calcular_dados_da_leitura(leitura_atual, valor_m3_gas):
     if (
         leitura_atual.leitura_agua is None
         or leitura_atual.leitura_gas is None
@@ -140,6 +216,7 @@ def _calcular_dados_da_leitura(leitura_atual):
     resultado_gas = calcular_gas(
         leitura_gas_anterior,
         leitura_atual.leitura_gas,
+        valor_m3_gas,
     )
     return {
         "consumo_agua": resultado_agua["consumo"],
@@ -181,8 +258,21 @@ def cadastrar_fatura(
     leitura_agua_atual=None,
     leitura_gas_anterior=None,
     leitura_gas_atual=None,
+    valor_aluguel=None,
+    desconto=None,
 ):
     apartamento = _consultar_apartamento_para_atualizacao(apartamento_id)
+    valor_m3_gas = obter_configuracao().valor_m3_gas
+    valor_aluguel = _normalizar_valor_financeiro(
+        valor_aluguel,
+        "O valor do aluguel",
+        padrao=apartamento.valor_aluguel,
+    )
+    desconto = _normalizar_valor_financeiro(
+        desconto,
+        "O desconto",
+        padrao=Decimal("0.00"),
+    )
 
     if (
         isinstance(mes, bool)
@@ -259,7 +349,10 @@ def cadastrar_fatura(
     )
 
     if leitura is not None:
-        dados_calculados = _calcular_dados_da_leitura(leitura)
+        dados_calculados = _calcular_dados_da_leitura(
+            leitura,
+            valor_m3_gas,
+        )
         retratos_informados = {
             "leitura_agua_anterior": _normalizar_decimal(
                 leitura_agua_anterior,
@@ -365,7 +458,10 @@ def cadastrar_fatura(
         consumo_gas=consumo_gas,
         valor_agua=valor_agua,
         valor_gas=valor_gas,
-        valor_total=valor_agua + valor_gas,
+        valor_aluguel=valor_aluguel,
+        desconto=desconto,
+        valor_total=Decimal("0.00"),
+        valor_m3_gas_emissao=valor_m3_gas,
         status=status,
         apartamento_numero_emissao=apartamento.numero,
         apartamento_bloco_emissao=apartamento.bloco,
@@ -374,6 +470,10 @@ def cadastrar_fatura(
         leitura_gas_anterior=leitura_gas_anterior,
         leitura_gas_atual=leitura_gas_atual,
     )
+    try:
+        fatura.recalcular_valor_total()
+    except ValidationError as exc:
+        raise ValueError(" ".join(exc.messages)) from exc
     try:
         fatura.full_clean(
             validate_unique=False,
@@ -445,19 +545,215 @@ def listar_faturas(
     return queryset.order_by("-ano", "-mes", "-id")
 
 
-def editar_fatura(fatura_id, *, status=None):
-    fatura = consultar_fatura(fatura_id)
-    if status is not None:
-        if status not in Fatura.Status.values:
-            raise ValueError("Status de fatura inválido.")
-        fatura.status = status
-        fatura.save(update_fields=["status"])
+def _consultar_fatura_para_atualizacao(fatura_id):
+    try:
+        return (
+            Fatura.objects
+            .select_for_update()
+            .select_related("apartamento", "leitura")
+            .get(pk=fatura_id)
+        )
+    except Fatura.DoesNotExist as exc:
+        raise ValueError("Fatura não encontrada.") from exc
+
+
+def _normalizar_motivo(motivo, acao):
+    motivo = (motivo or "").strip()
+    rotulo = (
+        "estorno"
+        if acao == HistoricoStatusFatura.Acao.PAGAMENTO_ESTORNADO
+        else "reabertura"
+    )
+    if not motivo:
+        raise RegraNegocioFaturaError(
+            f"Informe o motivo d{'o' if rotulo == 'estorno' else 'a'} "
+            f"{rotulo}."
+        )
+    if len(motivo) < 5:
+        raise RegraNegocioFaturaError(
+            "O motivo deve ter pelo menos 5 caracteres."
+        )
+    if len(motivo) > 500:
+        raise RegraNegocioFaturaError(
+            "O motivo deve ter no máximo 500 caracteres."
+        )
+    return motivo
+
+
+@transaction.atomic
+def _executar_acao_status(
+    fatura_id,
+    *,
+    status_origem,
+    novo_status,
+    acao,
+    usuario=None,
+    motivo="",
+    exige_motivo=False,
+):
+    fatura = _consultar_fatura_para_atualizacao(fatura_id)
+    if fatura.status == novo_status:
+        return fatura, False
+    validar_transicao_status(fatura.status, novo_status)
+    if fatura.status != status_origem:
+        raise RegraNegocioFaturaError(
+            "A ação solicitada não corresponde ao status atual da fatura."
+        )
+    motivo = (
+        _normalizar_motivo(motivo, acao)
+        if exige_motivo
+        else ""
+    )
+    status_anterior = fatura.status
+    agora = timezone.now()
+    campos_atualizados = ["status"]
+    fatura.status = novo_status
+
+    if novo_status == Fatura.Status.PAGA:
+        fatura.data_pagamento = agora
+        fatura.data_cancelamento = None
+        campos_atualizados.extend(
+            ["data_pagamento", "data_cancelamento"]
+        )
+    elif novo_status == Fatura.Status.CANCELADA:
+        fatura.data_cancelamento = agora
+        fatura.data_pagamento = None
+        campos_atualizados.extend(
+            ["data_cancelamento", "data_pagamento"]
+        )
+    elif status_anterior == Fatura.Status.PAGA:
+        fatura.data_pagamento = None
+        campos_atualizados.append("data_pagamento")
+    elif status_anterior == Fatura.Status.CANCELADA:
+        fatura.data_cancelamento = None
+        campos_atualizados.append("data_cancelamento")
+
+    fatura.save(update_fields=campos_atualizados)
+    if usuario is not None and not getattr(
+        usuario,
+        "is_authenticated",
+        False,
+    ):
+        usuario = None
+    HistoricoStatusFatura.objects.create(
+        fatura=fatura,
+        status_anterior=status_anterior,
+        novo_status=novo_status,
+        acao=acao,
+        motivo=motivo,
+        usuario=usuario,
+    )
+    return fatura, True
+
+
+def marcar_fatura_como_paga(fatura_id, usuario=None):
+    return _executar_acao_status(
+        fatura_id,
+        status_origem=Fatura.Status.PENDENTE,
+        novo_status=Fatura.Status.PAGA,
+        acao=HistoricoStatusFatura.Acao.PAGAMENTO_CONFIRMADO,
+        usuario=usuario,
+    )
+
+
+def cancelar_fatura(fatura_id, usuario=None):
+    return _executar_acao_status(
+        fatura_id,
+        status_origem=Fatura.Status.PENDENTE,
+        novo_status=Fatura.Status.CANCELADA,
+        acao=HistoricoStatusFatura.Acao.FATURA_CANCELADA,
+        usuario=usuario,
+    )
+
+
+def estornar_pagamento(fatura_id, motivo, usuario=None):
+    return _executar_acao_status(
+        fatura_id,
+        status_origem=Fatura.Status.PAGA,
+        novo_status=Fatura.Status.PENDENTE,
+        acao=HistoricoStatusFatura.Acao.PAGAMENTO_ESTORNADO,
+        motivo=motivo,
+        usuario=usuario,
+        exige_motivo=True,
+    )
+
+
+def reabrir_fatura(fatura_id, motivo, usuario=None):
+    return _executar_acao_status(
+        fatura_id,
+        status_origem=Fatura.Status.CANCELADA,
+        novo_status=Fatura.Status.PENDENTE,
+        acao=HistoricoStatusFatura.Acao.FATURA_REABERTA,
+        motivo=motivo,
+        usuario=usuario,
+        exige_motivo=True,
+    )
+
+
+@transaction.atomic
+def editar_fatura(
+    fatura_id,
+    *,
+    valor_aluguel=None,
+    desconto=None,
+):
+    fatura = _consultar_fatura_para_atualizacao(fatura_id)
+
+    campos_atualizados = []
+    if valor_aluguel is not None or desconto is not None:
+        validar_edicao_financeira(fatura)
+        if valor_aluguel is not None:
+            fatura.valor_aluguel = _normalizar_valor_financeiro(
+                valor_aluguel,
+                "O valor do aluguel",
+            )
+            campos_atualizados.append("valor_aluguel")
+        if desconto is not None:
+            fatura.desconto = _normalizar_valor_financeiro(
+                desconto,
+                "O desconto",
+            )
+            campos_atualizados.append("desconto")
+        try:
+            fatura.recalcular_valor_total()
+        except ValidationError as exc:
+            raise ValueError(" ".join(exc.messages)) from exc
+        campos_atualizados.append("valor_total")
+
+    if campos_atualizados:
+        try:
+            fatura.full_clean(
+                validate_unique=False,
+                validate_constraints=False,
+            )
+            fatura.save(update_fields=campos_atualizados)
+        except ValidationError as exc:
+            raise ValueError(" ".join(exc.messages)) from exc
+        except IntegrityError as exc:
+            raise ValueError(
+                "Os valores da fatura violam uma regra de integridade."
+            ) from exc
     return fatura
 
 
+@transaction.atomic
 def excluir_fatura(fatura_id):
-    fatura = consultar_fatura(fatura_id)
+    try:
+        fatura = (
+            Fatura.objects
+            .select_for_update()
+            .select_related("apartamento", "leitura")
+            .get(pk=fatura_id)
+        )
+    except Fatura.DoesNotExist as exc:
+        raise ValueError("Fatura não encontrada.") from exc
+
+    identificacao = (
+        f"Fatura do apartamento {fatura.apartamento_numero_emissao or fatura.apartamento.numero}, "
+        f"mês {fatura.mes:02d}/{fatura.ano}"
+    )
     fatura.delete()
+    return identificacao
 
 
 def buscar_leitura_anterior(leitura_atual, campo=None):
@@ -483,8 +779,56 @@ def buscar_leitura_anterior(leitura_atual, campo=None):
     return queryset.order_by("-ano", "-mes", "-id").first()
 
 
+def consultar_valor_aluguel_leitura(leitura_id):
+    try:
+        return (
+            Leitura.objects
+            .select_related("apartamento")
+            .get(pk=leitura_id)
+            .apartamento
+            .valor_aluguel
+        )
+    except Leitura.DoesNotExist as exc:
+        raise ValueError("Leitura não encontrada.") from exc
+
+
+def obter_contexto_geracao_fatura(leitura_id):
+    """
+    Retorna a leitura solicitada e, quando houver, a fatura da competência.
+
+    A competência é a referência oficial para detectar duplicidade. O vínculo
+    direto com a leitura permanece disponível na fatura retornada para que
+    inconsistências históricas possam ser identificadas sem criar outra fatura.
+    """
+    try:
+        leitura = (
+            Leitura.objects
+            .select_related("apartamento")
+            .get(pk=leitura_id)
+        )
+    except (Leitura.DoesNotExist, TypeError, ValueError) as exc:
+        raise ValueError("Leitura não encontrada.") from exc
+
+    fatura = (
+        Fatura.objects
+        .select_related("apartamento", "leitura")
+        .filter(
+            apartamento_id=leitura.apartamento_id,
+            mes=leitura.mes,
+            ano=leitura.ano,
+        )
+        .first()
+    )
+    return leitura, fatura
+
+
 @transaction.atomic
-def gerar_fatura_mensal(leitura_id):
+def gerar_fatura_mensal(
+    leitura_id,
+    *,
+    valor_aluguel=None,
+    desconto=None,
+):
     leitura_atual = _consultar_contexto_leitura_para_atualizacao(leitura_id)
 
     return cadastrar_fatura(
@@ -492,29 +836,91 @@ def gerar_fatura_mensal(leitura_id):
         leitura_id=leitura_atual.id,
         mes=leitura_atual.mes,
         ano=leitura_atual.ano,
+        valor_aluguel=valor_aluguel,
+        desconto=desconto,
     )
 
 
-def gerar_pdf_fatura(fatura_id, pasta_pdfs=None):
-    """Gera o mesmo PDF da interface web e o salva em uma pasta local."""
-    from django.conf import settings
+@transaction.atomic
+def executar_fechamento_mensal(mes, ano):
+    if isinstance(mes, bool) or not isinstance(mes, int) or not 1 <= mes <= 12:
+        raise ValueError("O mês deve estar entre 1 e 12.")
+    if (
+        isinstance(ano, bool)
+        or not isinstance(ano, int)
+        or ano < 2000
+        or ano > ANO_MAXIMO
+    ):
+        raise ValueError("Informe um ano válido.")
 
-    from .pdf import gerar_pdf_fatura as renderizar_pdf_fatura
-
-    fatura = consultar_fatura(fatura_id)
-    if pasta_pdfs is None:
-        pasta_pdfs = Path(settings.BASE_DIR) / "faturas_geradas"
-    else:
-        pasta_pdfs = Path(pasta_pdfs)
-    pasta_pdfs.mkdir(parents=True, exist_ok=True)
-
-    caminho_pdf = pasta_pdfs / (
-        f"fatura_{fatura.id}_{fatura.mes}_{fatura.ano}.pdf"
+    logger.info(
+        "Fechamento mensal iniciado para %02d/%d.",
+        mes,
+        ano,
     )
-    arquivo_pdf = renderizar_pdf_fatura(fatura)
+    leituras_competencia = Leitura.objects.filter(
+        mes=mes,
+        ano=ano,
+    ).select_related("apartamento")
+    faturas_competencia = Fatura.objects.filter(
+        mes=mes,
+        ano=ano,
+    )
+    apartamentos = list(
+        Apartamento.objects
+        .select_for_update()
+        .order_by("id")
+        .prefetch_related(
+            Prefetch(
+                "leituras",
+                queryset=leituras_competencia,
+                to_attr="leituras_fechamento",
+            ),
+            Prefetch(
+                "faturas",
+                queryset=faturas_competencia,
+                to_attr="faturas_fechamento",
+            ),
+        )
+    )
+
+    geradas = 0
+    existentes = 0
+    sem_leitura = []
     try:
-        with caminho_pdf.open("wb") as destino:
-            destino.write(arquivo_pdf.getbuffer())
-    finally:
-        arquivo_pdf.close()
-    return caminho_pdf
+        for apartamento in apartamentos:
+            if not apartamento.leituras_fechamento:
+                sem_leitura.append(apartamento)
+                continue
+            if apartamento.faturas_fechamento:
+                existentes += 1
+                continue
+            gerar_fatura_mensal(
+                apartamento.leituras_fechamento[0].id
+            )
+            geradas += 1
+    except Exception:
+        logger.exception(
+            "Fechamento mensal falhou para %02d/%d; "
+            "a transação será revertida.",
+            mes,
+            ano,
+        )
+        raise
+
+    resultado = ResultadoFechamento(
+        apartamentos_analisados=len(apartamentos),
+        faturas_geradas=geradas,
+        faturas_existentes=existentes,
+        apartamentos_sem_leitura=tuple(sem_leitura),
+    )
+    logger.info(
+        "Fechamento mensal concluído para %02d/%d: "
+        "%d faturas geradas, %d já existentes e %d pendências.",
+        mes,
+        ano,
+        resultado.faturas_geradas,
+        resultado.faturas_existentes,
+        resultado.total_sem_leitura,
+    )
+    return resultado

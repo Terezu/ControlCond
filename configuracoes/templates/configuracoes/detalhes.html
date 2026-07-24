@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+
+{% block title %}Configurações | ControlCond{% endblock %}
+
+{% block content %}
+    {% url "configuracoes:editar" as url_editar_configuracao %}
+    {% include "components/page_header.html" with titulo="Configurações" subtitulo="Dados globais do condomínio, cobranças e apresentação dos documentos." url_acao=url_editar_configuracao texto_acao="Editar configurações" icone_acao="bi-pencil" %}
+
+    <div class="row g-4">
+        <div class="col-12 col-xl-8">
+            <section class="card shadow-sm h-100" aria-labelledby="titulo-condominio">
+                <div class="card-header bg-light py-3">
+                    <h2 id="titulo-condominio" class="h5 mb-0">Dados do condomínio</h2>
+                </div>
+                <div class="card-body">
+                    <div class="row g-4">
+                        <div class="col-12 col-md-8">
+                            <p class="detail-label">Nome</p>
+                            <p class="detail-value">{{ configuracao.nome|default:"Não informado" }}</p>
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <p class="detail-label">CNPJ</p>
+                            <p class="detail-value">{{ configuracao.cnpj|default:"Não informado" }}</p>
+                        </div>
+                        <div class="col-12">
+                            <p class="detail-label">Endereço</p>
+                            <p class="detail-value">{{ configuracao.endereco|default:"Não informado" }}</p>
+                        </div>
+                        <div class="col-12 col-sm-4">
+                            <p class="detail-label">CEP</p>
+                            <p class="detail-value">{{ configuracao.cep|default:"Não informado" }}</p>
+                        </div>
+                        <div class="col-12 col-sm-5">
+                            <p class="detail-label">Cidade</p>
+                            <p class="detail-value">{{ configuracao.cidade|default:"Não informada" }}</p>
+                        </div>
+                        <div class="col-12 col-sm-3">
+                            <p class="detail-label">Estado</p>
+                            <p class="detail-value">{{ configuracao.estado|default:"Não informado" }}</p>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <p class="detail-label">Telefone</p>
+                            <p class="detail-value">{{ configuracao.telefone|default:"Não informado" }}</p>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <p class="detail-label">E-mail</p>
+                            <p class="detail-value">{{ configuracao.email|default:"Não informado" }}</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <div class="col-12 col-xl-4">
+            <section class="card shadow-sm h-100" aria-labelledby="titulo-logo">
+                <div class="card-header bg-light py-3">
+                    <h2 id="titulo-logo" class="h5 mb-0">Identidade visual</h2>
+                </div>
+                <div class="card-body d-flex align-items-center justify-content-center text-center">
+                    {% if configuracao.logo %}
+                        <img
+                            src="{{ configuracao.logo.url }}"
+                            alt="Logo de {{ configuracao.nome|default:'condomínio' }}"
+                            class="img-fluid"
+                            style="max-height: 180px;"
+                        >
+                    {% else %}
+                        <div class="text-secondary">
+                            <i class="bi bi-image fs-1 d-block mb-2" aria-hidden="true"></i>
+                            <p class="mb-0">Nenhum logo configurado.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <div class="row g-4 mt-1">
+        <div class="col-12 col-lg-7">
+            <section class="card shadow-sm h-100" aria-labelledby="titulo-administradora">
+                <div class="card-header bg-light py-3">
+                    <h2 id="titulo-administradora" class="h5 mb-0">Dados da administradora</h2>
+                </div>
+                <div class="card-body">
+                    <div class="row g-4">
+                        <div class="col-12 col-md-6">
+                            <p class="detail-label">Nome</p>
+                            <p class="detail-value">{{ configuracao.administradora_nome|default:"Não informado" }}</p>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <p class="detail-label">Responsável</p>
+                            <p class="detail-value">{{ configuracao.administradora_responsavel|default:"Não informado" }}</p>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <p class="detail-label">Telefone</p>
+                            <p class="detail-value">{{ configuracao.administradora_telefone|default:"Não informado" }}</p>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <p class="detail-label">E-mail</p>
+                            <p class="detail-value">{{ configuracao.administradora_email|default:"Não informado" }}</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <div class="col-12 col-lg-5">
+            <section class="card shadow-sm h-100" aria-labelledby="titulo-cobrancas">
+                <div class="card-header bg-light py-3">
+                    <h2 id="titulo-cobrancas" class="h5 mb-0">Cobranças</h2>
+                </div>
+                <div class="card-body">
+                    <p class="detail-label">Valor do m³ do gás</p>
+                    <p class="fs-5 fw-semibold mb-0">R$ {{ configuracao.valor_m3_gas|floatformat:2 }}</p>
+                    <p class="text-secondary small mt-3 mb-0">
+                        Valor preparado para integração futura com o cálculo das faturas.
+                    </p>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <section class="card shadow-sm mt-4" aria-labelledby="titulo-pdf">
+        <div class="card-header bg-light py-3">
+            <h2 id="titulo-pdf" class="h5 mb-0">Textos dos PDFs</h2>
+        </div>
+        <div class="card-body">
+            <div class="row g-4">
+                <div class="col-12 col-lg-6">
+                    <p class="detail-label">Observações padrão</p>
+                    <p class="detail-value">{{ configuracao.observacoes_padrao|default:"Não informadas"|linebreaksbr }}</p>
+                </div>
+                <div class="col-12 col-lg-6">
+                    <p class="detail-label">Texto de rodapé</p>
+                    <p class="detail-value">{{ configuracao.texto_rodape|default:"Não informado"|linebreaksbr }}</p>
+                </div>
+            </div>
+        </div>
+    </section>
+{% endblock %}

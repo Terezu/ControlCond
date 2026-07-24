@@ -1,151 +1,226 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
+{% extends "base.html" %}
 
-    <title>Detalhes da Fatura</title>
-</head>
+{% block title %}Fatura {{ fatura.mes|stringformat:"02d" }}/{{ fatura.ano }} | ControlCond{% endblock %}
 
-<body>
-    <header>
-        <h1>Detalhes da Fatura</h1>
+{% block content %}
+    {% include "components/page_header.html" with titulo="Detalhes da fatura" subtitulo="Consulte os dados de emissão, consumo e cobrança." %}
 
-        <a href="{% url 'faturas:lista' %}">
-            Voltar para a lista
+    <div class="d-flex flex-column flex-sm-row justify-content-between gap-2 mb-4">
+        <a href="{% url 'faturas:lista' %}" class="btn btn-sm btn-outline-secondary align-self-start">
+            <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Voltar para faturas
         </a>
-    </header>
+        <div class="d-flex flex-wrap gap-2">
+            <a href="{% url 'faturas:baixar_pdf' fatura.id %}" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Baixar PDF
+            </a>
+            <a href="{% url 'faturas:excluir' fatura.id %}" class="btn btn-sm btn-outline-danger">
+                <i class="bi bi-trash me-1" aria-hidden="true"></i>Excluir fatura
+            </a>
+        </div>
+    </div>
 
-    {% if messages %}
-        <section>
-            {% for message in messages %}
-                <p>{{ message }}</p>
-            {% endfor %}
-        </section>
-    {% endif %}
+    <div class="row g-4">
+        <div class="col-12 col-lg-6">
+            <section class="card shadow-sm h-100" aria-labelledby="titulo-informacoes-gerais">
+                <div class="card-header bg-light py-3">
+                    <h2 id="titulo-informacoes-gerais" class="h5 mb-0">Informações gerais</h2>
+                </div>
+                <div class="card-body">
+                    <div class="row g-4">
+                        <div class="col-12 col-sm-6">
+                            <p class="detail-label">Apartamento</p>
+                            <p class="detail-value">
+                                Apartamento {{ fatura.apartamento_numero_emissao }}
+                                {% if fatura.apartamento_bloco_emissao %}— Bloco {{ fatura.apartamento_bloco_emissao }}{% endif %}
+                            </p>
+                        </div>
+                        <div class="col-6 col-sm-3">
+                            <p class="detail-label">Mês</p>
+                            <p class="detail-value">{{ fatura.mes|stringformat:"02d" }}/{{ fatura.ano }}</p>
+                        </div>
+                        <div class="col-6 col-sm-3">
+                            <p class="detail-label">Status</p>
+                            <p class="mb-0">{% include "components/status_badge.html" with status=fatura.status texto=fatura.get_status_display %}</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
 
-    <main>
-        <section>
-            <h2>Informações gerais</h2>
+        <div class="col-12 col-lg-6">
+            <section class="card shadow-sm h-100" aria-labelledby="titulo-consumo">
+                <div class="card-header bg-light py-3">
+                    <h2 id="titulo-consumo" class="h5 mb-0">Consumo</h2>
+                </div>
+                <div class="card-body">
+                    <div class="row g-4">
+                        <div class="col-12 col-sm-6">
+                            <p class="detail-label">Consumo de água</p>
+                            <p class="detail-value">{{ fatura.consumo_agua }} m³</p>
+                        </div>
+                        <div class="col-12 col-sm-6">
+                            <p class="detail-label">Consumo de gás</p>
+                            <p class="detail-value">{{ fatura.consumo_gas }} m³</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
 
-            <p>
-                <strong>Apartamento:</strong>
-                Apartamento {{ fatura.apartamento_numero_emissao }}
+    <section class="card shadow-sm mt-4" aria-labelledby="titulo-valores">
+        <div class="card-header bg-light py-3">
+            <h2 id="titulo-valores" class="h5 mb-0">Valores</h2>
+        </div>
+        <div class="card-body">
+            <div class="row g-4">
+                <div class="col-12 col-sm-6 col-lg-4">
+                    <p class="detail-label">Água e esgoto</p>
+                    <p class="detail-value">R$ {{ fatura.valor_agua|floatformat:2 }}</p>
+                </div>
+                <div class="col-12 col-sm-6 col-lg-4">
+                    <p class="detail-label">Gás</p>
+                    <p class="detail-value">R$ {{ fatura.valor_gas|floatformat:2 }}</p>
+                </div>
+                <div class="col-12 col-sm-6 col-lg-4">
+                    <p class="detail-label">Aluguel</p>
+                    <p class="detail-value">R$ {{ fatura.valor_aluguel|floatformat:2 }}</p>
+                </div>
+                <div class="col-12 col-sm-6 col-lg-4">
+                    <p class="detail-label">Subtotal</p>
+                    <p class="detail-value">R$ {{ fatura.subtotal|floatformat:2 }}</p>
+                </div>
+                <div class="col-12 col-sm-6 col-lg-4">
+                    <p class="detail-label">Desconto</p>
+                    <p class="detail-value">- R$ {{ fatura.desconto|floatformat:2 }}</p>
+                </div>
+                <div class="col-12 col-sm-6 col-lg-4">
+                    <p class="detail-label">Total a pagar</p>
+                    <p class="fs-5 fw-semibold mb-0">R$ {{ fatura.valor_total|floatformat:2 }}</p>
+                </div>
+            </div>
+        </div>
+    </section>
 
-                {% if fatura.apartamento_bloco_emissao %}
-                    - Bloco {{ fatura.apartamento_bloco_emissao }}
-                {% endif %}
-            </p>
-
-            <p>
-                <strong>Referência:</strong>
-                {{ fatura.mes|stringformat:"02d" }}/{{ fatura.ano }}
-            </p>
-
-            <p>
-                <strong>Status:</strong>
-                {{ fatura.get_status_display }}
-            </p>
-        </section>
-
-        <section>
-            <h2>Consumo</h2>
-
-            <p>
-                <strong>Consumo de água:</strong>
-                {{ fatura.consumo_agua }} m³
-            </p>
-
-            <p>
-                <strong>Consumo de gás:</strong>
-                {{ fatura.consumo_gas }} m³
-            </p>
-        </section>
-
-        <section>
-            <h2>Valores</h2>
-
-            <p>
-                <strong>Valor de água e esgoto:</strong>
-                R$ {{ fatura.valor_agua|floatformat:2 }}
-            </p>
-
-            <p>
-                <strong>Valor do gás:</strong>
-                R$ {{ fatura.valor_gas|floatformat:2 }}
-            </p>
-
-            <p>
-                <strong>Valor total:</strong>
-                R$ {{ fatura.valor_total|floatformat:2 }}
-            </p>
-        </section>
-
-        <section>
-            <h2>Leituras utilizadas</h2>
-
-            {% if fatura.leitura_agua_atual != None %}
-                <p>
-                    <strong>Leitura anterior de água:</strong>
-                    {{ fatura.leitura_agua_anterior|default_if_none:"Não informada" }}
-                </p>
-
-                <p>
-                    <strong>Leitura atual de água:</strong>
-                    {{ fatura.leitura_agua_atual|default_if_none:"Não informada" }}
-                </p>
-
-                <p>
-                    <strong>Leitura anterior de gás:</strong>
-                    {{ fatura.leitura_gas_anterior|default_if_none:"Não informada" }}
-                </p>
-
-                <p>
-                    <strong>Leitura atual de gás:</strong>
-                    {{ fatura.leitura_gas_atual|default_if_none:"Não informada" }}
-                </p>
+    <section class="card shadow-sm mt-4" aria-labelledby="titulo-editar-valores">
+        <div class="card-header bg-light py-3">
+            <h2 id="titulo-editar-valores" class="h5 mb-0">Editar valores da fatura</h2>
+        </div>
+        <div class="card-body">
+            {% if fatura.status == "pendente" %}
+                <form method="post" action="{% url 'faturas:alterar_valores' fatura.id %}" novalidate>
+                    {% csrf_token %}
+                    <div class="row align-items-end">
+                        <div class="col-12 col-md-5">
+                            {% include "components/form_field.html" with field=form_valores.valor_aluguel %}
+                        </div>
+                        <div class="col-12 col-md-5">
+                            {% include "components/form_field.html" with field=form_valores.desconto %}
+                        </div>
+                        <div class="col-12 col-md-2 mb-3">
+                            <button type="submit" class="btn btn-primary w-100">Salvar</button>
+                        </div>
+                    </div>
+                </form>
             {% else %}
-                <p>
-                    Esta fatura não possui informações de leitura registradas.
-                </p>
+                <div class="alert alert-secondary mb-0" role="status">
+                    Esta fatura está {{ fatura.get_status_display|lower }} e seus valores financeiros estão bloqueados para edição.
+                </div>
             {% endif %}
-        </section>
+        </div>
+    </section>
 
-        <section>
-            <h2>Ações</h2>
+    <div class="row g-4 mt-1">
+        <div class="col-12 col-lg-7">
+            <section class="card shadow-sm h-100" aria-labelledby="titulo-leituras-utilizadas">
+                <div class="card-header bg-light py-3">
+                    <h2 id="titulo-leituras-utilizadas" class="h5 mb-0">Leituras utilizadas</h2>
+                </div>
+                <div class="card-body">
+                    {% if fatura.leitura_agua_atual != None %}
+                        <div class="row g-4">
+                            <div class="col-12 col-sm-6">
+                                <p class="detail-label">Leitura anterior de água</p>
+                                <p class="detail-value">{{ fatura.leitura_agua_anterior|default_if_none:"Não informada" }}</p>
+                            </div>
+                            <div class="col-12 col-sm-6">
+                                <p class="detail-label">Leitura atual de água</p>
+                                <p class="detail-value">{{ fatura.leitura_agua_atual|default_if_none:"Não informada" }}</p>
+                            </div>
+                            <div class="col-12 col-sm-6">
+                                <p class="detail-label">Leitura anterior de gás</p>
+                                <p class="detail-value">{{ fatura.leitura_gas_anterior|default_if_none:"Não informada" }}</p>
+                            </div>
+                            <div class="col-12 col-sm-6">
+                                <p class="detail-label">Leitura atual de gás</p>
+                                <p class="detail-value">{{ fatura.leitura_gas_atual|default_if_none:"Não informada" }}</p>
+                            </div>
+                        </div>
+                    {% else %}
+                        <p class="text-secondary mb-0">Esta fatura não possui informações de leitura registradas.</p>
+                    {% endif %}
+                </div>
+            </section>
+        </div>
 
-            <p>
-                <a
-                    href="{% url 'faturas:pdf' fatura.id %}"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                >
-                    Visualizar PDF
-                </a>
-            </p>
+        <div class="col-12 col-lg-5">
+            <section class="card shadow-sm h-100" aria-labelledby="titulo-alterar-status">
+                <div class="card-header bg-light py-3">
+                    <h2 id="titulo-alterar-status" class="h5 mb-0">Alterar status</h2>
+                </div>
+                <div class="card-body">
+                    {% if fatura.status == "pendente" %}
+                        <div class="d-grid gap-2">
+                            <a class="btn btn-success" href="{% url 'faturas:confirmar_marcar_como_paga' fatura.id %}">
+                                Marcar como paga
+                            </a>
+                            <a class="btn btn-outline-danger" href="{% url 'faturas:confirmar_cancelar' fatura.id %}">
+                                Cancelar fatura
+                            </a>
+                        </div>
+                    {% elif fatura.status == "paga" %}
+                        <a class="btn btn-outline-warning w-100" href="{% url 'faturas:confirmar_estornar_pagamento' fatura.id %}">
+                            Estornar pagamento
+                        </a>
+                    {% else %}
+                        <a class="btn btn-outline-primary w-100" href="{% url 'faturas:confirmar_reabrir' fatura.id %}">
+                            Reabrir fatura
+                        </a>
+                    {% endif %}
+                </div>
+            </section>
+        </div>
+    </div>
 
-            <form
-                method="post"
-                action="{% url 'faturas:alterar_status' fatura.id %}"
-            >
-                {% csrf_token %}
-
-                {{ form_status.non_field_errors }}
-
-                <p>
-                    {{ form_status.status.label_tag }}
-                    {{ form_status.status }}
-                    {{ form_status.status.errors }}
-                </p>
-
-                <button type="submit">
-                    Atualizar status
-                </button>
-            </form>
-        </section>
-    </main>
-</body>
-</html>
+    <section class="card shadow-sm mt-4" aria-labelledby="titulo-historico-status">
+        <div class="card-header bg-light py-3">
+            <h2 id="titulo-historico-status" class="h5 mb-1">Histórico de status</h2>
+            <p class="text-secondary small mb-0">Alterações registradas da mais recente para a mais antiga.</p>
+        </div>
+        <div class="card-body">
+            {% if historico_status %}
+                <div class="list-group list-group-flush">
+                    {% for evento in historico_status %}
+                        <article class="list-group-item px-0">
+                            <div class="d-flex flex-column flex-sm-row justify-content-between gap-1">
+                                <strong>{{ evento.get_acao_display }}</strong>
+                                <time class="text-secondary small">{{ evento.criado_em|date:"d/m/Y H:i" }}</time>
+                            </div>
+                            <p class="mb-1">
+                                {{ evento.get_status_anterior_display }} → {{ evento.get_novo_status_display }}
+                            </p>
+                            {% if evento.motivo %}
+                                <p class="mb-1"><strong>Motivo:</strong> {{ evento.motivo }}</p>
+                            {% endif %}
+                            <p class="text-secondary small mb-0">
+                                <strong>Usuário:</strong> {{ evento.usuario.get_username|default:"Sistema" }}
+                            </p>
+                        </article>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p class="text-secondary mb-0">Nenhuma alteração de status registrada.</p>
+            {% endif %}
+        </div>
+    </section>
+{% endblock %}

@@ -1,5 +1,7 @@
 from django import forms
 
+from apartamentos.models import Apartamento
+
 from .models import ANO_MAXIMO, Leitura
 
 
@@ -47,6 +49,12 @@ class LeituraForm(forms.ModelForm):
             ),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        for field in self.fields.values():
+            field.widget.attrs.update({"class": "form-control"})
+
     def clean_mes(self):
         mes = self.cleaned_data["mes"]
 
@@ -91,3 +99,46 @@ class LeituraForm(forms.ModelForm):
             )
 
         return dados
+
+
+class FiltrarLeiturasForm(forms.Form):
+    apartamento = forms.ModelChoiceField(
+        queryset=Apartamento.objects.none(),
+        required=False,
+        label="Apartamento",
+        empty_label="Todos os apartamentos",
+    )
+    bloco = forms.CharField(
+        required=False,
+        label="Bloco",
+        max_length=50,
+    )
+    mes = forms.ChoiceField(
+        required=False,
+        label="Mês",
+        choices=[
+            ("", "Todos os meses"),
+            *[(numero, f"{numero:02d}") for numero in range(1, 13)],
+        ],
+    )
+    ano = forms.IntegerField(
+        required=False,
+        label="Ano",
+        min_value=2000,
+        max_value=ANO_MAXIMO,
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        for field in self.fields.values():
+            classe = (
+                "form-select"
+                if isinstance(field.widget, forms.Select)
+                else "form-control"
+            )
+            field.widget.attrs.update({"class": classe})
+
+        self.fields["apartamento"].queryset = (
+            Apartamento.objects.order_by("bloco", "numero", "id")
+        )

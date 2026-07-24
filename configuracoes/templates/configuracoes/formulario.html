@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}Editar configurações | ControlCond{% endblock %}
+
+{% block content %}
+    {% include "components/page_header.html" with titulo="Editar configurações" subtitulo="Atualize os dados globais utilizados pelo ControlCond." %}
+
+    <form method="post" enctype="multipart/form-data" novalidate>
+        {% csrf_token %}
+
+        {% if form.non_field_errors %}
+            <div class="alert alert-danger" role="alert">
+                {% for error in form.non_field_errors %}
+                    <div>{{ error }}</div>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        <section class="card shadow-sm mb-4" aria-labelledby="titulo-condominio">
+            <div class="card-header bg-light py-3">
+                <h2 id="titulo-condominio" class="h5 mb-0">Dados do condomínio</h2>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-12 col-lg-8">{% include "components/form_field.html" with field=form.nome %}</div>
+                    <div class="col-12 col-lg-4">{% include "components/form_field.html" with field=form.cnpj %}</div>
+                    <div class="col-12">{% include "components/form_field.html" with field=form.endereco %}</div>
+                    <div class="col-12 col-md-4">{% include "components/form_field.html" with field=form.cep %}</div>
+                    <div class="col-12 col-md-5">{% include "components/form_field.html" with field=form.cidade %}</div>
+                    <div class="col-12 col-md-3">{% include "components/form_field.html" with field=form.estado %}</div>
+                    <div class="col-12 col-md-6">{% include "components/form_field.html" with field=form.telefone %}</div>
+                    <div class="col-12 col-md-6">{% include "components/form_field.html" with field=form.email %}</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="card shadow-sm mb-4" aria-labelledby="titulo-administradora">
+            <div class="card-header bg-light py-3">
+                <h2 id="titulo-administradora" class="h5 mb-0">Dados da administradora</h2>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-12 col-md-6">{% include "components/form_field.html" with field=form.administradora_nome %}</div>
+                    <div class="col-12 col-md-6">{% include "components/form_field.html" with field=form.administradora_responsavel %}</div>
+                    <div class="col-12 col-md-6">{% include "components/form_field.html" with field=form.administradora_telefone %}</div>
+                    <div class="col-12 col-md-6">{% include "components/form_field.html" with field=form.administradora_email %}</div>
+                </div>
+            </div>
+        </section>
+
+        <div class="row g-4">
+            <div class="col-12 col-lg-4">
+                <section class="card shadow-sm h-100" aria-labelledby="titulo-cobrancas">
+                    <div class="card-header bg-light py-3">
+                        <h2 id="titulo-cobrancas" class="h5 mb-0">Cobranças</h2>
+                    </div>
+                    <div class="card-body">
+                        {% include "components/form_field.html" with field=form.valor_m3_gas %}
+                        <p class="text-secondary small mb-0">A utilização deste valor nos cálculos será implementada em uma etapa futura.</p>
+                    </div>
+                </section>
+            </div>
+
+            <div class="col-12 col-lg-8">
+                <section class="card shadow-sm h-100" aria-labelledby="titulo-pdf">
+                    <div class="card-header bg-light py-3">
+                        <h2 id="titulo-pdf" class="h5 mb-0">PDF</h2>
+                    </div>
+                    <div class="card-body">
+                        {% include "components/form_field.html" with field=form.logo %}
+                        {% include "components/form_field.html" with field=form.observacoes_padrao %}
+                        {% include "components/form_field.html" with field=form.texto_rodape %}
+                    </div>
+                </section>
+            </div>
+        </div>
+
+        <div class="d-flex flex-column-reverse flex-sm-row justify-content-end gap-2 mt-4">
+            <a href="{% url 'configuracoes:detalhes' %}" class="btn btn-outline-secondary">Cancelar</a>
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-check-lg me-1" aria-hidden="true"></i>Salvar configurações
+            </button>
+        </div>
+    </form>
+{% endblock %}

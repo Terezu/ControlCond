@@ -1,19 +1,27 @@
+import logging
+
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.http import Http404
+from django.core.paginator import Paginator
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods, require_safe
 
-from .forms import ApartamentoForm
+from .forms import ApartamentoForm, FiltrarApartamentosForm
 from .services import (
     cadastrar_apartamento,
     consultar_apartamento,
     consultar_detalhes_apartamento,
     editar_apartamento,
+    excluir_apartamento,
+    ExclusaoApartamentoBloqueadaError,
     listar_apartamentos,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _salvar_formulario(form, apartamento_id=None):
@@ -23,6 +31,7 @@ def _salvar_formulario(form, apartamento_id=None):
         "numero": dados["numero"],
         "bloco": dados["bloco"],
         "observacoes": dados["observacoes"],
+        "valor_aluguel": dados["valor_aluguel"],
         "leitura_base_agua": dados["leitura_base_agua"],
         "leitura_base_gas": dados["leitura_base_gas"],
     }
@@ -152,11 +161,28 @@ def editar_dados_apartamento(request, apartamento_id):
 @never_cache
 @require_safe
 def lista_apartamentos(request):
+    form_filtros = FiltrarApartamentosForm(request.GET or None)
+    filtros = {}
+
+    if form_filtros.is_valid():
+        filtros = {
+            "numero": form_filtros.cleaned_data["numero"],
+            "bloco": form_filtros.cleaned_data["bloco"],
+        }
+
+    paginator = Paginator(listar_apartamentos(**filtros), 10)
+    pagina_apartamentos = paginator.get_page(request.GET.get("page"))
+    parametros_filtros = request.GET.copy()
+    parametros_filtros.pop("page", None)
+
     return render(
         request,
         "apartamentos/lista.html",
         {
-            "apartamentos": listar_apartamentos(),
+            "apartamentos": pagina_apartamentos,
+            "pagina_apartamentos": pagina_apartamentos,
+            "form_filtros": form_filtros,
+            "parametros_filtros": parametros_filtros.urlencode(),
         },
     )
 
@@ -183,5 +209,75 @@ def detalhes_apartamento(request, apartamento_id):
             "ultima_leitura": leituras[0] if leituras else None,
             "leituras": leituras,
             "faturas": faturas,
+        },
+    )
+
+
+@staff_member_required
+@never_cache
+@require_http_methods(["GET", "POST"])
+def confirmar_exclusao_apartamento(request, apartamento_id):
+    try:
+        apartamento = consultar_detalhes_apartamento(apartamento_id)
+    except ValueError as exc:
+        raise Http404(str(exc)) from exc
+
+    quantidade_leituras = apartamento.leituras.count()
+    quantidade_faturas = apartamento.faturas.count()
+    bloqueada = bool(quantidade_leituras or quantidade_faturas)
+
+    if request.method == "POST":
+        try:
+            identificacao = excluir_apartamento(apartamento_id)
+        except ExclusaoApartamentoBloqueadaError as exc:
+            bloqueada = True
+            messages.error(request, str(exc))
+            logger.warning(
+                "Exclusão de apartamento bloqueada",
+                extra={
+                    "apartamento_id": apartamento_id,
+                    "usuario_id": request.user.id,
+                },
+            )
+        except ValueError as exc:
+            raise Http404(str(exc)) from exc
+        else:
+            messages.success(
+                request,
+                f"{identificacao} excluído permanentemente.",
+            )
+            logger.info(
+                "Apartamento excluído permanentemente",
+                extra={
+                    "apartamento_id": apartamento_id,
+                    "usuario_id": request.user.id,
+                },
+            )
+            return redirect("apartamentos:lista")
+
+    return render(
+        request,
+        "components/confirmar_exclusao.html",
+        {
+            "titulo": "Excluir apartamento",
+            "identificacao": str(apartamento),
+            "registros": (
+                ("Número", apartamento.numero),
+                ("Bloco", apartamento.bloco or "Não informado"),
+                ("Leituras cadastradas", quantidade_leituras),
+                ("Faturas cadastradas", quantidade_faturas),
+            ),
+            "bloqueada": bloqueada,
+            "mensagem_bloqueio": (
+                "Este apartamento não pode ser excluído enquanto possuir "
+                "leituras ou faturas cadastradas. Exclua primeiro os "
+                "registros vinculados."
+            ),
+            "aviso": "Tem certeza de que deseja excluir permanentemente este apartamento?",
+            "consequencia": "Esta ação é irreversível.",
+            "url_cancelar": reverse(
+                "apartamentos:detalhes",
+                args=[apartamento.id],
+            ),
         },
     )

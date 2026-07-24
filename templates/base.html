@@ -12,7 +12,7 @@
 
     <title>
         {% block title %}
-            ControlCond
+            {{ nome_sistema }}
         {% endblock %}
     </title>
 
@@ -28,7 +28,7 @@
 
     <link
     rel="stylesheet"
-    href="{% static 'css/style.css' %}"
+    href="{% static 'css/style.css' %}?v=20260724-dashboard"
     >
 </head>
 
@@ -62,8 +62,9 @@
             <ul class="navbar-nav ms-auto">
                 <li class="nav-item">
                     <a
-                        class="nav-link"
+                        class="nav-link{% if request.resolver_match.namespace == 'dashboard' %} active{% endif %}"
                         href="{% url 'dashboard:inicio' %}"
+                        {% if request.resolver_match.namespace == 'dashboard' %}aria-current="page"{% endif %}
                     >
                         Dashboard
                     </a>
@@ -71,8 +72,9 @@
 
                 <li class="nav-item">
                     <a
-                        class="nav-link"
+                        class="nav-link{% if request.resolver_match.namespace == 'apartamentos' %} active{% endif %}"
                         href="{% url 'apartamentos:lista' %}"
+                        {% if request.resolver_match.namespace == 'apartamentos' %}aria-current="page"{% endif %}
                     >
                         Apartamentos
                     </a>
@@ -80,8 +82,9 @@
 
                 <li class="nav-item">
                     <a
-                        class="nav-link"
+                        class="nav-link{% if request.resolver_match.namespace == 'leituras' %} active{% endif %}"
                         href="{% url 'leituras:lista' %}"
+                        {% if request.resolver_match.namespace == 'leituras' %}aria-current="page"{% endif %}
                     >
                         Leituras
                     </a>
@@ -89,10 +92,21 @@
 
                 <li class="nav-item">
                     <a
-                        class="nav-link"
+                        class="nav-link{% if request.resolver_match.namespace == 'faturas' %} active{% endif %}"
                         href="{% url 'faturas:lista' %}"
+                        {% if request.resolver_match.namespace == 'faturas' %}aria-current="page"{% endif %}
                     >
                         Faturas
+                    </a>
+                </li>
+
+                <li class="nav-item">
+                    <a
+                        class="nav-link{% if request.resolver_match.namespace == 'configuracoes' %} active{% endif %}"
+                        href="{% url 'configuracoes:detalhes' %}"
+                        {% if request.resolver_match.namespace == 'configuracoes' %}aria-current="page"{% endif %}
+                    >
+                        Configurações
                     </a>
                 </li>
             </ul>
@@ -125,7 +139,7 @@
 
 <footer class="border-top bg-white py-3 mt-5">
     <div class="container text-center text-secondary">
-        <small>ControlCond</small>
+        <small>{{ nome_sistema }}</small>
     </div>
 </footer>
 

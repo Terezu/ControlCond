@@ -15,4 +15,9 @@ urlpatterns = [
         views.nova_leitura,
         name="nova",
     ),
+    path(
+        "<int:leitura_id>/excluir/",
+        views.confirmar_exclusao_leitura,
+        name="excluir",
+    ),
 ]

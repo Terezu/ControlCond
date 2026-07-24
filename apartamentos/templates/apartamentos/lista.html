@@ -1,17 +1,55 @@
-<h1>Apartamentos</h1>
+{% extends "base.html" %}
 
-<p><a href="{% url 'apartamentos:novo' %}">Cadastrar apartamento</a></p>
+{% block title %}Apartamentos | ControlCond{% endblock %}
 
-<ul>
-  {% for apartamento in apartamentos %}
-    <li>
-      {{ apartamento }}
+{% block content %}
+    {% url "apartamentos:novo" as url_novo_apartamento %}
+    {% include "components/page_header.html" with titulo="Apartamentos" subtitulo="Consulte e gerencie as unidades do condomínio." url_acao=url_novo_apartamento texto_acao="Cadastrar apartamento" icone_acao="bi-plus-lg" %}
 
-      <a href="{% url 'apartamentos:detalhes' apartamento.id %}">
-        Ver detalhes
-      </a>
-    </li>
-  {% empty %}
-    <li>Nenhum apartamento cadastrado.</li>
-  {% endfor %}
-</ul>
+    <section class="card shadow-sm mb-5" aria-labelledby="titulo-filtros">
+        <div class="card-header bg-light py-3">
+            <h2 id="titulo-filtros" class="h5 mb-1">Filtros</h2>
+            <p class="text-secondary small mb-0">Refine a consulta por número ou bloco.</p>
+        </div>
+        <div class="card-body">
+            <form method="get">
+                {% if form_filtros.non_field_errors %}
+                    <div class="alert alert-danger" role="alert">
+                        {{ form_filtros.non_field_errors }}
+                    </div>
+                {% endif %}
+
+                <div class="row align-items-end">
+                    <div class="col-12 col-md-6">
+                        {% include "components/form_field.html" with field=form_filtros.numero %}
+                    </div>
+                    <div class="col-12 col-md-6">
+                        {% include "components/form_field.html" with field=form_filtros.bloco %}
+                    </div>
+                </div>
+
+                {% url "apartamentos:lista" as url_limpar_filtros %}
+                {% include "components/filter_actions.html" with url_limpar=url_limpar_filtros %}
+            </form>
+        </div>
+    </section>
+
+    <section class="card shadow-sm" aria-labelledby="titulo-lista-apartamentos">
+        <div class="card-header bg-light py-3 d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-2">
+            <div>
+                <h2 id="titulo-lista-apartamentos" class="h5 mb-1">Apartamentos cadastrados</h2>
+                <p class="text-secondary small mb-0">Selecione uma unidade para consultar leituras e faturas.</p>
+            </div>
+            <span class="badge text-bg-secondary">
+                {{ pagina_apartamentos.paginator.count }}
+                {% if pagina_apartamentos.paginator.count == 1 %}apartamento{% else %}apartamentos{% endif %}
+            </span>
+        </div>
+
+        <div class="card-body p-0">
+            {% include "components/data_table.html" with template_cabecalho="components/table_headers/apartamento.html" linhas=apartamentos template_linha="components/table_rows/apartamento.html" empty_titulo="Nenhum apartamento cadastrado" empty_texto="Cadastre a primeira unidade para começar a registrar leituras." empty_icone="bi-buildings" empty_url_acao=url_novo_apartamento empty_texto_acao="Cadastrar apartamento" empty_icone_acao="bi-plus-lg" %}
+        </div>
+
+        {% include "components/pagination.html" with pagina=pagina_apartamentos parametros_filtros=parametros_filtros aria_label="Paginação de apartamentos" %}
+    </section>
+{% endblock %}

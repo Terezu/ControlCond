@@ -102,6 +102,7 @@ INSTALLED_APPS = [
     "apartamentos.apps.ApartamentosConfig",
     "leituras.apps.LeiturasConfig",
     "faturas.apps.FaturasConfig",
+    "configuracoes.apps.ConfiguracoesConfig",
     "dashboard",
 ]
 
@@ -128,6 +129,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'configuracoes.context_processors.configuracao_global',
             ],
         },
     },
@@ -199,6 +201,9 @@ STATIC_URL = 'static/'
 STATICFILES_DIRS = [
     BASE_DIR / "static",
 ]
+
+MEDIA_URL = "media/"
+MEDIA_ROOT = BASE_DIR / "media"
 
 # As telas operacionais usam o login já fornecido pelo painel administrativo.
 LOGIN_URL = "/admin/login/"

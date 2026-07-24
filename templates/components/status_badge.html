@@ -1,0 +1,15 @@
+{% if status == "pendente" %}
+    <span class="badge text-bg-warning">
+        <i class="bi bi-clock me-1" aria-hidden="true"></i>{{ texto|default:"Pendente" }}
+    </span>
+{% elif status == "paga" %}
+    <span class="badge text-bg-success">
+        <i class="bi bi-check-circle me-1" aria-hidden="true"></i>{{ texto|default:"Paga" }}
+    </span>
+{% elif status == "cancelada" %}
+    <span class="badge text-bg-danger">
+        <i class="bi bi-x-circle me-1" aria-hidden="true"></i>{{ texto|default:"Cancelada" }}
+    </span>
+{% else %}
+    <span class="badge text-bg-secondary">{{ texto|default:"Status desconhecido" }}</span>
+{% endif %}

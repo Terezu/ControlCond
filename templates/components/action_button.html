@@ -1,18 +1,10 @@
-{% if url %}
-    <a
-        href="{{ url }}"
-        class="btn {{ classe|default:'btn-primary' }}"
-    >
-        {{ texto }}
-    </a>
-{% else %}
-    <button
-        type="{{ tipo|default:'button' }}"
-        class="btn {{ classe|default:'btn-primary' }}"
-        {% if nome %}name="{{ nome }}"{% endif %}
-        {% if valor %}value="{{ valor }}"{% endif %}
-        {% if desabilitado %}disabled{% endif %}
-    >
-        {{ texto }}
-    </button>
-{% endif %}
+<a
+    href="{{ url }}{% if parametro_nome and parametro_valor is not None %}?{{ parametro_nome }}={{ parametro_valor|urlencode }}{% endif %}"
+    class="btn {{ classe|default:'btn-primary' }}"
+    {% if aria_label %}aria-label="{{ aria_label }}"{% endif %}
+>
+    {% if icone %}
+        <i class="bi {{ icone }} me-1" aria-hidden="true"></i>
+    {% endif %}
+    {{ texto }}
+</a>

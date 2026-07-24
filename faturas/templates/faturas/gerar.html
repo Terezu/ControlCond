@@ -1,46 +1,71 @@
-<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+{% extends "base.html" %}
+{% load static %}
 
-    <title>Gerar fatura</title>
-</head>
-<body>
-    <h1>Gerar fatura</h1>
+{% block title %}Gerar fatura | ControlCond{% endblock %}
 
-    <p>
-        Selecione uma leitura para calcular e cadastrar sua respectiva fatura.
-    </p>
+{% block content %}
+    {% include "components/page_header.html" with titulo="Gerar fatura" subtitulo="Selecione uma leitura para calcular e cadastrar a fatura correspondente." %}
 
-    <form method="post">
-        {% csrf_token %}
+    <div class="row justify-content-center">
+        <div class="col-12 col-lg-8">
+            <div class="card shadow-sm">
+                <div class="card-body p-4">
+                    <form
+                        method="post"
+                        novalidate
+                        data-url-aluguel="{% url 'faturas:valor_aluguel_leitura' %}"
+                    >
+                        {% csrf_token %}
 
-        {{ form.as_p }}
+                        {% if form.non_field_errors %}
+                            <div class="alert alert-danger" role="alert">
+                                {{ form.non_field_errors }}
+                            </div>
+                        {% endif %}
 
-        {% if apartamento_sem_leitura_base %}
-            <section>
-                <p>
-                    Para gerar a primeira fatura do apartamento
-                    <strong>{{ apartamento_sem_leitura_base.numero }}</strong>,
-                    cadastre as medições anteriores de água e gás.
-                </p>
+                        {% include "components/form_field.html" with field=form.leitura %}
 
-                <a
-                    href="{% url 'apartamentos:editar' apartamento_sem_leitura_base.id %}?next={% url 'faturas:gerar' %}"
-                >
-                    Cadastrar primeiras medições
-                </a>
-            </section>
-        {% endif %}
+                        <div class="row">
+                            <div class="col-12 col-md-6">
+                                {% include "components/form_field.html" with field=form.valor_aluguel %}
+                            </div>
+                            <div class="col-12 col-md-6">
+                                {% include "components/form_field.html" with field=form.desconto %}
+                            </div>
+                        </div>
 
-        <button type="submit">
-            Gerar fatura
-        </button>
+                        {% if apartamento_sem_leitura_base %}
+                            <div class="alert alert-warning" role="alert">
+                                <h2 class="h6 alert-heading">Leituras-base necessárias</h2>
+                                <p>
+                                    Para gerar a primeira fatura do apartamento
+                                    <strong>{{ apartamento_sem_leitura_base.numero }}</strong>,
+                                    cadastre as medições anteriores de água e gás.
+                                </p>
+                                <a
+                                    href="{% url 'apartamentos:editar' apartamento_sem_leitura_base.id %}?next={% url 'faturas:gerar' %}"
+                                    class="alert-link"
+                                >
+                                    Cadastrar primeiras medições
+                                </a>
+                            </div>
+                        {% endif %}
 
-        <a href="{% url 'faturas:lista' %}">
-            Cancelar
-        </a>
-    </form>
-</body>
-</html>
+                        <p class="form-text">
+                            Apenas leituras completas e ainda não faturadas ficam disponíveis para seleção.
+                        </p>
+
+                        <div class="d-flex flex-column-reverse flex-sm-row justify-content-end gap-2 mt-4">
+                            <a href="{% url 'faturas:lista' %}" class="btn btn-outline-secondary">Cancelar</a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-receipt me-1" aria-hidden="true"></i>Gerar fatura
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{% static 'faturas/js/gerar_fatura.js' %}"></script>
+{% endblock %}

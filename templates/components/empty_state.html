@@ -1,17 +1,21 @@
-<div class="card border-0 shadow-sm">
-    <div class="card-body py-5 text-center">
+<div class="{% if not embutido %}card border-0 shadow-sm{% endif %}">
+    <div class="{% if not embutido %}card-body {% endif %}py-5 px-3 text-center">
+        {% if icone %}
+            <i class="bi {{ icone }} empty-state-icon d-inline-block mb-3" aria-hidden="true"></i>
+        {% endif %}
+
         <h2 class="h5 mb-2">
             {{ titulo|default:"Nenhum registro encontrado" }}
         </h2>
 
-        {% if mensagem %}
+        {% if mensagem or texto %}
             <p class="text-secondary mb-4">
-                {{ mensagem }}
+                {{ mensagem|default:texto }}
             </p>
         {% endif %}
 
         {% if url_acao and texto_acao %}
-            {% include "components/action_button.html" with url=url_acao texto=texto_acao classe=classe_acao %}
+            {% include "components/action_button.html" with url=url_acao texto=texto_acao classe=classe_acao icone=icone_acao %}
         {% endif %}
     </div>
 </div>

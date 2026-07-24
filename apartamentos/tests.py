@@ -1,7 +1,9 @@
 from decimal import Decimal
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError, transaction
 from django.db.models.deletion import ProtectedError
 from django.test import TestCase
 from django.urls import reverse
@@ -10,11 +12,125 @@ from faturas.models import Fatura
 from leituras.models import Leitura
 
 from .models import Apartamento
-from .forms import ApartamentoForm
-from .services import cadastrar_apartamento, editar_apartamento
+from .forms import ApartamentoForm, FiltrarApartamentosForm
+from .services import (
+    ExclusaoApartamentoBloqueadaError,
+    cadastrar_apartamento,
+    editar_apartamento,
+    excluir_apartamento,
+    listar_apartamentos,
+)
+
+
+class ExclusaoApartamentoTests(TestCase):
+    def setUp(self):
+        self.usuario = get_user_model().objects.create_user(
+            username="operador-exclusao-apartamento",
+            password="senha-de-teste",
+            is_staff=True,
+        )
+        self.client.force_login(self.usuario)
+
+    def test_confirmacao_nao_exclui_por_get_e_exibe_csrf(self):
+        apartamento = Apartamento.objects.create(numero="901")
+        resposta = self.client.get(
+            reverse("apartamentos:excluir", args=[apartamento.id])
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTrue(Apartamento.objects.filter(pk=apartamento.id).exists())
+        self.assertContains(resposta, "Excluir permanentemente")
+        self.assertContains(resposta, "Esta ação é irreversível")
+        self.assertContains(resposta, "csrfmiddlewaretoken")
+
+    def test_exclui_apartamento_vazio_por_post(self):
+        apartamento = Apartamento.objects.create(numero="902")
+        resposta = self.client.post(
+            reverse("apartamentos:excluir", args=[apartamento.id]),
+            follow=True,
+        )
+
+        self.assertRedirects(resposta, reverse("apartamentos:lista"))
+        self.assertFalse(Apartamento.objects.filter(pk=apartamento.id).exists())
+        self.assertContains(resposta, "excluído permanentemente")
+
+    def test_bloqueia_apartamento_com_leitura_e_fatura_e_informa_quantidades(self):
+        apartamento = Apartamento.objects.create(numero="903")
+        leitura = Leitura.objects.create(
+            apartamento=apartamento,
+            mes=7,
+            ano=2026,
+            leitura_agua=Decimal("10"),
+        )
+        Fatura.objects.create(
+            apartamento=apartamento,
+            leitura=leitura,
+            mes=7,
+            ano=2026,
+            consumo_agua=0,
+            consumo_gas=0,
+            apartamento_numero_emissao=apartamento.numero,
+        )
+
+        resposta = self.client.post(
+            reverse("apartamentos:excluir", args=[apartamento.id])
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "1 leitura e 1 fatura")
+        self.assertTrue(Apartamento.objects.filter(pk=apartamento.id).exists())
+        self.assertTrue(Leitura.objects.filter(pk=leitura.id).exists())
+        self.assertEqual(Fatura.objects.filter(apartamento=apartamento).count(), 1)
+
+    def test_confirmacao_inexistente_retorna_404(self):
+        resposta = self.client.get(
+            reverse("apartamentos:excluir", args=[999999])
+        )
+        self.assertEqual(resposta.status_code, 404)
+
+    def test_usuario_nao_staff_nao_pode_excluir(self):
+        apartamento = Apartamento.objects.create(numero="904")
+        usuario = get_user_model().objects.create_user(
+            username="morador-exclusao-apartamento",
+            password="senha-de-teste",
+        )
+        self.client.force_login(usuario)
+
+        resposta = self.client.post(
+            reverse("apartamentos:excluir", args=[apartamento.id])
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertTrue(Apartamento.objects.filter(pk=apartamento.id).exists())
+
+    def test_service_bloqueia_diretamente_e_trata_plural(self):
+        apartamento = Apartamento.objects.create(numero="905")
+        for mes in (6, 7):
+            Leitura.objects.create(
+                apartamento=apartamento,
+                mes=mes,
+                ano=2026,
+                leitura_agua=Decimal("10"),
+            )
+
+        with self.assertRaisesRegex(
+            ExclusaoApartamentoBloqueadaError,
+            "2 leituras e 0 faturas",
+        ):
+            excluir_apartamento(apartamento.id)
+
+        self.assertTrue(Apartamento.objects.filter(pk=apartamento.id).exists())
 
 
 class ApartamentoFormTests(TestCase):
+    def test_widgets_preservam_restricoes_e_recebem_estilo_bootstrap(self):
+        form = ApartamentoForm()
+
+        self.assertEqual(form.fields["leitura_base_agua"].widget.attrs["min"], "0")
+        self.assertEqual(form.fields["leitura_base_agua"].widget.attrs["step"], "0.01")
+        self.assertEqual(form.fields["observacoes"].widget.attrs["rows"], 4)
+        self.assertEqual(form.fields["numero"].widget.attrs["class"], "form-control")
+
     def test_exige_as_duas_leituras_base(self):
         form = ApartamentoForm(
             data={
@@ -29,6 +145,33 @@ class ApartamentoFormTests(TestCase):
         self.assertIn("leitura_base_agua", form.errors)
         self.assertIn("leitura_base_gas", form.errors)
 
+    def test_formulario_de_filtros_mantem_valores_informados(self):
+        form = FiltrarApartamentosForm({"numero": "10", "bloco": "A"})
+
+        self.assertTrue(form.is_valid())
+        self.assertEqual(form.cleaned_data["numero"], "10")
+        self.assertEqual(form.cleaned_data["bloco"], "A")
+
+
+class FiltrosApartamentoTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.apartamento_101a = Apartamento.objects.create(numero="101", bloco="A")
+        cls.apartamento_102a = Apartamento.objects.create(numero="102", bloco="A")
+        cls.apartamento_101b = Apartamento.objects.create(numero="101", bloco="B")
+
+    def test_servico_combina_numero_e_bloco(self):
+        resultados = list(
+            listar_apartamentos(numero="101", bloco="A")
+        )
+
+        self.assertEqual(resultados, [self.apartamento_101a])
+
+    def test_filtro_de_numero_permite_correspondencia_parcial(self):
+        resultados = list(listar_apartamentos(numero="02"))
+
+        self.assertEqual(resultados, [self.apartamento_102a])
+
     def test_aceita_leituras_base_zero(self):
         form = ApartamentoForm(
             data={
@@ -39,6 +182,26 @@ class ApartamentoFormTests(TestCase):
         )
 
         self.assertTrue(form.is_valid(), form.errors)
+
+    def test_aluguel_vazio_vira_zero_e_negativo_e_rejeitado(self):
+        dados = {
+            "numero": "101",
+            "leitura_base_agua": "0",
+            "leitura_base_gas": "0",
+            "valor_aluguel": "",
+        }
+        form_sem_aluguel = ApartamentoForm(data=dados)
+        self.assertTrue(form_sem_aluguel.is_valid(), form_sem_aluguel.errors)
+        self.assertEqual(
+            form_sem_aluguel.cleaned_data["valor_aluguel"],
+            Decimal("0.00"),
+        )
+
+        form_negativo = ApartamentoForm(
+            data={**dados, "valor_aluguel": "-0.01"}
+        )
+        self.assertFalse(form_negativo.is_valid())
+        self.assertIn("valor_aluguel", form_negativo.errors)
 
     def test_rejeita_leituras_base_acima_do_limite(self):
         form = ApartamentoForm(
@@ -185,6 +348,22 @@ class FluxoApartamentoTests(TestCase):
                     leitura_base_gas="0",
                 )
 
+    def test_cadastro_normaliza_aluguel_e_aplica_zero_quando_ausente(self):
+        com_aluguel = cadastrar_apartamento(
+            numero="501",
+            leitura_base_agua=0,
+            leitura_base_gas=0,
+            valor_aluguel="1200.5",
+        )
+        sem_aluguel = cadastrar_apartamento(
+            numero="502",
+            leitura_base_agua=0,
+            leitura_base_gas=0,
+        )
+
+        self.assertEqual(com_aluguel.valor_aluguel, Decimal("1200.50"))
+        self.assertEqual(sem_aluguel.valor_aluguel, Decimal("0.00"))
+
     @patch(
         "apartamentos.views._salvar_formulario",
         side_effect=ValueError("Falha concorrente de validação."),
@@ -201,6 +380,91 @@ class FluxoApartamentoTests(TestCase):
 
         self.assertEqual(resposta.status_code, 200)
         self.assertContains(resposta, "Falha concorrente de validação.")
+
+
+class ApresentacaoApartamentoTests(TestCase):
+    def setUp(self):
+        usuario = get_user_model().objects.create_user(
+            username="operador-apresentacao",
+            password="senha-de-teste",
+            is_staff=True,
+        )
+        self.client.force_login(usuario)
+
+    def test_lista_usa_layout_padrao_e_exibe_estado_vazio(self):
+        resposta = self.client.get(reverse("apartamentos:lista"))
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTemplateUsed(resposta, "apartamentos/lista.html")
+        self.assertTemplateUsed(resposta, "base.html")
+        self.assertContains(resposta, "Nenhum apartamento cadastrado")
+        self.assertContains(resposta, reverse("apartamentos:novo"))
+
+    def test_lista_exibe_apartamento_e_link_de_detalhes(self):
+        apartamento = Apartamento.objects.create(
+            numero="101",
+            bloco="A",
+            leitura_base_agua=Decimal("10.00"),
+            leitura_base_gas=Decimal("5.00"),
+        )
+
+        resposta = self.client.get(reverse("apartamentos:lista"))
+
+        self.assertContains(resposta, "Apartamento 101")
+        self.assertContains(
+            resposta,
+            reverse("apartamentos:detalhes", args=[apartamento.id]),
+        )
+
+    def test_lista_filtra_e_mantem_parametros_preenchidos(self):
+        Apartamento.objects.create(numero="101", bloco="A")
+        Apartamento.objects.create(numero="202", bloco="B")
+
+        resposta = self.client.get(
+            reverse("apartamentos:lista"),
+            {"numero": "101", "bloco": "A"},
+        )
+
+        self.assertContains(resposta, "Apartamento 101")
+        self.assertNotContains(resposta, "Apartamento 202")
+        self.assertContains(resposta, 'value="101"')
+        self.assertContains(resposta, 'value="A"')
+        self.assertContains(resposta, "Limpar filtros")
+
+    def test_formulario_usa_componente_de_campo_e_mantem_cancelamento(self):
+        resposta = self.client.get(reverse("apartamentos:novo"))
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTemplateUsed(resposta, "apartamentos/formulario.html")
+        self.assertTemplateUsed(resposta, "components/form_field.html")
+        self.assertContains(resposta, "Salvar apartamento")
+        self.assertContains(resposta, reverse("apartamentos:lista"))
+
+    @patch("apartamentos.views.consultar_detalhes_apartamento")
+    def test_detalhes_exibe_secoes_e_estados_vazios(self, consultar):
+        registros_vazios = SimpleNamespace(all=lambda: [])
+        consultar.return_value = SimpleNamespace(
+            id=1,
+            numero="101",
+            bloco="A",
+            leitura_base_agua=Decimal("10.00"),
+            leitura_base_gas=Decimal("5.00"),
+            observacoes="",
+            leituras=registros_vazios,
+            faturas=registros_vazios,
+        )
+
+        resposta = self.client.get(
+            reverse("apartamentos:detalhes", args=[1]),
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTemplateUsed(resposta, "apartamentos/detalhes.html")
+        self.assertContains(resposta, "Histórico de leituras")
+        self.assertContains(resposta, "Histórico de faturas")
+        self.assertContains(resposta, "Nenhuma leitura cadastrada")
+        self.assertContains(resposta, "Nenhuma fatura cadastrada")
+        self.assertContains(resposta, reverse("leituras:nova", args=[1]))
 
 
 class ProtecaoApartamentoTest(TestCase):
@@ -235,6 +499,55 @@ class ProtecaoApartamentoTest(TestCase):
         self.assertTrue(Fatura.objects.filter(pk=fatura.pk).exists())
 
 
+class IntegridadeApartamentoTests(TestCase):
+    def test_banco_impede_numero_duplicado_sem_bloco(self):
+        Apartamento.objects.create(numero="101", bloco=None)
+
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            Apartamento.objects.create(numero="101", bloco=None)
+
+    def test_banco_impede_duplicidade_independente_de_maiusculas(self):
+        Apartamento.objects.create(numero="101", bloco="A")
+
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            Apartamento.objects.create(numero="101", bloco="a")
+
+    def test_banco_rejeita_numero_e_textos_nao_normalizados(self):
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            Apartamento.objects.create(numero=" 101 ")
+
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            Apartamento.objects.create(numero="101", bloco=" ")
+
+    def test_service_normaliza_textos_e_rejeita_duplicidade(self):
+        apartamento = cadastrar_apartamento(
+            numero=" 101 ",
+            bloco=" A ",
+            observacoes=" Medidor externo ",
+            leitura_base_agua=0,
+            leitura_base_gas=0,
+        )
+
+        self.assertEqual(apartamento.numero, "101")
+        self.assertEqual(apartamento.bloco, "A")
+        self.assertEqual(apartamento.observacoes, "Medidor externo")
+
+        with self.assertRaisesRegex(ValueError, "Já existe"):
+            cadastrar_apartamento(
+                numero="101",
+                bloco="a",
+                leitura_base_agua=0,
+                leitura_base_gas=0,
+            )
+
+    def test_banco_rejeita_aluguel_negativo(self):
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            Apartamento.objects.create(
+                numero="999",
+                valor_aluguel=Decimal("-0.01"),
+            )
+
+
 class SegurancaViewsApartamentoTests(TestCase):
     def setUp(self):
         self.usuario = get_user_model().objects.create_user(
@@ -252,8 +565,11 @@ class SegurancaViewsApartamentoTests(TestCase):
             reverse("leituras:nova", args=[999]),
             reverse("faturas:lista"),
             reverse("faturas:gerar"),
+            reverse("faturas:fechamento_mensal"),
+            reverse("faturas:valor_aluguel_leitura"),
             reverse("faturas:detalhes", args=[999]),
-            reverse("faturas:pdf", args=[999]),
+            reverse("faturas:alterar_valores", args=[999]),
+            reverse("faturas:baixar_pdf", args=[999]),
         ]
 
         for url in urls:
@@ -322,7 +638,7 @@ class SegurancaViewsApartamentoTests(TestCase):
             reverse("faturas:lista"),
             reverse("faturas:gerar"),
             reverse("faturas:detalhes", args=[fatura.id]),
-            reverse("faturas:pdf", args=[fatura.id]),
+            reverse("faturas:baixar_pdf", args=[fatura.id]),
         ]
 
         for url in urls:

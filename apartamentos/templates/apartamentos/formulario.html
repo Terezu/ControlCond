@@ -1,52 +1,70 @@
-<h1>{{ titulo }}</h1>
+{% extends "base.html" %}
 
-<p>
-  Informe as leituras anteriores dos medidores. Elas serão usadas como base
-  para calcular o consumo da primeira medição mensal.
-</p>
+{% block title %}{{ titulo }} | ControlCond{% endblock %}
 
-<form method="post">
-  {% csrf_token %}
+{% block content %}
+    {% include "components/page_header.html" with titulo=titulo subtitulo="Informe os dados da unidade e as leituras anteriores dos medidores." %}
 
-  {% if next %}
-    <input type="hidden" name="next" value="{{ next }}">
-  {% endif %}
+    <div class="row justify-content-center">
+        <div class="col-12 col-lg-8">
+            <div class="card shadow-sm">
+                <div class="card-body p-4">
+                    <p class="text-secondary">
+                        As leituras-base serão usadas para calcular o consumo da primeira medição mensal.
+                    </p>
 
-  {{ form.non_field_errors }}
+                    <form method="post" novalidate>
+                        {% csrf_token %}
 
-  {% for campo in form %}
-    <p>
-      {{ campo.label_tag }}<br>
-      {{ campo }}
+                        {% if next %}
+                            <input type="hidden" name="next" value="{{ next }}">
+                        {% endif %}
 
-      {% if campo.help_text %}
-        <small>{{ campo.help_text }}</small>
-      {% endif %}
+                        {% if form.non_field_errors %}
+                            <div class="alert alert-danger" role="alert">
+                                {% for error in form.non_field_errors %}
+                                    <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
 
-      {% for erro in campo.errors %}
-        <br>
-        <strong>{{ erro }}</strong>
-      {% endfor %}
-    </p>
-  {% endfor %}
+                        <div class="row">
+                            <div class="col-12 col-md-6">
+                                {% include "components/form_field.html" with field=form.numero %}
+                            </div>
+                            <div class="col-12 col-md-6">
+                                {% include "components/form_field.html" with field=form.bloco %}
+                            </div>
+                            <div class="col-12 col-md-6">
+                                {% include "components/form_field.html" with field=form.valor_aluguel %}
+                            </div>
+                            <div class="col-12 col-md-6">
+                                {% include "components/form_field.html" with field=form.leitura_base_agua %}
+                            </div>
+                            <div class="col-12 col-md-6">
+                                {% include "components/form_field.html" with field=form.leitura_base_gas %}
+                            </div>
+                            <div class="col-12">
+                                {% include "components/form_field.html" with field=form.observacoes %}
+                            </div>
+                        </div>
 
-  <button type="submit">
-    Salvar apartamento
-  </button>
-</form>
+                        <div class="d-flex flex-column-reverse flex-sm-row justify-content-end gap-2 mt-4">
+                            {% if next %}
+                                <a href="{{ next }}" class="btn btn-outline-secondary">Cancelar</a>
+                            {% elif apartamento %}
+                                <a href="{% url 'apartamentos:detalhes' apartamento.id %}" class="btn btn-outline-secondary">Cancelar</a>
+                            {% else %}
+                                <a href="{% url 'apartamentos:lista' %}" class="btn btn-outline-secondary">Cancelar</a>
+                            {% endif %}
 
-<p>
-  {% if next %}
-    <a href="{{ next }}">
-      Cancelar
-    </a>
-  {% elif apartamento %}
-    <a href="{% url 'apartamentos:detalhes' apartamento.id %}">
-      Cancelar
-    </a>
-  {% else %}
-    <a href="{% url 'apartamentos:lista' %}">
-      Cancelar
-    </a>
-  {% endif %}
-</p>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check-lg me-1" aria-hidden="true"></i>Salvar apartamento
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
