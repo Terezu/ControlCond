@@ -10,6 +10,9 @@ from .forms import FiltroCompetenciaDashboardForm
 from .services import obter_resumo_dashboard
 
 
+CHAVE_SESSAO_COMPETENCIA = "dashboard_competencia"
+
+
 @staff_member_required
 @never_cache
 @require_safe
@@ -17,18 +20,22 @@ def dashboard(request):
     competencia_padrao = (
         FiltroCompetenciaDashboardForm.competencia_atual()
     )
+    competencia_salva = request.session.get(
+        CHAVE_SESSAO_COMPETENCIA,
+        competencia_padrao,
+    )
     if request.GET:
         form = FiltroCompetenciaDashboardForm(request.GET)
-        competencia = (
-            form.cleaned_data
-            if form.is_valid()
-            else competencia_padrao
-        )
+        if form.is_valid():
+            competencia = form.cleaned_data
+            request.session[CHAVE_SESSAO_COMPETENCIA] = competencia
+        else:
+            competencia = competencia_salva
     else:
         form = FiltroCompetenciaDashboardForm(
-            initial=competencia_padrao
+            initial=competencia_salva
         )
-        competencia = competencia_padrao
+        competencia = competencia_salva
 
     resumo = obter_resumo_dashboard(
         competencia["mes"],
