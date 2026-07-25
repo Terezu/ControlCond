@@ -1,6 +1,11 @@
 from django import forms
 
-from .models import ConfiguracaoCondominio, FaixaTarifaAgua
+from .models import (
+    ConfiguracaoCondominio,
+    FaixaTarifaAgua,
+    TabelaTarifariaAgua,
+    TarifaGas,
+)
 from .validators import formatar_cep, formatar_cnpj
 
 
@@ -68,9 +73,7 @@ class ConfiguracaoCondominioForm(forms.ModelForm):
             "mostrar_resumo_financeiro",
         )
         widgets = {
-            "valor_m3_gas": forms.NumberInput(
-                attrs={"min": "0", "max": "999999.99", "step": "0.01"}
-            ),
+            "valor_m3_gas": forms.HiddenInput(),
             "observacoes_padrao": forms.Textarea(attrs={"rows": 4}),
             "texto_rodape": forms.Textarea(attrs={"rows": 3}),
             "mensagem_institucional_rodape": forms.Textarea(attrs={"rows": 3}),
@@ -119,6 +122,7 @@ class FaixaTarifaAguaForm(forms.ModelForm):
             "valor",
             "ordem",
             "ativa",
+            "descricao",
         )
         widgets = {
             "consumo_inicial": forms.NumberInput(attrs={"min": "0"}),
@@ -136,7 +140,7 @@ class FaixaTarifaAguaForm(forms.ModelForm):
                 field.widget.attrs["class"] = "form-control"
 
 
-class BaseFaixaTarifaAguaFormSet(forms.BaseModelFormSet):
+class BaseFaixaTarifaAguaFormSet(forms.BaseInlineFormSet):
     def clean(self):
         super().clean()
         if any(self.errors):
@@ -171,10 +175,77 @@ class BaseFaixaTarifaAguaFormSet(forms.BaseModelFormSet):
                     )
 
 
-FaixaTarifaAguaFormSet = forms.modelformset_factory(
+FaixaTarifaAguaFormSet = forms.inlineformset_factory(
+    TabelaTarifariaAgua,
     FaixaTarifaAgua,
     form=FaixaTarifaAguaForm,
     formset=BaseFaixaTarifaAguaFormSet,
     extra=1,
     can_delete=True,
 )
+
+
+class FormBootstrapMixin:
+    def aplicar_bootstrap(self):
+        for field in self.fields.values():
+            field.widget.attrs["class"] = (
+                "form-check-input"
+                if isinstance(field.widget, forms.CheckboxInput)
+                else "form-control"
+            )
+
+
+class TabelaTarifariaAguaForm(FormBootstrapMixin, forms.ModelForm):
+    class Meta:
+        model = TabelaTarifariaAgua
+        fields = (
+            "nome", "data_inicio_vigencia", "data_fim_vigencia",
+            "ativa", "observacoes",
+        )
+        widgets = {
+            "data_inicio_vigencia": forms.DateInput(attrs={"type": "date"}),
+            "data_fim_vigencia": forms.DateInput(attrs={"type": "date"}),
+            "observacoes": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.aplicar_bootstrap()
+
+
+class TarifaGasForm(FormBootstrapMixin, forms.ModelForm):
+    class Meta:
+        model = TarifaGas
+        fields = (
+            "nome", "valor_por_m3", "data_inicio_vigencia",
+            "data_fim_vigencia", "ativa", "observacoes",
+        )
+        widgets = {
+            "valor_por_m3": forms.NumberInput(attrs={"min": "0", "step": "0.01"}),
+            "data_inicio_vigencia": forms.DateInput(attrs={"type": "date"}),
+            "data_fim_vigencia": forms.DateInput(attrs={"type": "date"}),
+            "observacoes": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.aplicar_bootstrap()
+
+
+class DuplicarRegraForm(forms.Form):
+    nome = forms.CharField(max_length=150)
+    data_inicio_vigencia = forms.DateField(
+        label="Início da nova vigência",
+        widget=forms.DateInput(attrs={"type": "date", "class": "form-control"}),
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["nome"].widget.attrs["class"] = "form-control"
+
+
+class EncerrarVigenciaForm(forms.Form):
+    data_fim_vigencia = forms.DateField(
+        label="Último dia da vigência",
+        widget=forms.DateInput(attrs={"type": "date", "class": "form-control"}),
+    )

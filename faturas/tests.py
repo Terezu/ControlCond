@@ -18,7 +18,11 @@ from django.urls import reverse
 
 from apartamentos.models import Apartamento
 from configuracoes.services import atualizar_configuracao, obter_configuracao
-from configuracoes.models import FaixaTarifaAgua
+from configuracoes.models import (
+    FaixaTarifaAgua,
+    TabelaTarifariaAgua,
+    TarifaGas,
+)
 from leituras.models import Leitura
 
 from .forms import (
@@ -199,8 +203,15 @@ class ComponentesFinanceirosFaturaTests(TestCase):
         )
         fatura = gerar_fatura_mensal(leitura.id)
         valor_agua_emitido = fatura.valor_agua
-        FaixaTarifaAgua.objects.all().delete()
+        tabela_antiga = fatura.tabela_agua_utilizada
+        tabela_antiga.data_fim_vigencia = date(2028, 1, 31)
+        tabela_antiga.save(update_fields=["data_fim_vigencia"])
+        tabela_nova = TabelaTarifariaAgua.objects.create(
+            nome="Nova tabela",
+            data_inicio_vigencia=date(2028, 2, 1),
+        )
         FaixaTarifaAgua.objects.create(
+            tabela=tabela_nova,
             consumo_inicial=0,
             consumo_final=None,
             valor=Decimal("1.00"),
@@ -748,8 +759,11 @@ class GerarFaturaMensalTests(TestCase):
         self.assertEqual(fatura.valor_total, Decimal("597.93"))
 
     def test_tarifa_configurada_do_gas_e_usada_e_fica_registrada(self):
-        atualizar_configuracao(
-            {"valor_m3_gas": Decimal("30.00")}
+        TarifaGas.objects.update(data_fim_vigencia=date(2025, 12, 31))
+        TarifaGas.objects.create(
+            nome="Tarifa 2026",
+            valor_por_m3=Decimal("30.00"),
+            data_inicio_vigencia=date(2026, 1, 1),
         )
         self.configurar_leituras_base()
         leitura = self.criar_leitura(
@@ -777,8 +791,11 @@ class GerarFaturaMensalTests(TestCase):
         )
         fatura_janeiro = gerar_fatura_mensal(leitura_janeiro.id)
 
-        atualizar_configuracao(
-            {"valor_m3_gas": Decimal("25.00")}
+        TarifaGas.objects.update(data_fim_vigencia=date(2026, 1, 31))
+        TarifaGas.objects.create(
+            nome="Tarifa fevereiro",
+            valor_por_m3=Decimal("25.00"),
+            data_inicio_vigencia=date(2026, 2, 1),
         )
         leitura_fevereiro = self.criar_leitura(
             mes=2,

@@ -1,6 +1,11 @@
 from django.contrib import admin
 
-from .models import ConfiguracaoCondominio, FaixaTarifaAgua
+from .models import (
+    ConfiguracaoCondominio,
+    FaixaTarifaAgua,
+    TabelaTarifariaAgua,
+    TarifaGas,
+)
 
 
 @admin.register(ConfiguracaoCondominio)
@@ -42,7 +47,7 @@ class ConfiguracaoCondominioAdmin(admin.ModelAdmin):
             "Financeiro",
             {
                 "fields": (
-                    "valor_m3_gas", "moeda", "dias_vencimento_padrao",
+                    "moeda", "dias_vencimento_padrao",
                     "mensagem_cobranca_padrao",
                     "mensagem_pagamento_antecipado",
                     "percentual_multa_padrao",
@@ -93,14 +98,47 @@ class ConfiguracaoCondominioAdmin(admin.ModelAdmin):
         return False
 
 
+class FaixaTarifaAguaInline(admin.TabularInline):
+    model = FaixaTarifaAgua
+    extra = 0
+
+    def has_change_permission(self, request, obj=None):
+        return not (obj and obj.foi_utilizada)
+
+    def has_delete_permission(self, request, obj=None):
+        return not (obj and obj.foi_utilizada)
+
+
 @admin.register(FaixaTarifaAgua)
 class FaixaTarifaAguaAdmin(admin.ModelAdmin):
     list_display = (
-        "ordem",
-        "consumo_inicial",
-        "consumo_final",
-        "valor",
-        "ativa",
+        "tabela", "ordem", "consumo_inicial", "consumo_final", "valor", "ativa",
     )
-    list_editable = ("consumo_inicial", "consumo_final", "valor", "ativa")
-    ordering = ("ordem", "id")
+    list_filter = ("ativa", "tabela")
+    ordering = ("tabela", "ordem")
+
+
+@admin.register(TabelaTarifariaAgua)
+class TabelaTarifariaAguaAdmin(admin.ModelAdmin):
+    list_display = ("nome", "data_inicio_vigencia", "data_fim_vigencia", "ativa")
+    list_filter = ("ativa",)
+    search_fields = ("nome",)
+    ordering = ("-data_inicio_vigencia",)
+    inlines = (FaixaTarifaAguaInline,)
+
+    def has_delete_permission(self, request, obj=None):
+        return not (obj and obj.foi_utilizada)
+
+
+@admin.register(TarifaGas)
+class TarifaGasAdmin(admin.ModelAdmin):
+    list_display = (
+        "nome", "valor_por_m3", "data_inicio_vigencia",
+        "data_fim_vigencia", "ativa",
+    )
+    list_filter = ("ativa",)
+    search_fields = ("nome",)
+    ordering = ("-data_inicio_vigencia",)
+
+    def has_delete_permission(self, request, obj=None):
+        return not (obj and obj.foi_utilizada)

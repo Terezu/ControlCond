@@ -5,8 +5,14 @@ from decimal import (
     ROUND_DOWN,
     ROUND_HALF_UP,
 )
+from datetime import date
 
-from configuracoes.services import obter_configuracao, obter_faixas_agua_ativas
+from configuracoes.services import (
+    ConsumoSemFaixaError,
+    obter_faixas_agua_ativas,
+    obter_tabela_agua_vigente,
+    obter_tarifa_gas_vigente,
+)
 
 def _decimal_finito(valor, descricao):
     try:
@@ -62,7 +68,7 @@ def calcular_consumo_agua(leitura_anterior, leitura_atual):
     return _calcular_consumo(leitura_anterior, leitura_atual, "água")
 
 
-def calcular_valor_agua(consumo):
+def calcular_valor_agua(consumo, mes=None, ano=None, *, tabela=None):
     consumo_decimal = _decimal_finito(consumo, "O consumo de água")
     if consumo_decimal < 0:
         raise ValueError("O consumo de água não pode ser negativo.")
@@ -70,7 +76,18 @@ def calcular_valor_agua(consumo):
         raise ValueError("O consumo de água deve ser um número inteiro.")
 
     consumo = int(consumo_decimal)
-    faixas = obter_faixas_agua_ativas()
+    if tabela is None:
+        if mes is None or ano is None:
+            faixas = obter_faixas_agua_ativas()
+        else:
+            tabela = obter_tabela_agua_vigente(mes, ano)
+            faixas = tuple(
+                tabela.faixas.filter(ativa=True).order_by("ordem", "id")
+            )
+    else:
+        faixas = tuple(
+            tabela.faixas.filter(ativa=True).order_by("ordem", "id")
+        )
     primeira = faixas[0]
     if (
         primeira.consumo_final is None
@@ -99,7 +116,7 @@ def calcular_valor_agua(consumo):
             ):
                 break
         else:
-            raise ValueError(
+            raise ConsumoSemFaixaError(
                 "A tabela de água não cobre o consumo informado."
             )
         return valor.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
@@ -109,13 +126,36 @@ def calcular_valor_agua(consumo):
         ) from exc
 
 
-def calcular_agua(leitura_anterior, leitura_atual):
+def calcular_agua(leitura_anterior, leitura_atual, mes=None, ano=None):
     consumo = calcular_consumo_agua(leitura_anterior, leitura_atual)
+    tabela = (
+        obter_tabela_agua_vigente(mes, ano)
+        if mes is not None and ano is not None
+        else None
+    )
+    faixas = (
+        tuple(tabela.faixas.filter(ativa=True).order_by("ordem", "id"))
+        if tabela is not None
+        else obter_faixas_agua_ativas()
+    )
+    faixa_aplicada = next(
+        (
+            faixa for faixa in faixas
+            if faixa.consumo_final is None or consumo <= faixa.consumo_final
+        ),
+        None,
+    )
+    if faixa_aplicada is None:
+        raise ConsumoSemFaixaError(
+            "A tabela de água não cobre o consumo informado."
+        )
     return {
         "leitura_anterior": leitura_anterior,
         "leitura_atual": leitura_atual,
         "consumo": consumo,
-        "valor": calcular_valor_agua(consumo),
+        "valor": calcular_valor_agua(consumo, tabela=tabela),
+        "tabela": tabela or faixa_aplicada.tabela,
+        "faixa": faixa_aplicada,
     }
 
 
@@ -123,12 +163,21 @@ def calcular_consumo_gas(leitura_anterior, leitura_atual):
     return _calcular_consumo(leitura_anterior, leitura_atual, "gás")
 
 
-def calcular_valor_gas(consumo_gas, valor_m3_gas=None):
+def calcular_valor_gas(
+    consumo_gas,
+    valor_m3_gas=None,
+    *,
+    mes=None,
+    ano=None,
+):
     consumo = _decimal_finito(consumo_gas, "O consumo de gás")
     if consumo < 0:
         raise ValueError("O consumo de gás não pode ser negativo.")
     if valor_m3_gas is None:
-        valor_m3_gas = obter_configuracao().valor_m3_gas
+        if mes is None or ano is None:
+            hoje = date.today()
+            mes, ano = hoje.month, hoje.year
+        valor_m3_gas = obter_tarifa_gas_vigente(mes, ano).valor_por_m3
     valor_m3_gas = _decimal_finito(
         valor_m3_gas,
         "O valor do m³ do gás",
@@ -148,11 +197,23 @@ def calcular_gas(
     leitura_anterior,
     leitura_atual,
     valor_m3_gas=None,
+    mes=None,
+    ano=None,
 ):
     consumo = calcular_consumo_gas(leitura_anterior, leitura_atual)
+    if valor_m3_gas is None:
+        if mes is None or ano is None:
+            hoje = date.today()
+            mes, ano = hoje.month, hoje.year
+        tarifa = obter_tarifa_gas_vigente(mes, ano)
+    else:
+        tarifa = None
+    valor_unitario = tarifa.valor_por_m3 if tarifa else valor_m3_gas
     return {
         "leitura_anterior": leitura_anterior,
         "leitura_atual": leitura_atual,
         "consumo": consumo,
-        "valor": calcular_valor_gas(consumo, valor_m3_gas),
+        "valor": calcular_valor_gas(consumo, valor_unitario),
+        "tarifa": tarifa,
+        "valor_por_m3": valor_unitario,
     }

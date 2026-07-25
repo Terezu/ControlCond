@@ -151,6 +151,16 @@
         </div>
     </section>
 
+    {% if fatura.tabela_agua_utilizada or fatura.tarifa_gas_utilizada %}
+    <section class="card shadow-sm mt-4" aria-labelledby="titulo-auditoria-tarifas">
+        <div class="card-header bg-light py-3"><h2 id="titulo-auditoria-tarifas" class="h5 mb-0">Auditoria tarifária</h2></div>
+        <div class="card-body"><div class="row g-4">
+            {% if fatura.tabela_agua_utilizada %}<div class="col-12 col-lg-6"><p class="detail-label">Água</p><p class="detail-value">{{ fatura.tabela_agua_utilizada.nome }} · faixa {{ fatura.faixa_agua_utilizada|default:"não identificada" }}</p><p class="small text-secondary mb-0">Vigência desde {{ fatura.tabela_agua_utilizada.data_inicio_vigencia|date:"d/m/Y" }}.</p></div>{% endif %}
+            {% if fatura.tarifa_gas_utilizada %}<div class="col-12 col-lg-6"><p class="detail-label">Gás</p><p class="detail-value">{{ fatura.tarifa_gas_utilizada.nome }} · R$ {{ fatura.valor_m3_gas_emissao|floatformat:2 }} por m³</p><p class="small text-secondary mb-0">Vigência desde {{ fatura.tarifa_gas_utilizada.data_inicio_vigencia|date:"d/m/Y" }}.</p></div>{% endif %}
+        </div></div>
+    </section>
+    {% endif %}
+
     <section class="card shadow-sm mt-4" aria-labelledby="titulo-editar-valores">
         <div class="card-header bg-light py-3">
             <h2 id="titulo-editar-valores" class="h5 mb-0">Editar valores da fatura</h2>

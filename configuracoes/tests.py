@@ -1,7 +1,9 @@
+from datetime import date
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.contrib import admin
+from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError, transaction
 from django.test import TestCase
@@ -13,13 +15,112 @@ from .models import (
     CHAVE_CONFIGURACAO,
     ConfiguracaoCondominio,
     FaixaTarifaAgua,
+    TabelaTarifariaAgua,
+    TarifaGas,
 )
 from .services import (
     atualizar_configuracao,
     obter_configuracao,
     obter_configuracoes,
     obter_faixas_agua_ativas,
+    obter_tabela_agua_vigente,
+    obter_tarifa_gas_vigente,
+    validar_tabela_agua,
 )
+
+
+class TarifasConsumoTests(TestCase):
+    def setUp(self):
+        self.tabela_inicial = TabelaTarifariaAgua.objects.get()
+        self.tarifa_inicial = TarifaGas.objects.get()
+
+    def test_seleciona_regras_pelo_primeiro_dia_da_competencia(self):
+        self.assertEqual(
+            obter_tabela_agua_vigente(1, 2026), self.tabela_inicial
+        )
+        self.assertEqual(
+            obter_tarifa_gas_vigente(1, 2026), self.tarifa_inicial
+        )
+
+    def test_rejeita_vigencias_sobrepostas(self):
+        tabela = TabelaTarifariaAgua(
+            nome="Sobreposta", data_inicio_vigencia=date(2026, 1, 1)
+        )
+        with self.assertRaises(ValidationError):
+            tabela.full_clean()
+        tarifa = TarifaGas(
+            nome="Sobreposta", valor_por_m3=Decimal("10"),
+            data_inicio_vigencia=date(2026, 1, 1),
+        )
+        with self.assertRaises(ValidationError):
+            tarifa.full_clean()
+
+    def test_rejeita_gas_negativo_e_fim_antes_do_inicio(self):
+        tarifa = TarifaGas(
+            nome="Inválida", valor_por_m3=Decimal("-1"),
+            data_inicio_vigencia=date(2026, 2, 1),
+            data_fim_vigencia=date(2026, 1, 31),
+        )
+        with self.assertRaises(ValidationError):
+            tarifa.full_clean()
+
+    def test_detecta_lacuna_e_sobreposicao_de_faixas(self):
+        segunda = self.tabela_inicial.faixas.order_by("ordem")[1]
+        segunda.consumo_inicial += 1
+        segunda.save(update_fields=["consumo_inicial"])
+        with self.assertRaisesRegex(ValueError, "lacunas"):
+            validar_tabela_agua(self.tabela_inicial)
+
+    def test_faixa_rejeita_intervalo_invertido(self):
+        faixa = FaixaTarifaAgua(
+            tabela=self.tabela_inicial, consumo_inicial=10,
+            consumo_final=5, valor=Decimal("1"), ordem=99,
+        )
+        with self.assertRaises(ValidationError):
+            faixa.full_clean()
+
+    def test_telas_exigem_staff_e_exibem_navegacao(self):
+        usuario = get_user_model().objects.create_user(
+            username="comum", password="senha"
+        )
+        self.client.force_login(usuario)
+        resposta = self.client.get(reverse("configuracoes:tabelas_agua"))
+        self.assertEqual(resposta.status_code, 302)
+        usuario.is_staff = True
+        usuario.save(update_fields=["is_staff"])
+        resposta = self.client.get(reverse("configuracoes:detalhes"))
+        self.assertContains(resposta, "Configurar tabela de água")
+        self.assertContains(resposta, "Configurar tarifa de gás")
+
+    def test_detalhes_exibe_faixas_da_tabela_vigente(self):
+        usuario = get_user_model().objects.create_user(
+            username="staff-faixas", password="senha", is_staff=True
+        )
+        self.client.force_login(usuario)
+
+        resposta = self.client.get(reverse("configuracoes:detalhes"))
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, self.tabela_inicial.nome)
+        self.assertContains(resposta, "R$ 101,91")
+        self.assertNotContains(resposta, "Nenhuma tabela de água vigente")
+
+    def test_nova_vigencia_de_agua_altera_so_competencias_futuras(self):
+        from calculos.services import calcular_valor_agua
+        valor_antigo = calcular_valor_agua(5, 12, 2026)
+        self.tabela_inicial.data_fim_vigencia = date(2026, 12, 31)
+        self.tabela_inicial.save(update_fields=["data_fim_vigencia"])
+        nova = TabelaTarifariaAgua.objects.create(
+            nome="Tabela 2027", data_inicio_vigencia=date(2027, 1, 1)
+        )
+        FaixaTarifaAgua.objects.create(
+            tabela=nova, consumo_inicial=0, consumo_final=None,
+            valor=Decimal("150.00"), ordem=1,
+        )
+        self.assertEqual(valor_antigo, Decimal("101.91"))
+        self.assertEqual(
+            calcular_valor_agua(5, 1, 2027), Decimal("150.00")
+        )
 
 
 class ConfiguracaoCondominioModelTests(TestCase):

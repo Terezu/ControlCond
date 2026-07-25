@@ -37,6 +37,27 @@ class Fatura(models.Model):
         blank=True,
         null=True,
     )
+    tabela_agua_utilizada = models.ForeignKey(
+        "configuracoes.TabelaTarifariaAgua",
+        on_delete=models.PROTECT,
+        related_name="faturas_utilizadas",
+        blank=True,
+        null=True,
+    )
+    faixa_agua_utilizada = models.ForeignKey(
+        "configuracoes.FaixaTarifaAgua",
+        on_delete=models.PROTECT,
+        related_name="faturas_utilizadas",
+        blank=True,
+        null=True,
+    )
+    tarifa_gas_utilizada = models.ForeignKey(
+        "configuracoes.TarifaGas",
+        on_delete=models.PROTECT,
+        related_name="faturas_utilizadas",
+        blank=True,
+        null=True,
+    )
 
     mes = models.IntegerField(
         validators=[MinValueValidator(1), MaxValueValidator(12)]

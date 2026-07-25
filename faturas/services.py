@@ -9,7 +9,10 @@ from django.utils import timezone
 
 from apartamentos.models import Apartamento
 from calculos.services import calcular_agua, calcular_gas
-from configuracoes.services import obter_configuracao
+from configuracoes.services import (
+    ConsumoSemFaixaError,
+    TarifaNaoConfiguradaError,
+)
 from leituras.models import Leitura
 
 from .models import (
@@ -30,10 +33,15 @@ class ResultadoFechamento:
     faturas_geradas: int
     faturas_existentes: int
     apartamentos_sem_leitura: tuple
+    falhas_tarifarias: tuple = ()
 
     @property
     def total_sem_leitura(self):
         return len(self.apartamentos_sem_leitura)
+
+    @property
+    def total_falhas_tarifarias(self):
+        return len(self.falhas_tarifarias)
 
 
 class RegraNegocioFaturaError(ValidationError):
@@ -194,7 +202,7 @@ def _normalizar_valor_outros(valor):
     return valor
 
 
-def _calcular_dados_da_leitura(leitura_atual, valor_m3_gas):
+def _calcular_dados_da_leitura(leitura_atual):
     if (
         leitura_atual.leitura_agua is None
         or leitura_atual.leitura_gas is None
@@ -235,17 +243,24 @@ def _calcular_dados_da_leitura(leitura_atual, valor_m3_gas):
     resultado_agua = calcular_agua(
         leitura_agua_anterior,
         leitura_atual.leitura_agua,
+        leitura_atual.mes,
+        leitura_atual.ano,
     )
     resultado_gas = calcular_gas(
         leitura_gas_anterior,
         leitura_atual.leitura_gas,
-        valor_m3_gas,
+        mes=leitura_atual.mes,
+        ano=leitura_atual.ano,
     )
     return {
         "consumo_agua": resultado_agua["consumo"],
         "consumo_gas": resultado_gas["consumo"],
         "valor_agua": resultado_agua["valor"],
         "valor_gas": resultado_gas["valor"],
+        "tabela_agua": resultado_agua["tabela"],
+        "faixa_agua": resultado_agua["faixa"],
+        "tarifa_gas": resultado_gas["tarifa"],
+        "valor_m3_gas": resultado_gas["valor_por_m3"],
         "leitura_agua_anterior": leitura_agua_anterior,
         "leitura_agua_atual": leitura_atual.leitura_agua,
         "leitura_gas_anterior": leitura_gas_anterior,
@@ -291,7 +306,6 @@ def cadastrar_fatura(
     observacao_outros=None,
 ):
     apartamento = _consultar_apartamento_para_atualizacao(apartamento_id)
-    valor_m3_gas = obter_configuracao().valor_m3_gas
     valor_aluguel = _normalizar_valor_financeiro(
         valor_aluguel,
         "O valor do aluguel",
@@ -414,10 +428,7 @@ def cadastrar_fatura(
     )
 
     if leitura is not None:
-        dados_calculados = _calcular_dados_da_leitura(
-            leitura,
-            valor_m3_gas,
-        )
+        dados_calculados = _calcular_dados_da_leitura(leitura)
         retratos_informados = {
             "leitura_agua_anterior": _normalizar_decimal(
                 leitura_agua_anterior,
@@ -492,7 +503,13 @@ def cadastrar_fatura(
         leitura_agua_atual = dados_calculados["leitura_agua_atual"]
         leitura_gas_anterior = dados_calculados["leitura_gas_anterior"]
         leitura_gas_atual = dados_calculados["leitura_gas_atual"]
+        tabela_agua = dados_calculados["tabela_agua"]
+        faixa_agua = dados_calculados["faixa_agua"]
+        tarifa_gas = dados_calculados["tarifa_gas"]
+        valor_m3_gas = dados_calculados["valor_m3_gas"]
     else:
+        tabela_agua = faixa_agua = tarifa_gas = None
+        valor_m3_gas = Decimal("0.00")
         leitura_agua_anterior = _normalizar_decimal(
             leitura_agua_anterior,
             "A leitura anterior de água",
@@ -517,6 +534,9 @@ def cadastrar_fatura(
     fatura = Fatura(
         apartamento=apartamento,
         leitura=leitura,
+        tabela_agua_utilizada=tabela_agua,
+        faixa_agua_utilizada=faixa_agua,
+        tarifa_gas_utilizada=tarifa_gas,
         mes=mes,
         ano=ano,
         consumo_agua=consumo_agua,
@@ -574,6 +594,9 @@ def consultar_fatura(fatura_id):
             .select_related(
                 "apartamento",
                 "leitura",
+                "tabela_agua_utilizada",
+                "faixa_agua_utilizada",
+                "tarifa_gas_utilizada",
             )
             .get(id=fatura_id)
         )
@@ -1061,6 +1084,7 @@ def executar_fechamento_mensal(mes, ano):
     geradas = 0
     existentes = 0
     sem_leitura = []
+    falhas_tarifarias = []
     try:
         for apartamento in apartamentos:
             if not apartamento.leituras_fechamento:
@@ -1069,10 +1093,17 @@ def executar_fechamento_mensal(mes, ano):
             if apartamento.faturas_fechamento:
                 existentes += 1
                 continue
-            gerar_fatura_mensal(
-                apartamento.leituras_fechamento[0].id
-            )
-            geradas += 1
+            try:
+                gerar_fatura_mensal(
+                    apartamento.leituras_fechamento[0].id
+                )
+                geradas += 1
+            except (TarifaNaoConfiguradaError, ConsumoSemFaixaError) as exc:
+                falhas_tarifarias.append((apartamento, str(exc)))
+                logger.warning(
+                    "Fatura não gerada para apartamento %s em %02d/%d: %s",
+                    apartamento.pk, mes, ano, exc,
+                )
     except Exception:
         logger.exception(
             "Fechamento mensal falhou para %02d/%d; "
@@ -1087,6 +1118,7 @@ def executar_fechamento_mensal(mes, ano):
         faturas_geradas=geradas,
         faturas_existentes=existentes,
         apartamentos_sem_leitura=tuple(sem_leitura),
+        falhas_tarifarias=tuple(falhas_tarifarias),
     )
     logger.info(
         "Fechamento mensal concluído para %02d/%d: "

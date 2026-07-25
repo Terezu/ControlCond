@@ -1,4 +1,5 @@
 from decimal import Decimal
+from datetime import date
 
 from django.core.validators import (
     FileExtensionValidator,
@@ -6,7 +7,9 @@ from django.core.validators import (
     MinValueValidator,
     RegexValidator,
 )
+from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q
 
 from .validators import formatar_cep, formatar_cnpj, validar_cnpj
 
@@ -372,7 +375,68 @@ class ConfiguracaoCondominio(models.Model):
             self.moeda = self.moeda.strip().upper()
 
 
+class RegraVigenciaMixin(models.Model):
+    data_inicio_vigencia = models.DateField("Início da vigência")
+    data_fim_vigencia = models.DateField(
+        "Fim da vigência",
+        blank=True,
+        null=True,
+    )
+    ativa = models.BooleanField(
+        "Disponível administrativamente",
+        default=True,
+    )
+    observacoes = models.TextField(blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        abstract = True
+
+    def clean(self):
+        super().clean()
+        if (
+            self.data_fim_vigencia
+            and self.data_fim_vigencia < self.data_inicio_vigencia
+        ):
+            raise ValidationError(
+                {"data_fim_vigencia": "A data final não pode ser anterior à inicial."}
+            )
+        consulta = type(self).objects.exclude(pk=self.pk).filter(
+            data_inicio_vigencia__lte=(self.data_fim_vigencia or date.max)
+        ).filter(
+            Q(data_fim_vigencia__isnull=True)
+            | Q(data_fim_vigencia__gte=self.data_inicio_vigencia)
+        )
+        if consulta.exists():
+            raise ValidationError(
+                "O período de vigência se sobrepõe a outro registro."
+            )
+
+
+class TabelaTarifariaAgua(RegraVigenciaMixin):
+    nome = models.CharField(max_length=150)
+
+    class Meta:
+        db_table = "tabelas_tarifarias_agua"
+        ordering = ["-data_inicio_vigencia", "-id"]
+        verbose_name = "Tabela tarifária de água"
+        verbose_name_plural = "Tabelas tarifárias de água"
+
+    def __str__(self):
+        return self.nome
+
+    @property
+    def foi_utilizada(self):
+        return self.faturas_utilizadas.exists()
+
+
 class FaixaTarifaAgua(models.Model):
+    tabela = models.ForeignKey(
+        TabelaTarifariaAgua,
+        on_delete=models.PROTECT,
+        related_name="faixas",
+    )
     consumo_inicial = models.PositiveIntegerField("Consumo inicial")
     consumo_final = models.PositiveIntegerField(
         "Consumo final",
@@ -385,8 +449,9 @@ class FaixaTarifaAgua(models.Model):
         decimal_places=2,
         validators=[MinValueValidator(Decimal("0"))],
     )
-    ordem = models.PositiveSmallIntegerField(unique=True)
+    ordem = models.PositiveSmallIntegerField()
     ativa = models.BooleanField(default=True)
+    descricao = models.CharField(max_length=150, blank=True)
 
     class Meta:
         db_table = "faixas_tarifa_agua"
@@ -394,6 +459,14 @@ class FaixaTarifaAgua(models.Model):
         verbose_name = "Faixa da tarifa de água"
         verbose_name_plural = "Faixas da tarifa de água"
         constraints = [
+            models.UniqueConstraint(
+                fields=("tabela", "ordem"),
+                name="faixa_agua_ordem_unica_por_tabela",
+            ),
+            models.UniqueConstraint(
+                fields=("tabela", "consumo_inicial", "consumo_final"),
+                name="faixa_agua_intervalo_unico_por_tabela",
+            ),
             models.CheckConstraint(
                 condition=models.Q(valor__gte=0),
                 name="faixa_agua_valor_nao_negativo",
@@ -410,3 +483,76 @@ class FaixaTarifaAgua(models.Model):
     def __str__(self):
         final = self.consumo_final if self.consumo_final is not None else "∞"
         return f"{self.consumo_inicial}–{final} m³"
+
+    def clean(self):
+        super().clean()
+        if (
+            self.consumo_final is not None
+            and self.consumo_final < self.consumo_inicial
+        ):
+            raise ValidationError(
+                {"consumo_final": "O consumo final não pode ser menor que o inicial."}
+            )
+        limite = self.consumo_final or 2**31 - 1
+        sobreposta = (
+            FaixaTarifaAgua.objects
+            .filter(tabela=self.tabela)
+            .exclude(pk=self.pk)
+            .filter(consumo_inicial__lte=limite)
+            .filter(
+                Q(consumo_final__isnull=True)
+                | Q(consumo_final__gte=self.consumo_inicial)
+            )
+        )
+        if sobreposta.exists():
+            raise ValidationError("Existem faixas de consumo sobrepostas.")
+
+    def save(self, *args, **kwargs):
+        if self.tabela_id is None:
+            from django.db.models import Q
+            hoje = date.today()
+            self.tabela = (
+                TabelaTarifariaAgua.objects
+                .filter(ativa=True, data_inicio_vigencia__lte=hoje)
+                .filter(
+                    Q(data_fim_vigencia__isnull=True)
+                    | Q(data_fim_vigencia__gte=hoje)
+                )
+                .order_by("-data_inicio_vigencia")
+                .first()
+            )
+            if self.tabela is None:
+                raise ValidationError("Nenhuma tabela de água vigente.")
+        return super().save(*args, **kwargs)
+
+
+class TarifaGas(RegraVigenciaMixin):
+    nome = models.CharField(max_length=150)
+    valor_por_m3 = models.DecimalField(
+        "Valor por m³",
+        max_digits=8,
+        decimal_places=2,
+        validators=[
+            MinValueValidator(Decimal("0")),
+            MaxValueValidator(LIMITE_VALOR_GAS),
+        ],
+    )
+
+    class Meta:
+        db_table = "tarifas_gas"
+        ordering = ["-data_inicio_vigencia", "-id"]
+        verbose_name = "Tarifa de gás"
+        verbose_name_plural = "Tarifas de gás"
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(valor_por_m3__gte=0),
+                name="tarifa_gas_valor_nao_negativo",
+            ),
+        ]
+
+    def __str__(self):
+        return self.nome
+
+    @property
+    def foi_utilizada(self):
+        return self.faturas_utilizadas.exists()

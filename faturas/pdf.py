@@ -412,7 +412,11 @@ def desenhar_composicao_financeira(pdf, fatura, largura, y):
 
     coluna_esquerda = (
         ("Água e esgoto", f"R$ {formatar_valor_monetario(fatura.valor_agua)}"),
-        ("Gás", f"R$ {formatar_valor_monetario(fatura.valor_gas)}"),
+        (
+            f"Gás ({fatura.consumo_gas} m³ × R$ "
+            f"{formatar_valor_monetario(fatura.valor_m3_gas_emissao)}/m³)",
+            f"R$ {formatar_valor_monetario(fatura.valor_gas)}",
+        ),
         ("Aluguel", f"R$ {formatar_valor_monetario(fatura.valor_aluguel)}"),
         (
             "Condomínio",

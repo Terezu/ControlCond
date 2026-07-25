@@ -7,6 +7,7 @@
 
     <form method="post" enctype="multipart/form-data" novalidate>
         {% csrf_token %}
+        {{ form.valor_m3_gas }}
         {{ formset_faixas.management_form }}
 
         {% if form.non_field_errors or formset_faixas.non_form_errors %}
@@ -62,7 +63,6 @@
             <div class="accordion-item">
                 <h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#financeiro" aria-expanded="false" aria-controls="financeiro"><i class="bi bi-cash-coin me-2" aria-hidden="true"></i>Financeiro</button></h2>
                 <div id="financeiro" class="accordion-collapse collapse" data-bs-parent="#configuracoesAccordion"><div class="accordion-body"><div class="row">
-                    <div class="col-12 col-md-4">{% include "components/form_field.html" with field=form.valor_m3_gas %}</div>
                     <div class="col-12 col-md-4">{% include "components/form_field.html" with field=form.moeda %}</div>
                     <div class="col-12 col-md-4">{% include "components/form_field.html" with field=form.dias_vencimento_padrao %}</div>
                     <div class="col-12 col-md-6">{% include "components/form_field.html" with field=form.percentual_multa_padrao %}</div>
@@ -113,28 +113,6 @@
                 </div></div>
             </div>
 
-            <div class="accordion-item">
-                <h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#tabelaAgua" aria-expanded="false" aria-controls="tabelaAgua"><i class="bi bi-droplet me-2" aria-hidden="true"></i>Tabela da água</button></h2>
-                <div id="tabelaAgua" class="accordion-collapse collapse" data-bs-parent="#configuracoesAccordion"><div class="accordion-body">
-                    <p class="text-secondary small">A primeira faixa é a cobrança mínima fixa. Nas demais, o valor é cobrado por m³. Deixe o final vazio somente na última faixa.</p>
-                    <div class="vstack gap-3">
-                        {% for faixa_form in formset_faixas %}
-                            <div class="border rounded-3 p-3">
-                                {{ faixa_form.id }}
-                                <div class="row align-items-end">
-                                    <div class="col-6 col-md-2">{% include "components/form_field.html" with field=faixa_form.ordem %}</div>
-                                    <div class="col-6 col-md-2">{% include "components/form_field.html" with field=faixa_form.consumo_inicial %}</div>
-                                    <div class="col-6 col-md-2">{% include "components/form_field.html" with field=faixa_form.consumo_final %}</div>
-                                    <div class="col-6 col-md-2">{% include "components/form_field.html" with field=faixa_form.valor %}</div>
-                                    <div class="col-6 col-md-2">{% include "components/form_field.html" with field=faixa_form.ativa %}</div>
-                                    <div class="col-6 col-md-2">{% include "components/form_field.html" with field=faixa_form.DELETE %}</div>
-                                </div>
-                                {{ faixa_form.non_field_errors }}
-                            </div>
-                        {% endfor %}
-                    </div>
-                </div></div>
-            </div>
         </div>
 
         <div class="d-flex flex-column-reverse flex-sm-row justify-content-end gap-2 mt-4">

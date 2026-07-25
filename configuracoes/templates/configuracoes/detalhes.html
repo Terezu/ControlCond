@@ -120,12 +120,6 @@
                     <h2 id="titulo-cobrancas" class="h5 mb-0">Cobranças</h2>
                 </div>
                 <div class="card-body">
-                    <p class="detail-label">Valor do m³ do gás</p>
-                    <p class="fs-5 fw-semibold mb-0">R$ {{ configuracao.valor_m3_gas|floatformat:2 }}</p>
-                    <p class="text-secondary small mt-3 mb-0">
-                        Este valor é copiado para cada fatura no momento da emissão.
-                    </p>
-                    <hr>
                     <p class="detail-label">Moeda</p>
                     <p class="detail-value">{{ configuracao.moeda }}</p>
                     <p class="detail-label">Prazo padrão</p>
@@ -180,21 +174,51 @@
         </div>
     </div>
 
+    <section class="card shadow-sm mt-4" aria-labelledby="titulo-tarifas-consumo">
+        <div class="card-header bg-light py-3">
+            <h2 id="titulo-tarifas-consumo" class="h5 mb-0">Tarifas de consumo</h2>
+        </div>
+        <div class="card-body"><div class="row g-4">
+            <div class="col-12 col-lg-6"><div class="border rounded h-100 p-4">
+                <i class="bi bi-droplet fs-3 text-primary" aria-hidden="true"></i>
+                <h3 class="h5 mt-2">Tabela de água</h3>
+                {% if tabela_agua_vigente %}
+                    <p class="text-secondary">Vigente desde {{ tabela_agua_vigente.data_inicio_vigencia|date:"d/m/Y" }}, com {{ tabela_agua_vigente.faixas.count }} faixas.</p>
+                {% else %}<div class="alert alert-warning">Nenhuma tabela de água vigente.</div>{% endif %}
+                <a class="btn btn-outline-primary" href="{% url 'configuracoes:tabelas_agua' %}" aria-label="Configurar tabela de água">Configurar tabela de água</a>
+            </div></div>
+            <div class="col-12 col-lg-6"><div class="border rounded h-100 p-4">
+                <i class="bi bi-fire fs-3 text-primary" aria-hidden="true"></i>
+                <h3 class="h5 mt-2">Tarifa de gás</h3>
+                {% if tarifa_gas_vigente %}
+                    <p class="text-secondary">Tarifa vigente: R$ {{ tarifa_gas_vigente.valor_por_m3|floatformat:2 }} por m³ desde {{ tarifa_gas_vigente.data_inicio_vigencia|date:"d/m/Y" }}.</p>
+                {% else %}<div class="alert alert-warning">Nenhuma tarifa de gás vigente.</div>{% endif %}
+                <a class="btn btn-outline-primary" href="{% url 'configuracoes:tarifas_gas' %}" aria-label="Configurar tarifa de gás">Configurar tarifa de gás</a>
+            </div></div>
+        </div></div>
+    </section>
+
     <section class="card shadow-sm mt-4" aria-labelledby="titulo-faixas-agua">
         <div class="card-header bg-light py-3"><h2 id="titulo-faixas-agua" class="h5 mb-0">Tabela da água</h2></div>
         <div class="card-body p-0">
-            {% if faixas_agua %}
+            {% if tabela_agua_vigente %}
+                <div class="px-3 pt-3">
+                    <p class="mb-1 fw-semibold">{{ tabela_agua_vigente.nome }}</p>
+                    <p class="small text-secondary mb-3">
+                        Vigência iniciada em {{ tabela_agua_vigente.data_inicio_vigencia|date:"d/m/Y" }}.
+                    </p>
+                </div>
                 <div class="table-responsive"><table class="table table-hover align-middle mb-0">
                     <thead><tr><th>Ordem</th><th>Consumo inicial</th><th>Consumo final</th><th>Valor</th><th>Status</th></tr></thead>
-                    <tbody>{% for faixa in faixas_agua %}<tr>
+                    <tbody>{% for faixa in tabela_agua_vigente.faixas.all %}<tr>
                         <td>{{ faixa.ordem }}</td><td>{{ faixa.consumo_inicial }} m³</td>
                         <td>{% if faixa.consumo_final == None %}Sem limite{% else %}{{ faixa.consumo_final }} m³{% endif %}</td>
                         <td>R$ {{ faixa.valor|floatformat:2 }}</td>
                         <td><span class="badge text-bg-{% if faixa.ativa %}success{% else %}secondary{% endif %}">{{ faixa.ativa|yesno:"Ativa,Inativa" }}</span></td>
-                    </tr>{% endfor %}</tbody>
+                    </tr>{% empty %}<tr><td colspan="5" class="text-center text-secondary py-4">A tabela vigente não possui faixas cadastradas.</td></tr>{% endfor %}</tbody>
                 </table></div>
             {% else %}
-                <div class="alert alert-warning m-3 mb-3" role="alert">Nenhuma faixa cadastrada. A geração de faturas ficará bloqueada.</div>
+                <div class="alert alert-warning m-3 mb-3" role="alert">Nenhuma tabela de água vigente. A geração de faturas ficará bloqueada.</div>
             {% endif %}
         </div>
     </section>
