@@ -17,7 +17,11 @@ from django.test import TestCase
 from django.urls import reverse
 
 from apartamentos.models import Apartamento
-from configuracoes.services import atualizar_configuracao, obter_configuracao
+from configuracoes.services import (
+    atualizar_configuracao as atualizar_configuracao_por_condominio,
+    obter_configuracao as obter_configuracao_por_condominio,
+)
+from condominios.models import Condominio
 from configuracoes.models import (
     FaixaTarifaAgua,
     TabelaTarifariaAgua,
@@ -48,6 +52,16 @@ from .services import (
     marcar_fatura_como_paga,
     reabrir_fatura,
 )
+
+
+def obter_configuracao():
+    return obter_configuracao_por_condominio(Condominio.objects.get())
+
+
+def atualizar_configuracao(dados):
+    return atualizar_configuracao_por_condominio(
+        Condominio.objects.get(), dados
+    )
 
 
 class ComponentesFinanceirosFaturaTests(TestCase):
@@ -2100,7 +2114,7 @@ class FaturaPresentationTests(TestCase):
         )
         self.client.force_login(usuario)
 
-    @patch("faturas.views.listar_faturas", return_value=[])
+    @patch("faturas.views.listar_faturas_por_condominio", return_value=[])
     def test_lista_usa_layout_padrao_e_exibe_estado_vazio(self, _listar):
         resposta = self.client.get(reverse("faturas:lista"))
 
@@ -2110,7 +2124,7 @@ class FaturaPresentationTests(TestCase):
         self.assertContains(resposta, "Nenhuma fatura encontrada")
         self.assertContains(resposta, reverse("faturas:gerar"))
 
-    @patch("faturas.views.listar_faturas")
+    @patch("faturas.views.listar_faturas_por_condominio")
     def test_lista_exibe_fatura_e_acoes_validas(self, listar):
         listar.return_value = [
             SimpleNamespace(
@@ -2413,7 +2427,7 @@ class FaturaPresentationTests(TestCase):
         self.assertEqual(fatura.desconto, Decimal("50.00"))
         self.assertEqual(fatura.valor_total, Decimal("1100.00"))
 
-    @patch("faturas.views.consultar_fatura")
+    @patch("faturas.views.consultar_fatura_no_condominio")
     def test_detalhes_exibe_dados_status_e_acoes(self, consultar):
         consultar.return_value = SimpleNamespace(
             id=7,

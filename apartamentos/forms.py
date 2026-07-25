@@ -79,12 +79,15 @@ class ApartamentoForm(forms.ModelForm):
         }
 
     def __init__(self, *args, **kwargs):
+        condominio = kwargs.pop("condominio", None)
         super().__init__(*args, **kwargs)
 
         for field in self.fields.values():
             field.widget.attrs.update({"class": "form-control"})
         if not self.is_bound and not getattr(self.instance, "pk", None):
-            configuracao = obter_configuracao()
+            if condominio is None:
+                condominio = self.instance.condominio
+            configuracao = obter_configuracao(condominio)
             self.fields["valor_bonificacao"].initial = (
                 configuracao.valor_bonificacao_padrao
             )

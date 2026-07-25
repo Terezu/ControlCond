@@ -484,6 +484,31 @@ class Fatura(models.Model):
         super().clean()
 
         erros = {}
+        if self.apartamento_id:
+            condominio_id = self.apartamento.condominio_id
+            if (
+                self.tabela_agua_utilizada_id
+                and self.tabela_agua_utilizada.condominio_id != condominio_id
+            ):
+                erros["tabela_agua_utilizada"] = (
+                    "A tabela deve pertencer ao condomínio da fatura."
+                )
+            if (
+                self.tarifa_gas_utilizada_id
+                and self.tarifa_gas_utilizada.condominio_id != condominio_id
+            ):
+                erros["tarifa_gas_utilizada"] = (
+                    "A tarifa deve pertencer ao condomínio da fatura."
+                )
+            if (
+                self.faixa_agua_utilizada_id
+                and self.tabela_agua_utilizada_id
+                and self.faixa_agua_utilizada.tabela_id
+                != self.tabela_agua_utilizada_id
+            ):
+                erros["faixa_agua_utilizada"] = (
+                    "A faixa deve pertencer à tabela utilizada."
+                )
         valores = (self.valor_agua, self.valor_gas, self.valor_total)
         if all(isinstance(valor, Decimal) for valor in valores):
             try:
@@ -553,7 +578,13 @@ class Fatura(models.Model):
                 self.leitura_agua_atual,
                 self.consumo_agua,
                 self.valor_agua,
-                calcular_agua,
+                lambda anterior, atual: calcular_agua(
+                    anterior,
+                    atual,
+                    self.mes,
+                    self.ano,
+                    condominio=self.apartamento.condominio,
+                ),
             ),
             (
                 "gas",

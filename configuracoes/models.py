@@ -12,6 +12,7 @@ from django.db import models
 from django.db.models import Q
 
 from .validators import formatar_cep, formatar_cnpj, validar_cnpj
+from condominios.models import obter_condominio_padrao_id
 
 
 CHAVE_CONFIGURACAO = 1
@@ -48,10 +49,15 @@ ESTADOS_BRASILEIROS = (
 
 
 class ConfiguracaoCondominio(models.Model):
+    condominio = models.OneToOneField(
+        "condominios.Condominio",
+        on_delete=models.CASCADE,
+        related_name="configuracao",
+        default=obter_condominio_padrao_id,
+    )
     chave = models.PositiveSmallIntegerField(
         default=CHAVE_CONFIGURACAO,
         editable=False,
-        unique=True,
     )
 
     nome = models.CharField(
@@ -302,10 +308,6 @@ class ConfiguracaoCondominio(models.Model):
         verbose_name_plural = "Configurações do condomínio"
         constraints = [
             models.CheckConstraint(
-                condition=models.Q(chave=CHAVE_CONFIGURACAO),
-                name="configuracao_condominio_registro_unico",
-            ),
-            models.CheckConstraint(
                 condition=models.Q(valor_m3_gas__gte=0),
                 name="configuracao_valor_gas_nao_negativo",
             ),
@@ -403,6 +405,7 @@ class RegraVigenciaMixin(models.Model):
                 {"data_fim_vigencia": "A data final não pode ser anterior à inicial."}
             )
         consulta = type(self).objects.exclude(pk=self.pk).filter(
+            condominio_id=self.condominio_id,
             data_inicio_vigencia__lte=(self.data_fim_vigencia or date.max)
         ).filter(
             Q(data_fim_vigencia__isnull=True)
@@ -415,6 +418,12 @@ class RegraVigenciaMixin(models.Model):
 
 
 class TabelaTarifariaAgua(RegraVigenciaMixin):
+    condominio = models.ForeignKey(
+        "condominios.Condominio",
+        on_delete=models.PROTECT,
+        related_name="tabelas_agua",
+        default=obter_condominio_padrao_id,
+    )
     nome = models.CharField(max_length=150)
 
     class Meta:
@@ -510,10 +519,16 @@ class FaixaTarifaAgua(models.Model):
     def save(self, *args, **kwargs):
         if self.tabela_id is None:
             from django.db.models import Q
+            from condominios.models import Condominio
             hoje = date.today()
+            condominio = Condominio.objects.order_by("id").first()
             self.tabela = (
                 TabelaTarifariaAgua.objects
-                .filter(ativa=True, data_inicio_vigencia__lte=hoje)
+                .filter(
+                    condominio=condominio,
+                    ativa=True,
+                    data_inicio_vigencia__lte=hoje,
+                )
                 .filter(
                     Q(data_fim_vigencia__isnull=True)
                     | Q(data_fim_vigencia__gte=hoje)
@@ -527,6 +542,12 @@ class FaixaTarifaAgua(models.Model):
 
 
 class TarifaGas(RegraVigenciaMixin):
+    condominio = models.ForeignKey(
+        "condominios.Condominio",
+        on_delete=models.PROTECT,
+        related_name="tarifas_gas",
+        default=obter_condominio_padrao_id,
+    )
     nome = models.CharField(max_length=150)
     valor_por_m3 = models.DecimalField(
         "Valor por m³",

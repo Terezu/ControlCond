@@ -89,6 +89,10 @@ class GerarFaturaForm(forms.Form):
     )
 
     def __init__(self, *args, **kwargs):
+        condominio = kwargs.pop("condominio", None)
+        if condominio is None:
+            from condominios.models import Condominio
+            condominio = Condominio.objects.order_by("id").first()
         super().__init__(*args, **kwargs)
         _aplicar_estilo_bootstrap(self.fields)
 
@@ -102,6 +106,7 @@ class GerarFaturaForm(forms.Form):
             .select_related("apartamento")
             .annotate(fatura_existente=Exists(fatura_do_periodo))
             .filter(
+                apartamento__condominio=condominio,
                 leitura_agua__isnull=False,
                 leitura_gas__isnull=False,
                 fatura_existente=False,
@@ -376,10 +381,15 @@ class FiltrarFaturasForm(forms.Form):
     )
 
     def __init__(self, *args, **kwargs):
+        condominio = kwargs.pop("condominio", None)
+        if condominio is None:
+            from condominios.models import Condominio
+            condominio = Condominio.objects.order_by("id").first()
         super().__init__(*args, **kwargs)
         _aplicar_estilo_bootstrap(self.fields)
 
         self.fields["apartamento"].queryset = (
             Apartamento.objects
+            .filter(condominio=condominio)
             .order_by("bloco", "numero", "id")
         )

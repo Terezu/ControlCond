@@ -129,6 +129,10 @@ class FiltrarLeiturasForm(forms.Form):
     )
 
     def __init__(self, *args, **kwargs):
+        condominio = kwargs.pop("condominio", None)
+        if condominio is None:
+            from condominios.models import Condominio
+            condominio = Condominio.objects.order_by("id").first()
         super().__init__(*args, **kwargs)
 
         for field in self.fields.values():
@@ -140,5 +144,7 @@ class FiltrarLeiturasForm(forms.Form):
             field.widget.attrs.update({"class": classe})
 
         self.fields["apartamento"].queryset = (
-            Apartamento.objects.order_by("bloco", "numero", "id")
+            Apartamento.objects.filter(
+                condominio=condominio
+            ).order_by("bloco", "numero", "id")
         )

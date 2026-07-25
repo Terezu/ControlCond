@@ -245,12 +245,14 @@ def _calcular_dados_da_leitura(leitura_atual):
         leitura_atual.leitura_agua,
         leitura_atual.mes,
         leitura_atual.ano,
+        condominio=apartamento.condominio,
     )
     resultado_gas = calcular_gas(
         leitura_gas_anterior,
         leitura_atual.leitura_gas,
         mes=leitura_atual.mes,
         ano=leitura_atual.ano,
+        condominio=apartamento.condominio,
     )
     return {
         "consumo_agua": resultado_agua["consumo"],
@@ -604,6 +606,23 @@ def consultar_fatura(fatura_id):
         raise ValueError("Fatura não encontrada.") from erro
 
 
+def consultar_fatura_no_condominio(condominio, fatura_id):
+    try:
+        return (
+            Fatura.objects
+            .select_related(
+                "apartamento", "leitura", "tabela_agua_utilizada",
+                "faixa_agua_utilizada", "tarifa_gas_utilizada",
+            )
+            .get(
+                id=fatura_id,
+                apartamento__condominio=condominio,
+            )
+        )
+    except Fatura.DoesNotExist as exc:
+        raise ValueError("Fatura não encontrada.") from exc
+
+
 def listar_faturas(
     *,
     apartamento_id=None,
@@ -637,6 +656,12 @@ def listar_faturas(
         queryset = queryset.filter(status=status)
 
     return queryset.order_by("-ano", "-mes", "-id")
+
+
+def listar_faturas_por_condominio(condominio, **filtros):
+    return listar_faturas(**filtros).filter(
+        apartamento__condominio=condominio
+    )
 
 
 def _consultar_fatura_para_atualizacao(fatura_id):
@@ -1132,6 +1157,45 @@ def executar_fechamento_mensal(mes, ano):
     return resultado
 
 
+def executar_fechamento_mensal_por_condominio(condominio, mes, ano):
+    """Versão isolada; mantém o wrapper global apenas durante a Sprint 1."""
+    if isinstance(mes, bool) or not isinstance(mes, int) or not 1 <= mes <= 12:
+        raise ValueError("O mês deve estar entre 1 e 12.")
+    if isinstance(ano, bool) or not isinstance(ano, int) or not 2000 <= ano <= ANO_MAXIMO:
+        raise ValueError("Informe um ano válido.")
+    # O algoritmo é idêntico ao legado, mas o universo é previamente limitado.
+    apartamentos = list(
+        Apartamento.objects.filter(condominio=condominio).order_by("id")
+    )
+    geradas = existentes = 0
+    sem_leitura = []
+    falhas = []
+    for apartamento in apartamentos:
+        leitura = Leitura.objects.filter(
+            apartamento=apartamento, mes=mes, ano=ano
+        ).order_by("id").first()
+        if leitura is None:
+            sem_leitura.append(apartamento)
+            continue
+        if Fatura.objects.filter(
+            apartamento=apartamento, mes=mes, ano=ano
+        ).exists():
+            existentes += 1
+            continue
+        try:
+            gerar_fatura_mensal(leitura.id)
+            geradas += 1
+        except (TarifaNaoConfiguradaError, ConsumoSemFaixaError) as exc:
+            falhas.append((apartamento, str(exc)))
+    return ResultadoFechamento(
+        apartamentos_analisados=len(apartamentos),
+        faturas_geradas=geradas,
+        faturas_existentes=existentes,
+        apartamentos_sem_leitura=tuple(sem_leitura),
+        falhas_tarifarias=tuple(falhas),
+    )
+
+
 def listar_faturas_para_download_mensal(mes, ano):
     if isinstance(mes, bool) or not isinstance(mes, int) or not 1 <= mes <= 12:
         raise ValueError("O mês deve estar entre 1 e 12.")
@@ -1153,4 +1217,10 @@ def listar_faturas_para_download_mensal(mes, ano):
             "apartamento_numero_emissao",
             "id",
         )
+    )
+
+
+def listar_faturas_download_por_condominio(condominio, mes, ano):
+    return listar_faturas_para_download_mensal(mes, ano).filter(
+        apartamento__condominio=condominio
     )

@@ -103,6 +103,7 @@ INSTALLED_APPS = [
     "leituras.apps.LeiturasConfig",
     "faturas.apps.FaturasConfig",
     "configuracoes.apps.ConfiguracoesConfig",
+    "condominios.apps.CondominiosConfig",
     "dashboard",
 ]
 

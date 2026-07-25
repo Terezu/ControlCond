@@ -81,13 +81,16 @@ def _limitar(queryset):
     )
 
 
-def obter_resumo_dashboard(mes, ano):
+def obter_resumo_dashboard(condominio, mes, ano):
     leituras_competencia = Q(leituras__mes=mes, leituras__ano=ano)
     faturas_competencia_apartamento = Q(
         faturas__mes=mes,
         faturas__ano=ano,
     )
-    apartamentos = Apartamento.objects.aggregate(
+    apartamentos_queryset = Apartamento.objects.filter(
+        condominio=condominio
+    )
+    apartamentos = apartamentos_queryset.aggregate(
         total=Count("id", distinct=True),
         com_leitura=Count(
             "id",
@@ -104,7 +107,9 @@ def obter_resumo_dashboard(mes, ano):
     apartamentos_com_leitura = apartamentos["com_leitura"]
     apartamentos_com_fatura = apartamentos["com_fatura"]
 
-    faturas = Fatura.objects.filter(mes=mes, ano=ano).aggregate(
+    faturas = Fatura.objects.filter(
+        apartamento__condominio=condominio, mes=mes, ano=ano
+    ).aggregate(
         pendentes=Count(
             "id",
             filter=Q(status=Fatura.Status.PENDENTE),
@@ -156,13 +161,13 @@ def obter_resumo_dashboard(mes, ano):
         ano=ano,
     )
     sem_leitura = (
-        Apartamento.objects
+        apartamentos_queryset
         .annotate(tem_leitura=Exists(leitura_periodo))
         .filter(tem_leitura=False)
         .order_by("bloco", "numero", "id")
     )
     sem_fatura = (
-        Apartamento.objects
+        apartamentos_queryset
         .annotate(
             tem_fatura=Exists(fatura_periodo),
             leitura_competencia_id=Subquery(
@@ -175,6 +180,7 @@ def obter_resumo_dashboard(mes, ano):
     pendentes = (
         Fatura.objects
         .filter(
+            apartamento__condominio=condominio,
             mes=mes,
             ano=ano,
             status=Fatura.Status.PENDENTE,

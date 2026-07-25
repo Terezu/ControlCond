@@ -68,7 +68,12 @@ def calcular_consumo_agua(leitura_anterior, leitura_atual):
     return _calcular_consumo(leitura_anterior, leitura_atual, "água")
 
 
-def calcular_valor_agua(consumo, mes=None, ano=None, *, tabela=None):
+def calcular_valor_agua(
+    consumo, mes=None, ano=None, *, tabela=None, condominio=None
+):
+    if condominio is None and tabela is None:
+        from condominios.models import Condominio
+        condominio = Condominio.objects.order_by("id").first()
     consumo_decimal = _decimal_finito(consumo, "O consumo de água")
     if consumo_decimal < 0:
         raise ValueError("O consumo de água não pode ser negativo.")
@@ -78,9 +83,9 @@ def calcular_valor_agua(consumo, mes=None, ano=None, *, tabela=None):
     consumo = int(consumo_decimal)
     if tabela is None:
         if mes is None or ano is None:
-            faixas = obter_faixas_agua_ativas()
+            faixas = obter_faixas_agua_ativas(condominio)
         else:
-            tabela = obter_tabela_agua_vigente(mes, ano)
+            tabela = obter_tabela_agua_vigente(condominio, mes, ano)
             faixas = tuple(
                 tabela.faixas.filter(ativa=True).order_by("ordem", "id")
             )
@@ -126,17 +131,19 @@ def calcular_valor_agua(consumo, mes=None, ano=None, *, tabela=None):
         ) from exc
 
 
-def calcular_agua(leitura_anterior, leitura_atual, mes=None, ano=None):
+def calcular_agua(
+    leitura_anterior, leitura_atual, mes=None, ano=None, *, condominio=None
+):
     consumo = calcular_consumo_agua(leitura_anterior, leitura_atual)
     tabela = (
-        obter_tabela_agua_vigente(mes, ano)
+        obter_tabela_agua_vigente(condominio, mes, ano)
         if mes is not None and ano is not None
         else None
     )
     faixas = (
         tuple(tabela.faixas.filter(ativa=True).order_by("ordem", "id"))
         if tabela is not None
-        else obter_faixas_agua_ativas()
+        else obter_faixas_agua_ativas(condominio)
     )
     faixa_aplicada = next(
         (
@@ -169,7 +176,11 @@ def calcular_valor_gas(
     *,
     mes=None,
     ano=None,
+    condominio=None,
 ):
+    if condominio is None and valor_m3_gas is None:
+        from condominios.models import Condominio
+        condominio = Condominio.objects.order_by("id").first()
     consumo = _decimal_finito(consumo_gas, "O consumo de gás")
     if consumo < 0:
         raise ValueError("O consumo de gás não pode ser negativo.")
@@ -177,7 +188,9 @@ def calcular_valor_gas(
         if mes is None or ano is None:
             hoje = date.today()
             mes, ano = hoje.month, hoje.year
-        valor_m3_gas = obter_tarifa_gas_vigente(mes, ano).valor_por_m3
+        valor_m3_gas = obter_tarifa_gas_vigente(
+            condominio, mes, ano
+        ).valor_por_m3
     valor_m3_gas = _decimal_finito(
         valor_m3_gas,
         "O valor do m³ do gás",
@@ -199,13 +212,17 @@ def calcular_gas(
     valor_m3_gas=None,
     mes=None,
     ano=None,
+    condominio=None,
 ):
+    if condominio is None and valor_m3_gas is None:
+        from condominios.models import Condominio
+        condominio = Condominio.objects.order_by("id").first()
     consumo = calcular_consumo_gas(leitura_anterior, leitura_atual)
     if valor_m3_gas is None:
         if mes is None or ano is None:
             hoje = date.today()
             mes, ano = hoje.month, hoje.year
-        tarifa = obter_tarifa_gas_vigente(mes, ano)
+        tarifa = obter_tarifa_gas_vigente(condominio, mes, ano)
     else:
         tarifa = None
     valor_unitario = tarifa.valor_por_m3 if tarifa else valor_m3_gas

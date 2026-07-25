@@ -4,6 +4,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models.functions import Coalesce, Lower, Trim
+from condominios.models import obter_condominio_padrao_id
 
 
 LIMITE_LEITURA = Decimal("999999.99")
@@ -11,6 +12,12 @@ LIMITE_VALOR_MONETARIO = Decimal("99999999.99")
 
 
 class Apartamento(models.Model):
+    condominio = models.ForeignKey(
+        "condominios.Condominio",
+        on_delete=models.PROTECT,
+        related_name="apartamentos",
+        default=obter_condominio_padrao_id,
+    )
     numero = models.CharField(max_length=20)
     bloco = models.CharField(max_length=50, blank=True, null=True)
     observacoes = models.TextField(blank=True, null=True)
@@ -90,9 +97,10 @@ class Apartamento(models.Model):
         ordering = ["bloco", "numero"]
         constraints = [
             models.UniqueConstraint(
+                models.F("condominio"),
                 Lower("numero"),
                 Coalesce(Lower("bloco"), models.Value("")),
-                name="apartamento_unico_por_numero_e_bloco",
+                name="apartamento_unico_por_condominio_numero_bloco",
                 violation_error_message=(
                     "Já existe um apartamento com este número e bloco."
                 ),

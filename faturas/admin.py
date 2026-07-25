@@ -5,9 +5,18 @@ from .models import Fatura, HistoricoStatusFatura
 
 @admin.register(Fatura)
 class FaturaAdmin(admin.ModelAdmin):
-    list_display = ("apartamento", "mes", "ano", "valor_total", "status")
-    list_filter = ("status", "ano", "mes")
-    search_fields = ("apartamento__numero", "apartamento__bloco")
+    list_display = (
+        "apartamento", "condominio", "mes", "ano", "valor_total", "status",
+    )
+    list_filter = ("apartamento__condominio", "status", "ano", "mes")
+    search_fields = (
+        "apartamento__numero", "apartamento__bloco",
+        "apartamento__condominio__nome",
+    )
+
+    @admin.display(ordering="apartamento__condominio")
+    def condominio(self, obj):
+        return obj.apartamento.condominio
     readonly_fields = (
         "apartamento",
         "leitura",

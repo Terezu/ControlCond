@@ -440,7 +440,9 @@ class ApresentacaoApartamentoTests(TestCase):
         self.assertContains(resposta, "Salvar apartamento")
         self.assertContains(resposta, reverse("apartamentos:lista"))
 
-    @patch("apartamentos.views.consultar_detalhes_apartamento")
+    @patch(
+        "apartamentos.views.consultar_detalhes_apartamento_no_condominio"
+    )
     def test_detalhes_exibe_secoes_e_estados_vazios(self, consultar):
         registros_vazios = SimpleNamespace(all=lambda: [])
         consultar.return_value = SimpleNamespace(

@@ -10,6 +10,9 @@ from .models import (
 
 @admin.register(ConfiguracaoCondominio)
 class ConfiguracaoCondominioAdmin(admin.ModelAdmin):
+    list_display = ("nome", "condominio", "atualizado_em")
+    list_filter = ("condominio",)
+    autocomplete_fields = ("condominio",)
     fieldsets = (
         (
             "Dados do condomínio",
@@ -92,7 +95,8 @@ class ConfiguracaoCondominioAdmin(admin.ModelAdmin):
     )
 
     def has_add_permission(self, request):
-        return not ConfiguracaoCondominio.objects.exists()
+        from condominios.models import Condominio
+        return Condominio.objects.filter(configuracao__isnull=True).exists()
 
     def has_delete_permission(self, request, obj=None):
         return False
@@ -120,9 +124,13 @@ class FaixaTarifaAguaAdmin(admin.ModelAdmin):
 
 @admin.register(TabelaTarifariaAgua)
 class TabelaTarifariaAguaAdmin(admin.ModelAdmin):
-    list_display = ("nome", "data_inicio_vigencia", "data_fim_vigencia", "ativa")
-    list_filter = ("ativa",)
-    search_fields = ("nome",)
+    list_display = (
+        "nome", "condominio", "data_inicio_vigencia",
+        "data_fim_vigencia", "ativa",
+    )
+    list_filter = ("condominio", "ativa")
+    search_fields = ("nome", "condominio__nome")
+    autocomplete_fields = ("condominio",)
     ordering = ("-data_inicio_vigencia",)
     inlines = (FaixaTarifaAguaInline,)
 
@@ -133,11 +141,12 @@ class TabelaTarifariaAguaAdmin(admin.ModelAdmin):
 @admin.register(TarifaGas)
 class TarifaGasAdmin(admin.ModelAdmin):
     list_display = (
-        "nome", "valor_por_m3", "data_inicio_vigencia",
+        "nome", "condominio", "valor_por_m3", "data_inicio_vigencia",
         "data_fim_vigencia", "ativa",
     )
-    list_filter = ("ativa",)
-    search_fields = ("nome",)
+    list_filter = ("condominio", "ativa")
+    search_fields = ("nome", "condominio__nome")
+    autocomplete_fields = ("condominio",)
     ordering = ("-data_inicio_vigencia",)
 
     def has_delete_permission(self, request, obj=None):

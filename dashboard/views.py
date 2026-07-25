@@ -8,6 +8,7 @@ from django.views.decorators.http import require_safe
 
 from .forms import FiltroCompetenciaDashboardForm
 from .services import obter_resumo_dashboard
+from condominios.services import obter_condominio_ativo
 
 
 CHAVE_SESSAO_COMPETENCIA = "dashboard_competencia"
@@ -38,6 +39,7 @@ def dashboard(request):
         competencia = competencia_salva
 
     resumo = obter_resumo_dashboard(
+        obter_condominio_ativo(request),
         competencia["mes"],
         competencia["ano"],
     )

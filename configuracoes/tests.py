@@ -8,6 +8,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
+from condominios.models import Condominio
 
 from .forms import ConfiguracaoCondominioForm
 from .admin import ConfiguracaoCondominioAdmin
@@ -19,14 +20,46 @@ from .models import (
     TarifaGas,
 )
 from .services import (
-    atualizar_configuracao,
-    obter_configuracao,
-    obter_configuracoes,
-    obter_faixas_agua_ativas,
-    obter_tabela_agua_vigente,
-    obter_tarifa_gas_vigente,
+    atualizar_configuracao as atualizar_configuracao_por_condominio,
+    obter_configuracao as obter_configuracao_por_condominio,
+    obter_configuracoes as obter_configuracoes_por_condominio,
+    obter_faixas_agua_ativas as obter_faixas_agua_ativas_por_condominio,
+    obter_tabela_agua_vigente as obter_tabela_agua_vigente_por_condominio,
+    obter_tarifa_gas_vigente as obter_tarifa_gas_vigente_por_condominio,
     validar_tabela_agua,
 )
+
+
+def obter_configuracao():
+    return obter_configuracao_por_condominio(Condominio.objects.get())
+
+
+def obter_configuracoes():
+    return obter_configuracoes_por_condominio(Condominio.objects.get())
+
+
+def atualizar_configuracao(dados):
+    return atualizar_configuracao_por_condominio(
+        Condominio.objects.get(), dados
+    )
+
+
+def obter_faixas_agua_ativas(*args):
+    return obter_faixas_agua_ativas_por_condominio(
+        Condominio.objects.get(), *args
+    )
+
+
+def obter_tabela_agua_vigente(mes, ano):
+    return obter_tabela_agua_vigente_por_condominio(
+        Condominio.objects.get(), mes, ano
+    )
+
+
+def obter_tarifa_gas_vigente(mes, ano):
+    return obter_tarifa_gas_vigente_por_condominio(
+        Condominio.objects.get(), mes, ano
+    )
 
 
 class TarifasConsumoTests(TestCase):

@@ -7,6 +7,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from apartamentos.models import Apartamento
+from condominios.models import Condominio
 from faturas.models import Fatura
 from leituras.models import Leitura
 
@@ -177,7 +178,7 @@ class DashboardResumoTests(TestCase):
         )
 
     def test_estado_vazio_retorna_zeros_e_decimais(self):
-        resumo = obter_resumo_dashboard(7, 2026)
+        resumo = obter_resumo_dashboard(Condominio.objects.get(), 7, 2026)
 
         self.assertEqual(resumo.total_apartamentos, 0)
         self.assertEqual(resumo.valor_faturado, Decimal("0.00"))
@@ -208,7 +209,7 @@ class DashboardResumoTests(TestCase):
             Decimal("300.30"),
         )
 
-        resumo = obter_resumo_dashboard(7, 2026)
+        resumo = obter_resumo_dashboard(Condominio.objects.get(), 7, 2026)
 
         self.assertEqual(resumo.total_apartamentos, 4)
         self.assertEqual(resumo.apartamentos_com_leitura, 2)
@@ -257,7 +258,7 @@ class DashboardResumoTests(TestCase):
             Decimal("3.03"),
         )
 
-        resumo = obter_resumo_dashboard(7, 2026)
+        resumo = obter_resumo_dashboard(Condominio.objects.get(), 7, 2026)
 
         self.assertEqual(resumo.taxa_pagamento, Decimal("66.7"))
         self.assertEqual(
@@ -285,7 +286,7 @@ class DashboardResumoTests(TestCase):
             apartamento_numero_emissao=apartamento.numero,
         )
 
-        resumo = obter_resumo_dashboard(7, 2026)
+        resumo = obter_resumo_dashboard(Condominio.objects.get(), 7, 2026)
 
         self.assertEqual(resumo.valor_faturado, Decimal("950.00"))
         self.assertEqual(resumo.valor_pendente, Decimal("950.00"))
@@ -294,7 +295,7 @@ class DashboardResumoTests(TestCase):
         for numero in range(1, 7):
             self.criar_apartamento(str(numero))
 
-        resumo = obter_resumo_dashboard(7, 2026)
+        resumo = obter_resumo_dashboard(Condominio.objects.get(), 7, 2026)
 
         self.assertEqual(len(resumo.lista_sem_leitura.itens), 5)
         self.assertTrue(resumo.lista_sem_leitura.tem_mais)
@@ -304,8 +305,8 @@ class DashboardResumoTests(TestCase):
     def test_service_executa_cinco_queries_de_dominio(self):
         self.criar_apartamento("101", com_leitura=True)
 
-        with self.assertNumQueries(5):
-            obter_resumo_dashboard(7, 2026)
+        with self.assertNumQueries(6):
+            obter_resumo_dashboard(Condominio.objects.get(), 7, 2026)
 
     def test_interface_exibe_cards_listas_links_e_moeda_brasileira(self):
         usuario = get_user_model().objects.create_user(
@@ -413,3 +414,4 @@ class DashboardResumoTests(TestCase):
 
         self.assertContains(resposta, "Nenhum apartamento cadastrado")
         self.assertContains(resposta, "R$ 0,00", count=4)
+

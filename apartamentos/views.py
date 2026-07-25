@@ -14,17 +14,21 @@ from .forms import ApartamentoForm, FiltrarApartamentosForm
 from .services import (
     cadastrar_apartamento,
     consultar_apartamento,
+    consultar_apartamento_no_condominio,
     consultar_detalhes_apartamento,
+    consultar_detalhes_apartamento_no_condominio,
     editar_apartamento,
     excluir_apartamento,
     ExclusaoApartamentoBloqueadaError,
     listar_apartamentos,
+    listar_apartamentos_por_condominio,
 )
+from condominios.services import obter_condominio_ativo
 
 logger = logging.getLogger(__name__)
 
 
-def _salvar_formulario(form, apartamento_id=None):
+def _salvar_formulario(form, apartamento_id=None, condominio=None):
     dados = form.cleaned_data
 
     argumentos = {
@@ -41,7 +45,7 @@ def _salvar_formulario(form, apartamento_id=None):
     }
 
     if apartamento_id is None:
-        return cadastrar_apartamento(**argumentos)
+        return cadastrar_apartamento(condominio=condominio, **argumentos)
 
     return editar_apartamento(
         apartamento_id,
@@ -77,11 +81,16 @@ def _redirecionar_para_next(request):
 @never_cache
 @require_http_methods(["GET", "POST"])
 def novo_apartamento(request):
-    form = ApartamentoForm(request.POST or None)
+    condominio = obter_condominio_ativo(request)
+    form = ApartamentoForm(
+        request.POST or None, condominio=condominio
+    )
 
     if request.method == "POST" and form.is_valid():
         try:
-            apartamento = _salvar_formulario(form)
+            apartamento = _salvar_formulario(
+                form, condominio=condominio
+            )
         except ValueError as exc:
             form.add_error(None, str(exc))
         else:
@@ -115,14 +124,18 @@ def novo_apartamento(request):
 @never_cache
 @require_http_methods(["GET", "POST"])
 def editar_dados_apartamento(request, apartamento_id):
+    condominio = obter_condominio_ativo(request)
     try:
-        apartamento = consultar_apartamento(apartamento_id)
+        apartamento = consultar_apartamento_no_condominio(
+            condominio, apartamento_id
+        )
     except ValueError as exc:
         raise Http404(str(exc)) from exc
 
     form = ApartamentoForm(
         request.POST or None,
         instance=apartamento,
+        condominio=condominio,
     )
 
     if request.method == "POST" and form.is_valid():
@@ -174,7 +187,12 @@ def lista_apartamentos(request):
             "bloco": form_filtros.cleaned_data["bloco"],
         }
 
-    paginator = Paginator(listar_apartamentos(**filtros), 10)
+    paginator = Paginator(
+        listar_apartamentos_por_condominio(
+            obter_condominio_ativo(request), **filtros
+        ),
+        10,
+    )
     pagina_apartamentos = paginator.get_page(request.GET.get("page"))
     parametros_filtros = request.GET.copy()
     parametros_filtros.pop("page", None)
@@ -196,8 +214,8 @@ def lista_apartamentos(request):
 @require_safe
 def detalhes_apartamento(request, apartamento_id):
     try:
-        apartamento = consultar_detalhes_apartamento(
-            apartamento_id
+        apartamento = consultar_detalhes_apartamento_no_condominio(
+            obter_condominio_ativo(request), apartamento_id
         )
     except ValueError as exc:
         raise Http404(str(exc)) from exc
@@ -222,7 +240,9 @@ def detalhes_apartamento(request, apartamento_id):
 @require_http_methods(["GET", "POST"])
 def confirmar_exclusao_apartamento(request, apartamento_id):
     try:
-        apartamento = consultar_detalhes_apartamento(apartamento_id)
+        apartamento = consultar_detalhes_apartamento_no_condominio(
+            obter_condominio_ativo(request), apartamento_id
+        )
     except ValueError as exc:
         raise Http404(str(exc)) from exc
 

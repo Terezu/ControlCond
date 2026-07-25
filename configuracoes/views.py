@@ -22,6 +22,7 @@ from .services import (
     obter_tarifa_gas_vigente,
     salvar_regra_vigencia,
 )
+from condominios.services import obter_condominio_ativo
 
 
 @staff_member_required
@@ -30,19 +31,26 @@ from .services import (
 def detalhes_configuracao(request):
     from django.utils import timezone
     hoje = timezone.localdate()
+    condominio = obter_condominio_ativo(request)
+    if condominio is None:
+        raise PermissionError("Nenhum condomínio ativo.")
     try:
-        tabela_agua = obter_tabela_agua_vigente(hoje.month, hoje.year)
+        tabela_agua = obter_tabela_agua_vigente(
+            condominio, hoje.month, hoje.year
+        )
     except ValueError:
         tabela_agua = None
     try:
-        tarifa_gas = obter_tarifa_gas_vigente(hoje.month, hoje.year)
+        tarifa_gas = obter_tarifa_gas_vigente(
+            condominio, hoje.month, hoje.year
+        )
     except ValueError:
         tarifa_gas = None
     return render(
         request,
         "configuracoes/detalhes.html",
         {
-            "configuracao": obter_configuracao(request=request),
+            "configuracao": obter_configuracao(condominio),
             "tabela_agua_vigente": tabela_agua,
             "tarifa_gas_vigente": tarifa_gas,
         },
@@ -53,7 +61,8 @@ def detalhes_configuracao(request):
 @never_cache
 @require_http_methods(["GET", "POST"])
 def editar_configuracao(request):
-    configuracao = obter_configuracao(request=request)
+    condominio = obter_condominio_ativo(request)
+    configuracao = obter_configuracao(condominio)
     form = ConfiguracaoCondominioForm(
         request.POST or None,
         request.FILES or None,
@@ -62,7 +71,7 @@ def editar_configuracao(request):
     if request.method == "POST" and form.is_valid():
         try:
             with transaction.atomic():
-                atualizar_configuracao(form.cleaned_data)
+                atualizar_configuracao(condominio, form.cleaned_data)
         except ValueError as exc:
             form.add_error(None, str(exc))
         else:
@@ -86,8 +95,11 @@ def editar_configuracao(request):
 @never_cache
 @require_safe
 def listar_tabelas_agua(request):
+    condominio = obter_condominio_ativo(request)
     return render(request, "configuracoes/tabelas_agua.html", {
-        "tabelas": TabelaTarifariaAgua.objects.prefetch_related("faixas"),
+        "tabelas": TabelaTarifariaAgua.objects.filter(
+            condominio=condominio
+        ).prefetch_related("faixas"),
     })
 
 
@@ -95,9 +107,12 @@ def listar_tabelas_agua(request):
 @never_cache
 @require_http_methods(["GET", "POST"])
 def editar_tabela_agua(request, tabela_id=None):
+    condominio = obter_condominio_ativo(request)
     tabela = (
-        get_object_or_404(TabelaTarifariaAgua, pk=tabela_id)
-        if tabela_id else TabelaTarifariaAgua()
+        get_object_or_404(
+            TabelaTarifariaAgua, pk=tabela_id, condominio=condominio
+        )
+        if tabela_id else TabelaTarifariaAgua(condominio=condominio)
     )
     bloqueada = bool(tabela.pk and tabela.foi_utilizada)
     if bloqueada and request.method == "POST":
@@ -129,8 +144,11 @@ def editar_tabela_agua(request, tabela_id=None):
 @never_cache
 @require_safe
 def detalhe_tabela_agua(request, tabela_id):
+    condominio = obter_condominio_ativo(request)
     tabela = get_object_or_404(
-        TabelaTarifariaAgua.objects.prefetch_related("faixas"), pk=tabela_id
+        TabelaTarifariaAgua.objects.prefetch_related("faixas"),
+        pk=tabela_id,
+        condominio=condominio,
     )
     return render(request, "configuracoes/tabela_agua_detalhe.html", {
         "tabela": tabela,
@@ -141,14 +159,18 @@ def detalhe_tabela_agua(request, tabela_id):
 @never_cache
 @require_http_methods(["GET", "POST"])
 def duplicar_tabela_agua(request, tabela_id):
+    condominio = obter_condominio_ativo(request)
     origem = get_object_or_404(
-        TabelaTarifariaAgua.objects.prefetch_related("faixas"), pk=tabela_id
+        TabelaTarifariaAgua.objects.prefetch_related("faixas"),
+        pk=tabela_id,
+        condominio=condominio,
     )
     form = DuplicarRegraForm(request.POST or None, initial={"nome": f"Cópia de {origem.nome}"})
     if request.method == "POST" and form.is_valid():
         try:
             with transaction.atomic():
                 nova = TabelaTarifariaAgua(
+                    condominio=condominio,
                     nome=form.cleaned_data["nome"],
                     data_inicio_vigencia=form.cleaned_data["data_inicio_vigencia"],
                     ativa=False,
@@ -172,8 +194,9 @@ def duplicar_tabela_agua(request, tabela_id):
 @never_cache
 @require_safe
 def listar_tarifas_gas(request):
+    condominio = obter_condominio_ativo(request)
     return render(request, "configuracoes/tarifas_gas.html", {
-        "tarifas": TarifaGas.objects.all(),
+        "tarifas": TarifaGas.objects.filter(condominio=condominio),
     })
 
 
@@ -181,7 +204,12 @@ def listar_tarifas_gas(request):
 @never_cache
 @require_http_methods(["GET", "POST"])
 def editar_tarifa_gas(request, tarifa_id=None):
-    tarifa = get_object_or_404(TarifaGas, pk=tarifa_id) if tarifa_id else TarifaGas()
+    condominio = obter_condominio_ativo(request)
+    tarifa = (
+        get_object_or_404(
+            TarifaGas, pk=tarifa_id, condominio=condominio
+        ) if tarifa_id else TarifaGas(condominio=condominio)
+    )
     if tarifa.pk and tarifa.foi_utilizada and request.method == "POST":
         messages.error(request, "Tarifas já utilizadas não podem ser alteradas.")
         return redirect("configuracoes:tarifas_gas")
@@ -203,7 +231,10 @@ def editar_tarifa_gas(request, tarifa_id=None):
 @never_cache
 @require_http_methods(["GET", "POST"])
 def duplicar_tarifa_gas(request, tarifa_id):
-    origem = get_object_or_404(TarifaGas, pk=tarifa_id)
+    condominio = obter_condominio_ativo(request)
+    origem = get_object_or_404(
+        TarifaGas, pk=tarifa_id, condominio=condominio
+    )
     form = DuplicarRegraForm(
         request.POST or None, initial={"nome": f"Cópia de {origem.nome}"}
     )
@@ -211,6 +242,7 @@ def duplicar_tarifa_gas(request, tarifa_id):
         try:
             nova = TarifaGas(
                 nome=form.cleaned_data["nome"],
+                condominio=condominio,
                 valor_por_m3=origem.valor_por_m3,
                 data_inicio_vigencia=form.cleaned_data["data_inicio_vigencia"],
                 ativa=False,
@@ -235,7 +267,9 @@ def encerrar_vigencia(request, tipo, regra_id):
     if modelo is None:
         from django.http import Http404
         raise Http404
-    regra = get_object_or_404(modelo, pk=regra_id)
+    regra = get_object_or_404(
+        modelo, pk=regra_id, condominio=obter_condominio_ativo(request)
+    )
     form = EncerrarVigenciaForm(request.POST)
     if form.is_valid():
         regra.data_fim_vigencia = form.cleaned_data["data_fim_vigencia"]

@@ -23,20 +23,25 @@ from .forms import (
 )
 from .models import Fatura
 from configuracoes.services import obter_configuracao
+from condominios.services import obter_condominio_ativo
 
 from .pdf import gerar_pdf_fatura_bytes
 from .services import (
     RegraNegocioFaturaError,
     cancelar_fatura,
     consultar_fatura,
+    consultar_fatura_no_condominio,
     consultar_valores_padrao_leitura,
     editar_fatura,
     excluir_fatura,
     executar_fechamento_mensal,
+    executar_fechamento_mensal_por_condominio,
     estornar_pagamento,
     gerar_fatura_mensal,
     listar_faturas,
+    listar_faturas_por_condominio,
     listar_faturas_para_download_mensal,
+    listar_faturas_download_por_condominio,
     marcar_fatura_como_paga,
     obter_contexto_geracao_fatura,
     reabrir_fatura,
@@ -49,7 +54,10 @@ logger = logging.getLogger(__name__)
 @never_cache
 @require_safe
 def lista_faturas(request):
-    form_filtros = FiltrarFaturasForm(request.GET or None)
+    condominio = obter_condominio_ativo(request)
+    form_filtros = FiltrarFaturasForm(
+        request.GET or None, condominio=condominio
+    )
 
     filtros = {}
 
@@ -71,7 +79,7 @@ def lista_faturas(request):
         if filtros["mes"] is not None:
             filtros["mes"] = int(filtros["mes"])
 
-    faturas = listar_faturas(**filtros)
+    faturas = listar_faturas_por_condominio(condominio, **filtros)
 
     paginator = Paginator(
         faturas,
@@ -104,7 +112,9 @@ def lista_faturas(request):
 @require_safe
 def detalhes_fatura(request, fatura_id):
     try:
-        fatura = consultar_fatura(fatura_id)
+        fatura = consultar_fatura_no_condominio(
+            obter_condominio_ativo(request), fatura_id
+        )
     except ValueError as erro:
         raise Http404(str(erro)) from erro
 
@@ -129,7 +139,9 @@ def detalhes_fatura(request, fatura_id):
 @require_http_methods(["GET", "POST"])
 def confirmar_exclusao_fatura(request, fatura_id):
     try:
-        fatura = consultar_fatura(fatura_id)
+        fatura = consultar_fatura_no_condominio(
+            obter_condominio_ativo(request), fatura_id
+        )
     except ValueError as exc:
         raise Http404(str(exc)) from exc
 
@@ -233,10 +245,11 @@ ACOES_STATUS = {
 }
 
 
-def _obter_fatura_acao(fatura_id):
+def _obter_fatura_acao(request, fatura_id):
     return get_object_or_404(
         Fatura.objects.select_related("apartamento", "leitura"),
         pk=fatura_id,
+        apartamento__condominio=obter_condominio_ativo(request),
     )
 
 
@@ -256,7 +269,7 @@ def _mensagem_formulario(form):
 
 
 def _confirmar_acao_status(request, fatura_id, acao):
-    fatura = _obter_fatura_acao(fatura_id)
+    fatura = _obter_fatura_acao(request, fatura_id)
     configuracao = ACOES_STATUS[acao]
     if fatura.status != configuracao["status_origem"]:
         messages.error(
@@ -282,7 +295,7 @@ def _confirmar_acao_status(request, fatura_id, acao):
 
 
 def _executar_acao_status(request, fatura_id, acao):
-    fatura = _obter_fatura_acao(fatura_id)
+    fatura = _obter_fatura_acao(request, fatura_id)
     configuracao = ACOES_STATUS[acao]
     motivo = None
     data_pagamento = None
@@ -367,12 +380,14 @@ confirmar_reabrir, reabrir = _criar_views_acao("reabrir")
 @never_cache
 @require_http_methods(["GET", "POST"])
 def fechamento_mensal(request):
+    condominio = obter_condominio_ativo(request)
     resultado = None
     periodo_download = None
     form = FechamentoMensalForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
         try:
-            resultado = executar_fechamento_mensal(
+            resultado = executar_fechamento_mensal_por_condominio(
+                condominio,
                 form.cleaned_data["mes"],
                 form.cleaned_data["ano"],
             )
@@ -382,7 +397,9 @@ def fechamento_mensal(request):
                 "mes": mes,
                 "ano": ano,
                 "total_faturas": (
-                    listar_faturas_para_download_mensal(mes, ano).count()
+                    listar_faturas_download_por_condominio(
+                        condominio, mes, ano
+                    ).count()
                 ),
             }
         except ValueError as erro:
@@ -425,8 +442,11 @@ def _nome_pdf_no_zip(fatura):
 @never_cache
 @require_safe
 def baixar_faturas_mes(request, ano, mes):
+    condominio = obter_condominio_ativo(request)
     try:
-        faturas = list(listar_faturas_para_download_mensal(mes, ano))
+        faturas = list(
+            listar_faturas_download_por_condominio(condominio, mes, ano)
+        )
     except ValueError as exc:
         raise Http404(str(exc)) from exc
     if not faturas:
@@ -434,7 +454,8 @@ def baixar_faturas_mes(request, ano, mes):
 
     destino = BytesIO()
     try:
-        configuracao = obter_configuracao()
+        condominio = obter_condominio_ativo(request)
+        configuracao = obter_configuracao(condominio)
         with ZipFile(destino, mode="w", compression=ZIP_DEFLATED) as arquivo_zip:
             for fatura in faturas:
                 arquivo_zip.writestr(
@@ -472,7 +493,9 @@ def baixar_faturas_mes(request, ano, mes):
 @require_http_methods(["POST"])
 def alterar_valores_fatura(request, fatura_id):
     try:
-        fatura = consultar_fatura(fatura_id)
+        fatura = consultar_fatura_no_condominio(
+            obter_condominio_ativo(request), fatura_id
+        )
     except ValueError as erro:
         raise Http404(str(erro)) from erro
 
@@ -529,6 +552,7 @@ def alterar_valores_fatura(request, fatura_id):
 @never_cache
 @require_http_methods(["GET", "POST"])
 def gerar_fatura(request):
+    condominio = obter_condominio_ativo(request)
     apartamento_sem_leitura_base = None
 
     if request.method == "POST":
@@ -550,7 +574,7 @@ def gerar_fatura(request):
                     fatura_id=fatura_existente.id,
                 )
 
-        form = GerarFaturaForm(request.POST)
+        form = GerarFaturaForm(request.POST, condominio=condominio)
 
         if form.is_valid():
             leitura = form.cleaned_data["leitura"]
@@ -648,9 +672,10 @@ def gerar_fatura(request):
                     "valor_outros": Decimal("0.00"),
                     "desconto": Decimal("0.00"),
                 },
+                condominio=condominio,
             )
         else:
-            form = GerarFaturaForm()
+            form = GerarFaturaForm(condominio=condominio)
 
     return render(
         request,
@@ -693,6 +718,7 @@ def baixar_pdf_fatura(request, fatura_id):
     fatura = get_object_or_404(
         Fatura.objects.select_related("apartamento", "leitura"),
         id=fatura_id,
+        apartamento__condominio=obter_condominio_ativo(request),
     )
     buffer = BytesIO(gerar_pdf_fatura_bytes(fatura))
 

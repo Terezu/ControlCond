@@ -15,21 +15,13 @@ from .validators import formatar_cep, formatar_cnpj
 
 
 @transaction.atomic
-def obter_configuracao(request=None):
-    if request is not None:
-        configuracao_em_memoria = getattr(
-            request,
-            "_configuracao_condominio",
-            None,
-        )
-        if configuracao_em_memoria is not None:
-            return configuracao_em_memoria
-
+def obter_configuracao(condominio):
+    if condominio is None:
+        raise ValueError("Informe o condomínio para recuperar as configurações.")
     configuracao, _ = ConfiguracaoCondominio.objects.get_or_create(
-        chave=CHAVE_CONFIGURACAO,
+        condominio=condominio,
+        defaults={"nome": condominio.nome},
     )
-    if request is not None:
-        request._configuracao_condominio = configuracao
     return configuracao
 
 
@@ -62,10 +54,13 @@ def _vigente_em(queryset, referencia):
     )
 
 
-def obter_tabela_agua_vigente(mes, ano):
+def obter_tabela_agua_vigente(condominio, mes, ano):
     referencia = data_referencia_tarifaria(mes, ano)
     tabela = (
-        _vigente_em(TabelaTarifariaAgua.objects, referencia)
+        _vigente_em(
+            TabelaTarifariaAgua.objects.filter(condominio=condominio),
+            referencia,
+        )
         .prefetch_related("faixas")
         .order_by("-data_inicio_vigencia", "-id")
         .first()
@@ -78,10 +73,13 @@ def obter_tabela_agua_vigente(mes, ano):
     return tabela
 
 
-def obter_tarifa_gas_vigente(mes, ano):
+def obter_tarifa_gas_vigente(condominio, mes, ano):
     referencia = data_referencia_tarifaria(mes, ano)
     tarifa = (
-        _vigente_em(TarifaGas.objects, referencia)
+        _vigente_em(
+            TarifaGas.objects.filter(condominio=condominio),
+            referencia,
+        )
         .order_by("-data_inicio_vigencia", "-id")
         .first()
     )
@@ -125,11 +123,16 @@ def validar_tabela_agua(tabela):
     return faixas
 
 
-def obter_faixas_agua_ativas(mes=None, ano=None):
+def obter_faixas_agua_ativas(condominio, mes=None, ano=None):
+    if condominio is None:
+        from condominios.models import Condominio
+        condominio = Condominio.objects.order_by("id").first()
     if mes is None or ano is None:
         hoje = date.today()
         mes, ano = hoje.month, hoje.year
-    return validar_tabela_agua(obter_tabela_agua_vigente(mes, ano))
+    return validar_tabela_agua(
+        obter_tabela_agua_vigente(condominio, mes, ano)
+    )
 
 
 @transaction.atomic
@@ -141,11 +144,14 @@ def salvar_regra_vigencia(instancia):
 
 
 @transaction.atomic
-def atualizar_configuracao(dados):
+def atualizar_configuracao(condominio, dados):
     configuracao, _ = (
         ConfiguracaoCondominio.objects
         .select_for_update()
-        .get_or_create(chave=CHAVE_CONFIGURACAO)
+        .get_or_create(
+            condominio=condominio,
+            defaults={"nome": condominio.nome},
+        )
     )
 
     campos_editaveis = {
@@ -182,13 +188,18 @@ def atualizar_configuracao(dados):
         ) from exc
 
     if "valor_m3_gas" in dados:
-        _sincronizar_tarifa_gas_legada(configuracao.valor_m3_gas)
+        _sincronizar_tarifa_gas_legada(
+            condominio, configuracao.valor_m3_gas
+        )
     return configuracao
 
 
-def _sincronizar_tarifa_gas_legada(valor):
+def _sincronizar_tarifa_gas_legada(condominio, valor):
     hoje = date.today()
-    vigente = _vigente_em(TarifaGas.objects.select_for_update(), hoje).first()
+    vigente = _vigente_em(
+        TarifaGas.objects.select_for_update().filter(condominio=condominio),
+        hoje,
+    ).first()
     if vigente and vigente.valor_por_m3 == valor:
         return vigente
     if vigente:
@@ -197,6 +208,7 @@ def _sincronizar_tarifa_gas_legada(valor):
         vigente.save(update_fields=["data_fim_vigencia", "atualizado_em"])
     tarifa = TarifaGas(
         nome=f"Tarifa de gás {hoje:%m/%Y}",
+        condominio=condominio,
         valor_por_m3=valor,
         data_inicio_vigencia=hoje,
         ativa=True,

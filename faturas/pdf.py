@@ -657,7 +657,9 @@ def desenhar_rodape(pdf, configuracao, largura):
 
 
 def gerar_pdf_fatura(fatura, destino, configuracao=None):
-    configuracao = configuracao or obter_configuracao()
+    configuracao = configuracao or obter_configuracao(
+        fatura.apartamento.condominio
+    )
     pdf = canvas.Canvas(destino, pagesize=A4)
     largura, altura = A4
 

@@ -10,6 +10,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods, require_safe
 
 from apartamentos.models import Apartamento
+from condominios.services import obter_condominio_ativo
 
 from .forms import FiltrarLeiturasForm, LeituraForm
 from .models import Leitura
@@ -27,7 +28,10 @@ logger = logging.getLogger(__name__)
 @never_cache
 @require_safe
 def lista_leituras(request):
-    form_filtros = FiltrarLeiturasForm(request.GET or None)
+    condominio = obter_condominio_ativo(request)
+    form_filtros = FiltrarLeiturasForm(
+        request.GET or None, condominio=condominio
+    )
     filtros = {}
 
     if form_filtros.is_valid():
@@ -40,7 +44,12 @@ def lista_leituras(request):
             "ano": form_filtros.cleaned_data["ano"],
         }
 
-    paginator = Paginator(listar_leituras(**filtros), 10)
+    paginator = Paginator(
+        listar_leituras(**filtros).filter(
+            apartamento__condominio=condominio
+        ),
+        10,
+    )
     pagina_leituras = paginator.get_page(request.GET.get("page"))
     parametros_filtros = request.GET.copy()
     parametros_filtros.pop("page", None)
@@ -64,6 +73,7 @@ def nova_leitura(request, apartamento_id):
     apartamento = get_object_or_404(
         Apartamento,
         pk=apartamento_id,
+        condominio=obter_condominio_ativo(request),
     )
 
     if request.method == "POST":
@@ -112,6 +122,7 @@ def confirmar_exclusao_leitura(request, leitura_id):
             "faturas"
         ),
         pk=leitura_id,
+        apartamento__condominio=obter_condominio_ativo(request),
     )
     fatura = leitura.faturas.first()
 

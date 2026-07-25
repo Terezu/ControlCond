@@ -27,6 +27,7 @@ def cadastrar_apartamento(
     valor_iptu=Decimal("0.00"),
     valor_bonificacao=Decimal("0.00"),
     dia_limite_bonificacao=None,
+    condominio=None,
 ):
     """Cria e retorna um apartamento."""
     numero = _normalizar_numero(numero)
@@ -44,7 +45,7 @@ def cadastrar_apartamento(
         leitura_base_gas,
     )
 
-    apartamento = Apartamento(
+    dados_apartamento = dict(
         numero=numero,
         bloco=bloco,
         observacoes=observacoes,
@@ -53,6 +54,9 @@ def cadastrar_apartamento(
         leitura_base_agua=leitura_base_agua,
         leitura_base_gas=leitura_base_gas,
     )
+    if condominio is not None:
+        dados_apartamento["condominio"] = condominio
+    apartamento = Apartamento(**dados_apartamento)
     _validar_modelo(apartamento)
     _salvar_apartamento(apartamento, force_insert=True)
     return apartamento
@@ -283,6 +287,46 @@ def listar_apartamentos(*, numero=None, bloco=None):
         apartamentos = apartamentos.filter(bloco__iexact=bloco.strip())
 
     return apartamentos.order_by("bloco", "numero", "id")
+
+
+def listar_apartamentos_por_condominio(
+    condominio, *, numero=None, bloco=None
+):
+    return listar_apartamentos(numero=numero, bloco=bloco).filter(
+        condominio=condominio
+    )
+
+
+def consultar_apartamento_no_condominio(condominio, apartamento_id):
+    try:
+        return Apartamento.objects.get(
+            pk=apartamento_id, condominio=condominio
+        )
+    except Apartamento.DoesNotExist as exc:
+        raise ValueError("Apartamento não encontrado.") from exc
+
+
+def consultar_detalhes_apartamento_no_condominio(
+    condominio, apartamento_id
+):
+    try:
+        return (
+            Apartamento.objects
+            .filter(condominio=condominio)
+            .prefetch_related(
+                Prefetch(
+                    "leituras",
+                    queryset=Leitura.objects.order_by("-ano", "-mes", "-id"),
+                ),
+                Prefetch(
+                    "faturas",
+                    queryset=Fatura.objects.order_by("-ano", "-mes", "-id"),
+                ),
+            )
+            .get(pk=apartamento_id)
+        )
+    except Apartamento.DoesNotExist as exc:
+        raise ValueError("Apartamento não encontrado.") from exc
 
 
 @transaction.atomic
