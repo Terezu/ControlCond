@@ -26,6 +26,7 @@ urlpatterns = [
     path('leituras/', include('leituras.urls')),
     path('faturas/', include('faturas.urls')),
     path('configuracoes/', include('configuracoes.urls')),
+    path('condominios/', include('condominios.urls')),
 ]
 
 if settings.DEBUG:

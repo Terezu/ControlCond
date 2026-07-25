@@ -59,6 +59,23 @@
             class="collapse navbar-collapse"
             id="menuPrincipal"
         >
+            {% if request.user.is_authenticated and condominio_ativo %}
+                <div class="navbar-text text-light-emphasis me-lg-3 py-2">
+                    <span class="small d-block">Condomínio ativo</span>
+                    {% if possui_multiplos_condominios %}
+                        <a
+                            href="{% url 'condominios:selecionar' %}?next={{ request.get_full_path|urlencode }}"
+                            class="link-light fw-semibold text-decoration-none"
+                            aria-label="Trocar condomínio ativo. Atual: {{ condominio_ativo.nome }}"
+                        >
+                            {{ condominio_ativo.nome }}
+                            <i class="bi bi-chevron-down ms-1" aria-hidden="true"></i>
+                        </a>
+                    {% else %}
+                        <span class="text-white fw-semibold">{{ condominio_ativo.nome }}</span>
+                    {% endif %}
+                </div>
+            {% endif %}
             <ul class="navbar-nav ms-auto">
                 <li class="nav-item">
                     <a
