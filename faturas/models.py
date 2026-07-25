@@ -574,7 +574,18 @@ class Fatura(models.Model):
                 erros[f"consumo_{campo_recurso}"] = (
                     f"O consumo de {recurso} não corresponde às leituras."
                 )
-            if valor != resultado["valor"]:
+            # A água usa tabela global versionável. Depois da emissão, seu
+            # valor persistido é o snapshot da tarifa daquele mês e não pode
+            # ser invalidado por alterações futuras nas faixas. Na criação,
+            # e sempre para o gás (que possui tarifa própria na fatura), a
+            # conferência financeira continua integral.
+            if (
+                valor != resultado["valor"]
+                and (
+                    campo_recurso == "gas"
+                    or self._state.adding
+                )
+            ):
                 erros[f"valor_{campo_recurso}"] = (
                     f"O valor de {recurso} não corresponde ao consumo."
                 )

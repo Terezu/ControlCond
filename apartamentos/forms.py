@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from django import forms
 
+from configuracoes.services import obter_configuracao
 from .models import (
     LIMITE_LEITURA,
     LIMITE_VALOR_MONETARIO,
@@ -82,6 +83,14 @@ class ApartamentoForm(forms.ModelForm):
 
         for field in self.fields.values():
             field.widget.attrs.update({"class": "form-control"})
+        if not self.is_bound and not getattr(self.instance, "pk", None):
+            configuracao = obter_configuracao()
+            self.fields["valor_bonificacao"].initial = (
+                configuracao.valor_bonificacao_padrao
+            )
+            self.fields["dia_limite_bonificacao"].initial = (
+                configuracao.dia_bonificacao_padrao
+            )
 
     def clean_valor_aluguel(self):
         return self.cleaned_data["valor_aluguel"] or Decimal("0.00")

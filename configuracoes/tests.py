@@ -1,14 +1,25 @@
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
+from django.contrib import admin
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
 
 from .forms import ConfiguracaoCondominioForm
-from .models import CHAVE_CONFIGURACAO, ConfiguracaoCondominio
-from .services import atualizar_configuracao, obter_configuracao
+from .admin import ConfiguracaoCondominioAdmin
+from .models import (
+    CHAVE_CONFIGURACAO,
+    ConfiguracaoCondominio,
+    FaixaTarifaAgua,
+)
+from .services import (
+    atualizar_configuracao,
+    obter_configuracao,
+    obter_configuracoes,
+    obter_faixas_agua_ativas,
+)
 
 
 class ConfiguracaoCondominioModelTests(TestCase):
@@ -35,6 +46,13 @@ class ConfiguracaoCondominioModelTests(TestCase):
 
 
 class ConfiguracaoCondominioServiceTests(TestCase):
+    def test_alias_plural_retorna_singleton_com_defaults_seguros(self):
+        ConfiguracaoCondominio.objects.all().delete()
+        configuracao = obter_configuracoes()
+        self.assertEqual(configuracao.nome, "ControlCond")
+        self.assertEqual(configuracao.moeda, "BRL")
+        self.assertEqual(configuracao.valor_m3_gas, Decimal("21.02"))
+
     def test_consulta_reutiliza_o_mesmo_registro(self):
         primeira = obter_configuracao()
         segunda = obter_configuracao()
@@ -68,14 +86,32 @@ class ConfiguracaoCondominioServiceTests(TestCase):
         self.assertEqual(configuracao.estado, "PR")
         self.assertEqual(configuracao.valor_m3_gas, Decimal("22.50"))
 
+    def test_migracao_preserva_tarifa_historica_da_agua(self):
+        faixas = obter_faixas_agua_ativas()
+        self.assertEqual(len(faixas), 6)
+        self.assertEqual(faixas[0].consumo_inicial, 0)
+        self.assertEqual(faixas[0].consumo_final, 5)
+        self.assertEqual(faixas[0].valor, Decimal("101.91"))
+        self.assertIsNone(faixas[-1].consumo_final)
+        self.assertEqual(faixas[-1].valor, Decimal("30.12"))
+
 
 class ConfiguracaoCondominioFormTests(TestCase):
     def test_formulario_normaliza_cnpj_e_cep(self):
         form = ConfiguracaoCondominioForm(
             data={
+                "nome": "ControlCond",
                 "cnpj": "04252011000110",
                 "cep": "80000000",
                 "valor_m3_gas": "21.02",
+                "cor_primaria": "#1F4E5F",
+                "cor_secundaria": "#64748B",
+                "cor_destaque": "#E8F1F4",
+                "moeda": "BRL",
+                "dias_vencimento_padrao": "10",
+                "percentual_multa_padrao": "0",
+                "percentual_juros_padrao": "0",
+                "valor_bonificacao_padrao": "0",
             }
         )
 
@@ -86,6 +122,7 @@ class ConfiguracaoCondominioFormTests(TestCase):
     def test_formulario_rejeita_cnpj_email_e_valor_invalidos(self):
         form = ConfiguracaoCondominioForm(
             data={
+                "nome": "ControlCond",
                 "cnpj": "11.111.111/1111-11",
                 "email": "email-invalido",
                 "valor_m3_gas": "-1",
@@ -104,7 +141,18 @@ class ConfiguracaoCondominioFormTests(TestCase):
             content_type="image/png",
         )
         form = ConfiguracaoCondominioForm(
-            data={"valor_m3_gas": "21.02"},
+            data={
+                "nome": "ControlCond",
+                "valor_m3_gas": "21.02",
+                "cor_primaria": "#1F4E5F",
+                "cor_secundaria": "#64748B",
+                "cor_destaque": "#E8F1F4",
+                "moeda": "BRL",
+                "dias_vencimento_padrao": "10",
+                "percentual_multa_padrao": "0",
+                "percentual_juros_padrao": "0",
+                "valor_bonificacao_padrao": "0",
+            },
             files={"logo": logo},
         )
 
@@ -156,6 +204,14 @@ class ConfiguracaoCondominioViewTests(TestCase):
             {
                 "nome": "Residencial Teste",
                 "valor_m3_gas": "23.40",
+                "cor_primaria": "#1F4E5F",
+                "cor_secundaria": "#64748B",
+                "cor_destaque": "#E8F1F4",
+                "moeda": "BRL",
+                "dias_vencimento_padrao": "10",
+                "percentual_multa_padrao": "0",
+                "percentual_juros_padrao": "0",
+                "valor_bonificacao_padrao": "0",
             },
         )
 
@@ -201,3 +257,17 @@ class ConfiguracaoCondominioViewTests(TestCase):
         self.assertIn("no-store", detalhes["Cache-Control"])
         self.assertEqual(resposta_post.status_code, 405)
         self.assertEqual(resposta_put.status_code, 405)
+
+
+class ConfiguracaoCondominioAdminTests(TestCase):
+    def test_admin_impede_segundo_registro(self):
+        model_admin = ConfiguracaoCondominioAdmin(
+            ConfiguracaoCondominio,
+            admin.site,
+        )
+        obter_configuracao()
+        self.assertFalse(model_admin.has_add_permission(None))
+        self.assertFalse(model_admin.has_delete_permission(None))
+
+    def test_faixas_estao_registradas_no_admin(self):
+        self.assertIn(FaixaTarifaAgua, admin.site._registry)

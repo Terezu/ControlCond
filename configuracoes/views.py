@@ -1,10 +1,12 @@
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
+from django.db import transaction
 from django.shortcuts import redirect, render
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods, require_safe
 
-from .forms import ConfiguracaoCondominioForm
+from .forms import ConfiguracaoCondominioForm, FaixaTarifaAguaFormSet
+from .models import FaixaTarifaAgua
 from .services import atualizar_configuracao, obter_configuracao
 
 
@@ -15,7 +17,10 @@ def detalhes_configuracao(request):
     return render(
         request,
         "configuracoes/detalhes.html",
-        {"configuracao": obter_configuracao(request=request)},
+        {
+            "configuracao": obter_configuracao(request=request),
+            "faixas_agua": FaixaTarifaAgua.objects.order_by("ordem", "id"),
+        },
     )
 
 
@@ -29,10 +34,26 @@ def editar_configuracao(request):
         request.FILES or None,
         instance=configuracao,
     )
+    formset_faixas = FaixaTarifaAguaFormSet(
+        (
+            request.POST
+            if request.method == "POST" and "agua-TOTAL_FORMS" in request.POST
+            else None
+        ),
+        queryset=FaixaTarifaAgua.objects.order_by("ordem", "id"),
+        prefix="agua",
+    )
 
-    if request.method == "POST" and form.is_valid():
+    if (
+        request.method == "POST"
+        and form.is_valid()
+        and (not formset_faixas.is_bound or formset_faixas.is_valid())
+    ):
         try:
-            atualizar_configuracao(form.cleaned_data)
+            with transaction.atomic():
+                atualizar_configuracao(form.cleaned_data)
+                if formset_faixas.is_bound:
+                    formset_faixas.save()
         except ValueError as exc:
             form.add_error(None, str(exc))
         else:
@@ -48,5 +69,6 @@ def editar_configuracao(request):
         {
             "configuracao": configuracao,
             "form": form,
+            "formset_faixas": formset_faixas,
         },
     )

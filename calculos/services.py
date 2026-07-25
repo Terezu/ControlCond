@@ -6,24 +6,7 @@ from decimal import (
     ROUND_HALF_UP,
 )
 
-
-# Tarifa residencial normal de água e esgoto de Curitiba, vigente desde
-# 17/05/2026. Fonte: https://www.sanepar.com.br/tarifas. O primeiro valor é a
-# cobrança total até 5 m³; os seguintes são valores por m³ em cada faixa.
-# Os números 5, 5, 5 e 10 não são os limites finais.
-# Eles representam quantos metros cúbicos cabem em cada faixa. None significa “sem limite”.
-TARIFA_AGUA_ATE_5_M3 = Decimal("101.91")
-FAIXAS_TARIFA_AGUA = (
-    (5, Decimal("3.15")),
-    (5, Decimal("17.56")),
-    (5, Decimal("17.65")),
-    (10, Decimal("17.80")),
-    (None, Decimal("30.12")),
-)
-# Padrão legado para chamadas matemáticas isoladas. No fluxo operacional,
-# faturas.services sempre informa a tarifa obtida de ConfiguracaoCondominio.
-VALOR_M3_GAS_PADRAO = Decimal("21.02")
-
+from configuracoes.services import obter_configuracao, obter_faixas_agua_ativas
 
 def _decimal_finito(valor, descricao):
     try:
@@ -87,18 +70,38 @@ def calcular_valor_agua(consumo):
         raise ValueError("O consumo de água deve ser um número inteiro.")
 
     consumo = int(consumo_decimal)
-    if consumo <= 5:
-        return TARIFA_AGUA_ATE_5_M3
+    faixas = obter_faixas_agua_ativas()
+    primeira = faixas[0]
+    if (
+        primeira.consumo_final is None
+        or consumo <= primeira.consumo_final
+    ):
+        return primeira.valor.quantize(
+            Decimal("0.01"),
+            rounding=ROUND_HALF_UP,
+        )
 
-    valor = TARIFA_AGUA_ATE_5_M3
-    restante = consumo - 5
+    valor = primeira.valor
     try:
-        for largura, tarifa_m3 in FAIXAS_TARIFA_AGUA:
-            quantidade = restante if largura is None else min(restante, largura)
-            valor += tarifa_m3 * quantidade
-            restante -= quantidade
-            if restante == 0:
+        for faixa in faixas[1:]:
+            if consumo < faixa.consumo_inicial:
                 break
+            final_aplicado = (
+                consumo
+                if faixa.consumo_final is None
+                else min(consumo, faixa.consumo_final)
+            )
+            quantidade = final_aplicado - faixa.consumo_inicial + 1
+            valor += faixa.valor * quantidade
+            if (
+                faixa.consumo_final is None
+                or consumo <= faixa.consumo_final
+            ):
+                break
+        else:
+            raise ValueError(
+                "A tabela de água não cobre o consumo informado."
+            )
         return valor.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     except DecimalException as exc:
         raise ValueError(
@@ -120,10 +123,12 @@ def calcular_consumo_gas(leitura_anterior, leitura_atual):
     return _calcular_consumo(leitura_anterior, leitura_atual, "gás")
 
 
-def calcular_valor_gas(consumo_gas, valor_m3_gas=VALOR_M3_GAS_PADRAO):
+def calcular_valor_gas(consumo_gas, valor_m3_gas=None):
     consumo = _decimal_finito(consumo_gas, "O consumo de gás")
     if consumo < 0:
         raise ValueError("O consumo de gás não pode ser negativo.")
+    if valor_m3_gas is None:
+        valor_m3_gas = obter_configuracao().valor_m3_gas
     valor_m3_gas = _decimal_finito(
         valor_m3_gas,
         "O valor do m³ do gás",
@@ -142,7 +147,7 @@ def calcular_valor_gas(consumo_gas, valor_m3_gas=VALOR_M3_GAS_PADRAO):
 def calcular_gas(
     leitura_anterior,
     leitura_atual,
-    valor_m3_gas=VALOR_M3_GAS_PADRAO,
+    valor_m3_gas=None,
 ):
     consumo = calcular_consumo_gas(leitura_anterior, leitura_atual)
     return {

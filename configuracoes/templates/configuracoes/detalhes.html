@@ -18,13 +18,21 @@
                             <p class="detail-label">Nome</p>
                             <p class="detail-value">{{ configuracao.nome|default:"Não informado" }}</p>
                         </div>
+                        {% if configuracao.razao_social %}
+                            <div class="col-12 col-md-8"><p class="detail-label">Razão social</p><p class="detail-value">{{ configuracao.razao_social }}</p></div>
+                        {% endif %}
                         <div class="col-12 col-md-4">
                             <p class="detail-label">CNPJ</p>
                             <p class="detail-value">{{ configuracao.cnpj|default:"Não informado" }}</p>
                         </div>
                         <div class="col-12">
                             <p class="detail-label">Endereço</p>
-                            <p class="detail-value">{{ configuracao.endereco|default:"Não informado" }}</p>
+                            <p class="detail-value">
+                                {{ configuracao.endereco|default:"Não informado" }}
+                                {{ configuracao.numero }}
+                                {{ configuracao.complemento }}
+                                {{ configuracao.bairro }}
+                            </p>
                         </div>
                         <div class="col-12 col-sm-4">
                             <p class="detail-label">CEP</p>
@@ -46,6 +54,8 @@
                             <p class="detail-label">E-mail</p>
                             <p class="detail-value">{{ configuracao.email|default:"Não informado" }}</p>
                         </div>
+                        {% if configuracao.celular %}<div class="col-12 col-md-6"><p class="detail-label">Celular</p><p class="detail-value">{{ configuracao.celular }}</p></div>{% endif %}
+                        {% if configuracao.website %}<div class="col-12 col-md-6"><p class="detail-label">Website</p><p class="detail-value">{{ configuracao.website }}</p></div>{% endif %}
                     </div>
                 </div>
             </section>
@@ -113,8 +123,13 @@
                     <p class="detail-label">Valor do m³ do gás</p>
                     <p class="fs-5 fw-semibold mb-0">R$ {{ configuracao.valor_m3_gas|floatformat:2 }}</p>
                     <p class="text-secondary small mt-3 mb-0">
-                        Valor preparado para integração futura com o cálculo das faturas.
+                        Este valor é copiado para cada fatura no momento da emissão.
                     </p>
+                    <hr>
+                    <p class="detail-label">Moeda</p>
+                    <p class="detail-value">{{ configuracao.moeda }}</p>
+                    <p class="detail-label">Prazo padrão</p>
+                    <p class="detail-value">{{ configuracao.dias_vencimento_padrao }} dias</p>
                 </div>
             </section>
         </div>
@@ -135,6 +150,52 @@
                     <p class="detail-value">{{ configuracao.texto_rodape|default:"Não informado"|linebreaksbr }}</p>
                 </div>
             </div>
+        </div>
+    </section>
+
+    <div class="row g-4 mt-1">
+        <div class="col-12 col-lg-6">
+            <section class="card shadow-sm h-100" aria-labelledby="titulo-pagamento">
+                <div class="card-header bg-light py-3"><h2 id="titulo-pagamento" class="h5 mb-0">Pagamento</h2></div>
+                <div class="card-body">
+                    <p class="detail-label">PIX</p><p class="detail-value">{{ configuracao.pix|default:"Não informado" }}</p>
+                    <p class="detail-label">Favorecido</p><p class="detail-value">{{ configuracao.favorecido_nome|default:"Não informado" }}</p>
+                    {% if configuracao.banco %}<p class="detail-label">Dados bancários</p><p class="detail-value">{{ configuracao.banco }} · Agência {{ configuracao.agencia }} · Conta {{ configuracao.conta }}</p>{% endif %}
+                    {% if configuracao.instrucoes_pagamento %}<p class="detail-label">Instruções</p><p class="detail-value">{{ configuracao.instrucoes_pagamento|linebreaksbr }}</p>{% endif %}
+                </div>
+            </section>
+        </div>
+        <div class="col-12 col-lg-6">
+            <section class="card shadow-sm h-100" aria-labelledby="titulo-dashboard">
+                <div class="card-header bg-light py-3"><h2 id="titulo-dashboard" class="h5 mb-0">Preferências do dashboard</h2></div>
+                <div class="card-body">
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item px-0">Gráfico financeiro: {{ configuracao.mostrar_grafico_financeiro|yesno:"Sim,Não" }}</li>
+                        <li class="list-group-item px-0">Últimos pagamentos: {{ configuracao.mostrar_ultimos_pagamentos|yesno:"Sim,Não" }}</li>
+                        <li class="list-group-item px-0">Últimos cadastros: {{ configuracao.mostrar_ultimos_cadastros|yesno:"Sim,Não" }}</li>
+                        <li class="list-group-item px-0">Resumo financeiro: {{ configuracao.mostrar_resumo_financeiro|yesno:"Sim,Não" }}</li>
+                    </ul>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <section class="card shadow-sm mt-4" aria-labelledby="titulo-faixas-agua">
+        <div class="card-header bg-light py-3"><h2 id="titulo-faixas-agua" class="h5 mb-0">Tabela da água</h2></div>
+        <div class="card-body p-0">
+            {% if faixas_agua %}
+                <div class="table-responsive"><table class="table table-hover align-middle mb-0">
+                    <thead><tr><th>Ordem</th><th>Consumo inicial</th><th>Consumo final</th><th>Valor</th><th>Status</th></tr></thead>
+                    <tbody>{% for faixa in faixas_agua %}<tr>
+                        <td>{{ faixa.ordem }}</td><td>{{ faixa.consumo_inicial }} m³</td>
+                        <td>{% if faixa.consumo_final == None %}Sem limite{% else %}{{ faixa.consumo_final }} m³{% endif %}</td>
+                        <td>R$ {{ faixa.valor|floatformat:2 }}</td>
+                        <td><span class="badge text-bg-{% if faixa.ativa %}success{% else %}secondary{% endif %}">{{ faixa.ativa|yesno:"Ativa,Inativa" }}</span></td>
+                    </tr>{% endfor %}</tbody>
+                </table></div>
+            {% else %}
+                <div class="alert alert-warning m-3 mb-3" role="alert">Nenhuma faixa cadastrada. A geração de faturas ficará bloqueada.</div>
+            {% endif %}
         </div>
     </section>
 {% endblock %}

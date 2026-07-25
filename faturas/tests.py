@@ -1,12 +1,14 @@
 from decimal import Decimal
 from datetime import date
 from io import BytesIO
+from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import patch
 from zipfile import ZipFile
 
 from django.contrib.auth import get_user_model
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
 from django.db import IntegrityError, transaction
@@ -16,6 +18,7 @@ from django.urls import reverse
 
 from apartamentos.models import Apartamento
 from configuracoes.services import atualizar_configuracao, obter_configuracao
+from configuracoes.models import FaixaTarifaAgua
 from leituras.models import Leitura
 
 from .forms import (
@@ -180,6 +183,32 @@ class ComponentesFinanceirosFaturaTests(TestCase):
         self.assertEqual(fatura.valor_iptu, Decimal("100.00"))
         self.assertEqual(fatura.valor_bonificacao, Decimal("80.00"))
         self.assertEqual(fatura.dia_limite_bonificacao, 10)
+
+    def test_tarifa_de_agua_nova_nao_invalida_fatura_emitida(self):
+        self.apartamento.leitura_base_agua = Decimal("0.00")
+        self.apartamento.leitura_base_gas = Decimal("0.00")
+        self.apartamento.save(
+            update_fields=["leitura_base_agua", "leitura_base_gas"]
+        )
+        leitura = Leitura.objects.create(
+            apartamento=self.apartamento,
+            mes=1,
+            ano=2028,
+            leitura_agua=Decimal("1.00"),
+            leitura_gas=Decimal("1.00"),
+        )
+        fatura = gerar_fatura_mensal(leitura.id)
+        valor_agua_emitido = fatura.valor_agua
+        FaixaTarifaAgua.objects.all().delete()
+        FaixaTarifaAgua.objects.create(
+            consumo_inicial=0,
+            consumo_final=None,
+            valor=Decimal("1.00"),
+            ordem=1,
+        )
+        editar_fatura(fatura.id, valor_aluguel=Decimal("1100.00"))
+        fatura.refresh_from_db()
+        self.assertEqual(fatura.valor_agua, valor_agua_emitido)
 
     def test_data_limite_usa_ultimo_dia_valido(self):
         fatura = self.criar_fatura(dia_limite_bonificacao=31)
@@ -1113,6 +1142,14 @@ class GerarFaturaMensalTests(TestCase):
                 "administradora_email": "admin@example.com",
                 "observacoes_padrao": "Pague até o vencimento.",
                 "texto_rodape": "Documento do condomínio.",
+                "pix": "financeiro@example.com",
+                "favorecido_nome": "Condomínio Teste",
+                "instrucoes_pagamento": "Envie o comprovante.",
+                "mensagem_cabecalho": "Cobrança mensal.",
+                "texto_juridico": "Documento sem valor fiscal.",
+                "cidade_assinatura": "Curitiba",
+                "responsavel_emissao": "João",
+                "cargo_responsavel": "Síndico",
                 "valor_m3_gas": Decimal("21.02"),
             }
         )
@@ -1153,6 +1190,12 @@ class GerarFaturaMensalTests(TestCase):
             "admin@example.com",
             "Pague até o vencimento.",
             "Documento do condomínio.",
+            "financeiro@example.com",
+            "Envie o comprovante.",
+            "Cobrança mensal.",
+            "Documento sem valor fiscal.",
+            "João",
+            "Síndico",
         ):
             with self.subTest(esperado=esperado):
                 self.assertIn(esperado, conteudo)
@@ -1193,6 +1236,33 @@ class GerarFaturaMensalTests(TestCase):
                 self.assertTrue(
                     destino_logo_invalida.read(4).startswith(b"%PDF")
                 )
+
+    def test_pdf_usa_logo_padrao_e_logo_personalizada(self):
+        configuracao = obter_configuracao()
+        configuracao.logo = None
+        fatura = Fatura.objects.create(
+            apartamento=self.apartamento,
+            mes=1,
+            ano=2026,
+            consumo_agua=0,
+            consumo_gas=0,
+            apartamento_numero_emissao=self.apartamento.numero,
+        )
+        with patch("faturas.pdf.canvas.Canvas") as canvas_mock:
+            canvas_mock.return_value.stringWidth.return_value = 0
+            gerar_pdf_fatura(fatura, BytesIO(), configuracao=configuracao)
+        self.assertTrue(canvas_mock.return_value.drawImage.called)
+
+        with TemporaryDirectory() as pasta, self.settings(MEDIA_ROOT=pasta):
+            configuracao.logo.save(
+                "personalizada.png",
+                ContentFile((Path(settings.BASE_DIR) / "Logo.png").read_bytes()),
+                save=True,
+            )
+            with patch("faturas.pdf.canvas.Canvas") as canvas_custom:
+                canvas_custom.return_value.stringWidth.return_value = 0
+                gerar_pdf_fatura(fatura, BytesIO(), configuracao=configuracao)
+            self.assertTrue(canvas_custom.return_value.drawImage.called)
 
     def test_banco_rejeita_total_diferente_da_soma(self):
         with self.assertRaises(IntegrityError), transaction.atomic():

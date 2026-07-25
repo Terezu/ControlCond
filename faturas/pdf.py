@@ -5,6 +5,7 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
+from django.conf import settings
 
 from configuracoes.services import obter_configuracao
 
@@ -92,10 +93,19 @@ def _quebrar_texto(pdf, texto, largura_maxima, fonte, tamanho):
 
 
 def _desenhar_logo(pdf, configuracao, largura, topo):
-    if not configuracao.logo:
+    caminho = None
+    if configuracao.logo:
+        try:
+            caminho = Path(configuracao.logo.path)
+        except (AttributeError, NotImplementedError, ValueError):
+            caminho = None
+    else:
+        caminho_padrao = Path(settings.BASE_DIR) / "Logo.png"
+        if caminho_padrao.is_file():
+            caminho = caminho_padrao
+    if caminho is None:
         return
     try:
-        caminho = Path(configuracao.logo.path)
         if not caminho.is_file():
             return
         pdf.drawImage(
@@ -174,13 +184,23 @@ def desenhar_cabecalho(pdf, fatura, configuracao, largura, topo):
 
     dados_institucionais = [
         f"CNPJ: {configuracao.cnpj}" if configuracao.cnpj else "",
-        _juntar_partes(configuracao.endereco, configuracao.cep),
+        _juntar_partes(
+            configuracao.endereco,
+            configuracao.numero,
+            configuracao.complemento,
+        ),
+        _juntar_partes(configuracao.bairro, configuracao.cep),
         _juntar_partes(
             configuracao.cidade,
             configuracao.estado,
             separador=" - ",
         ),
-        _juntar_partes(configuracao.telefone, configuracao.email),
+        _juntar_partes(
+            configuracao.telefone,
+            configuracao.celular,
+            configuracao.email,
+        ),
+        configuracao.mensagem_cabecalho,
     ]
     for dado in dados_institucionais:
         if not dado:
@@ -503,37 +523,76 @@ def desenhar_total(pdf, fatura, largura, y):
     return base - ESPACO_SECAO
 
 
-def desenhar_observacoes(pdf, configuracao, largura, altura, y):
-    if not configuracao.observacoes_padrao:
-        return y
-
+def desenhar_informacoes_complementares(pdf, configuracao, largura, altura, y):
     largura_texto = largura - (2 * MARGEM_HORIZONTAL)
-    linhas = _quebrar_texto(
-        pdf,
-        configuracao.observacoes_padrao,
-        largura_texto,
-        FONTE_REGULAR,
-        8,
+    pagamento = _juntar_partes(
+        f"PIX: {configuracao.pix}" if configuracao.pix else "",
+        (
+            f"Favorecido: {configuracao.favorecido_nome}"
+            if configuracao.favorecido_nome
+            else ""
+        ),
+        configuracao.favorecido_documento,
+        _juntar_partes(
+            configuracao.banco,
+            (
+                f"Agência {configuracao.agencia}"
+                if configuracao.agencia
+                else ""
+            ),
+            f"Conta {configuracao.conta}" if configuracao.conta else "",
+            configuracao.tipo_conta,
+        ),
+        configuracao.instrucoes_pagamento,
+        (
+            f"Código de barras: {configuracao.codigo_barras_padrao}"
+            if configuracao.codigo_barras_padrao
+            else ""
+        ),
     )
-    altura_necessaria = 23 + (len(linhas) * 11)
+    assinatura = _juntar_partes(
+        configuracao.cidade_assinatura,
+        configuracao.responsavel_emissao,
+        configuracao.cargo_responsavel,
+    )
+    blocos = (
+        ("COBRANÇA", configuracao.mensagem_cobranca_padrao),
+        (
+            "PAGAMENTO ANTECIPADO",
+            configuracao.mensagem_pagamento_antecipado,
+        ),
+        ("PAGAMENTO", pagamento),
+        ("OBSERVAÇÕES", configuracao.observacoes_padrao),
+        ("INFORMAÇÕES LEGAIS", configuracao.texto_juridico),
+        ("RESPONSÁVEL PELA EMISSÃO", assinatura),
+    )
     limite_rodape = MARGEM_INFERIOR + ALTURA_RODAPE
-
-    if y - altura_necessaria < limite_rodape:
-        pdf.showPage()
-        y = altura - MARGEM_SUPERIOR
-
-    pdf.setFillColor(COR_SECUNDARIA)
-    pdf.setFont(FONTE_DESTAQUE, 8)
-    pdf.drawString(MARGEM_HORIZONTAL, y, "OBSERVAÇÕES")
-    y -= 15
-    return _desenhar_linhas(
-        pdf,
-        linhas,
-        MARGEM_HORIZONTAL,
-        y,
-        tamanho=8,
-        entrelinha=11,
-    )
+    for titulo, texto in blocos:
+        if not texto:
+            continue
+        linhas = _quebrar_texto(
+            pdf,
+            texto,
+            largura_texto,
+            FONTE_REGULAR,
+            8,
+        )
+        altura_necessaria = 23 + (len(linhas) * 11)
+        if y - altura_necessaria < limite_rodape:
+            pdf.showPage()
+            y = altura - MARGEM_SUPERIOR
+        pdf.setFillColor(COR_SECUNDARIA)
+        pdf.setFont(FONTE_DESTAQUE, 8)
+        pdf.drawString(MARGEM_HORIZONTAL, y, titulo)
+        y = _desenhar_linhas(
+            pdf,
+            linhas,
+            MARGEM_HORIZONTAL,
+            y - 15,
+            tamanho=8,
+            entrelinha=11,
+        ) - 8
+    return y
 
 
 def desenhar_rodape(pdf, configuracao, largura):
@@ -559,7 +618,10 @@ def desenhar_rodape(pdf, configuracao, largura):
             )
         )
     else:
-        linhas.append("Documento gerado automaticamente pelo ControlCond.")
+        linhas.append(
+            configuracao.mensagem_institucional_rodape
+            or "Documento gerado automaticamente pelo ControlCond."
+        )
 
     administradora = _juntar_partes(
         configuracao.administradora_nome,
@@ -614,7 +676,13 @@ def gerar_pdf_fatura(fatura, destino, configuracao=None):
     y = desenhar_consumos(pdf, fatura, leituras, largura, y)
     y = desenhar_composicao_financeira(pdf, fatura, largura, y)
     y = desenhar_total(pdf, fatura, largura, y)
-    desenhar_observacoes(pdf, configuracao, largura, altura, y)
+    desenhar_informacoes_complementares(
+        pdf,
+        configuracao,
+        largura,
+        altura,
+        y,
+    )
     desenhar_rodape(pdf, configuracao, largura)
 
     pdf.showPage()

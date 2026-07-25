@@ -1,7 +1,8 @@
 from decimal import Decimal
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, TestCase
 
+from configuracoes.models import FaixaTarifaAgua
 from .services import (
     calcular_agua,
     calcular_consumo_agua,
@@ -84,7 +85,23 @@ class CalculosConsumoTests(SimpleTestCase):
                 calcular_consumo_agua(10, valor)
 
 
-class CalculosAguaTests(SimpleTestCase):
+class CalculosAguaTests(TestCase):
+    def test_falha_clara_sem_tabela_de_agua(self):
+        FaixaTarifaAgua.objects.all().delete()
+        with self.assertRaisesRegex(ValueError, "não está configurada"):
+            calcular_valor_agua(5)
+
+    def test_usa_tabela_persistida_personalizada(self):
+        FaixaTarifaAgua.objects.all().delete()
+        FaixaTarifaAgua.objects.create(
+            consumo_inicial=0,
+            consumo_final=None,
+            valor=Decimal("55.75"),
+            ordem=1,
+            ativa=True,
+        )
+        self.assertEqual(calcular_valor_agua(100), Decimal("55.75"))
+
     def test_valor_agua_para_consumo_zero(self):
         valor = calcular_valor_agua(0)
 
@@ -153,7 +170,7 @@ class CalculosAguaTests(SimpleTestCase):
             calcular_valor_agua(Decimal("1.5"))
 
 
-class CalculosGasTests(SimpleTestCase):
+class CalculosGasTests(TestCase):
     def test_valor_gas(self):
         valor = calcular_valor_gas(3)
 

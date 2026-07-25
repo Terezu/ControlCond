@@ -3,75 +3,137 @@
 {% block title %}Editar configurações | ControlCond{% endblock %}
 
 {% block content %}
-    {% include "components/page_header.html" with titulo="Editar configurações" subtitulo="Atualize os dados globais utilizados pelo ControlCond." %}
+    {% include "components/page_header.html" with titulo="Editar configurações" subtitulo="Centralize os dados globais utilizados pelo ControlCond." %}
 
     <form method="post" enctype="multipart/form-data" novalidate>
         {% csrf_token %}
+        {{ formset_faixas.management_form }}
 
-        {% if form.non_field_errors %}
+        {% if form.non_field_errors or formset_faixas.non_form_errors %}
             <div class="alert alert-danger" role="alert">
-                {% for error in form.non_field_errors %}
-                    <div>{{ error }}</div>
-                {% endfor %}
+                {{ form.non_field_errors }}
+                {{ formset_faixas.non_form_errors }}
             </div>
         {% endif %}
 
-        <section class="card shadow-sm mb-4" aria-labelledby="titulo-condominio">
-            <div class="card-header bg-light py-3">
-                <h2 id="titulo-condominio" class="h5 mb-0">Dados do condomínio</h2>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-12 col-lg-8">{% include "components/form_field.html" with field=form.nome %}</div>
-                    <div class="col-12 col-lg-4">{% include "components/form_field.html" with field=form.cnpj %}</div>
-                    <div class="col-12">{% include "components/form_field.html" with field=form.endereco %}</div>
-                    <div class="col-12 col-md-4">{% include "components/form_field.html" with field=form.cep %}</div>
-                    <div class="col-12 col-md-5">{% include "components/form_field.html" with field=form.cidade %}</div>
-                    <div class="col-12 col-md-3">{% include "components/form_field.html" with field=form.estado %}</div>
-                    <div class="col-12 col-md-6">{% include "components/form_field.html" with field=form.telefone %}</div>
-                    <div class="col-12 col-md-6">{% include "components/form_field.html" with field=form.email %}</div>
+        <div class="accordion shadow-sm" id="configuracoesAccordion">
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#dadosCondominio" aria-expanded="true" aria-controls="dadosCondominio">
+                        <i class="bi bi-buildings me-2" aria-hidden="true"></i>Dados do condomínio
+                    </button>
+                </h2>
+                <div id="dadosCondominio" class="accordion-collapse collapse show" data-bs-parent="#configuracoesAccordion">
+                    <div class="accordion-body"><div class="row">
+                        <div class="col-12 col-lg-8">{% include "components/form_field.html" with field=form.nome %}</div>
+                        <div class="col-12 col-lg-4">{% include "components/form_field.html" with field=form.cnpj %}</div>
+                        <div class="col-12 col-lg-6">{% include "components/form_field.html" with field=form.razao_social %}</div>
+                        <div class="col-12 col-lg-3">{% include "components/form_field.html" with field=form.nome_sindico %}</div>
+                        <div class="col-12 col-lg-3">{% include "components/form_field.html" with field=form.administrador %}</div>
+                        <div class="col-12 col-md-8">{% include "components/form_field.html" with field=form.endereco %}</div>
+                        <div class="col-12 col-md-4">{% include "components/form_field.html" with field=form.numero %}</div>
+                        <div class="col-12 col-md-6">{% include "components/form_field.html" with field=form.complemento %}</div>
+                        <div class="col-12 col-md-6">{% include "components/form_field.html" with field=form.bairro %}</div>
+                        <div class="col-12 col-md-3">{% include "components/form_field.html" with field=form.cep %}</div>
+                        <div class="col-12 col-md-4">{% include "components/form_field.html" with field=form.cidade %}</div>
+                        <div class="col-12 col-md-2">{% include "components/form_field.html" with field=form.estado %}</div>
+                        <div class="col-12 col-md-3">{% include "components/form_field.html" with field=form.pais %}</div>
+                        <div class="col-12 col-md-4">{% include "components/form_field.html" with field=form.telefone %}</div>
+                        <div class="col-12 col-md-4">{% include "components/form_field.html" with field=form.celular %}</div>
+                        <div class="col-12 col-md-4">{% include "components/form_field.html" with field=form.email %}</div>
+                        <div class="col-12 col-md-6">{% include "components/form_field.html" with field=form.website %}</div>
+                        <div class="col-12 col-md-6">{% include "components/form_field.html" with field=form.mensagem_institucional_rodape %}</div>
+                    </div></div>
                 </div>
             </div>
-        </section>
 
-        <section class="card shadow-sm mb-4" aria-labelledby="titulo-administradora">
-            <div class="card-header bg-light py-3">
-                <h2 id="titulo-administradora" class="h5 mb-0">Dados da administradora</h2>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-12 col-md-6">{% include "components/form_field.html" with field=form.administradora_nome %}</div>
-                    <div class="col-12 col-md-6">{% include "components/form_field.html" with field=form.administradora_responsavel %}</div>
-                    <div class="col-12 col-md-6">{% include "components/form_field.html" with field=form.administradora_telefone %}</div>
-                    <div class="col-12 col-md-6">{% include "components/form_field.html" with field=form.administradora_email %}</div>
-                </div>
-            </div>
-        </section>
-
-        <div class="row g-4">
-            <div class="col-12 col-lg-4">
-                <section class="card shadow-sm h-100" aria-labelledby="titulo-cobrancas">
-                    <div class="card-header bg-light py-3">
-                        <h2 id="titulo-cobrancas" class="h5 mb-0">Cobranças</h2>
-                    </div>
-                    <div class="card-body">
-                        {% include "components/form_field.html" with field=form.valor_m3_gas %}
-                        <p class="text-secondary small mb-0">A utilização deste valor nos cálculos será implementada em uma etapa futura.</p>
-                    </div>
-                </section>
+            <div class="accordion-item">
+                <h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#identidadeVisual" aria-expanded="false" aria-controls="identidadeVisual"><i class="bi bi-palette me-2" aria-hidden="true"></i>Identidade visual</button></h2>
+                <div id="identidadeVisual" class="accordion-collapse collapse" data-bs-parent="#configuracoesAccordion"><div class="accordion-body"><div class="row">
+                    <div class="col-12 col-lg-6">{% include "components/form_field.html" with field=form.logo %}</div>
+                    <div class="col-12 col-lg-6">{% include "components/form_field.html" with field=form.favicon %}</div>
+                    <div class="col-12 col-md-4">{% include "components/form_field.html" with field=form.cor_primaria %}</div>
+                    <div class="col-12 col-md-4">{% include "components/form_field.html" with field=form.cor_secundaria %}</div>
+                    <div class="col-12 col-md-4">{% include "components/form_field.html" with field=form.cor_destaque %}</div>
+                    <p class="text-secondary small mb-0">As cores ficam armazenadas para evolução futura do tema.</p>
+                </div></div></div>
             </div>
 
-            <div class="col-12 col-lg-8">
-                <section class="card shadow-sm h-100" aria-labelledby="titulo-pdf">
-                    <div class="card-header bg-light py-3">
-                        <h2 id="titulo-pdf" class="h5 mb-0">PDF</h2>
+            <div class="accordion-item">
+                <h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#financeiro" aria-expanded="false" aria-controls="financeiro"><i class="bi bi-cash-coin me-2" aria-hidden="true"></i>Financeiro</button></h2>
+                <div id="financeiro" class="accordion-collapse collapse" data-bs-parent="#configuracoesAccordion"><div class="accordion-body"><div class="row">
+                    <div class="col-12 col-md-4">{% include "components/form_field.html" with field=form.valor_m3_gas %}</div>
+                    <div class="col-12 col-md-4">{% include "components/form_field.html" with field=form.moeda %}</div>
+                    <div class="col-12 col-md-4">{% include "components/form_field.html" with field=form.dias_vencimento_padrao %}</div>
+                    <div class="col-12 col-md-6">{% include "components/form_field.html" with field=form.percentual_multa_padrao %}</div>
+                    <div class="col-12 col-md-6">{% include "components/form_field.html" with field=form.percentual_juros_padrao %}</div>
+                    <div class="col-12 col-md-6">{% include "components/form_field.html" with field=form.valor_bonificacao_padrao %}</div>
+                    <div class="col-12 col-md-6">{% include "components/form_field.html" with field=form.dia_bonificacao_padrao %}</div>
+                    <div class="col-12 col-md-6">{% include "components/form_field.html" with field=form.mensagem_cobranca_padrao %}</div>
+                    <div class="col-12 col-md-6">{% include "components/form_field.html" with field=form.mensagem_pagamento_antecipado %}</div>
+                </div></div></div>
+            </div>
+
+            <div class="accordion-item">
+                <h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#pagamento" aria-expanded="false" aria-controls="pagamento"><i class="bi bi-credit-card me-2" aria-hidden="true"></i>Pagamento</button></h2>
+                <div id="pagamento" class="accordion-collapse collapse" data-bs-parent="#configuracoesAccordion"><div class="accordion-body"><div class="row">
+                    <div class="col-12 col-md-6">{% include "components/form_field.html" with field=form.pix %}</div>
+                    <div class="col-12 col-md-6">{% include "components/form_field.html" with field=form.favorecido_nome %}</div>
+                    <div class="col-12 col-md-4">{% include "components/form_field.html" with field=form.favorecido_documento %}</div>
+                    <div class="col-12 col-md-4">{% include "components/form_field.html" with field=form.banco %}</div>
+                    <div class="col-12 col-md-4">{% include "components/form_field.html" with field=form.tipo_conta %}</div>
+                    <div class="col-12 col-md-4">{% include "components/form_field.html" with field=form.agencia %}</div>
+                    <div class="col-12 col-md-4">{% include "components/form_field.html" with field=form.conta %}</div>
+                    <div class="col-12 col-md-4">{% include "components/form_field.html" with field=form.codigo_barras_padrao %}</div>
+                    <div class="col-12">{% include "components/form_field.html" with field=form.instrucoes_pagamento %}</div>
+                </div></div></div>
+            </div>
+
+            <div class="accordion-item">
+                <h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#dadosPdf" aria-expanded="false" aria-controls="dadosPdf"><i class="bi bi-file-earmark-pdf me-2" aria-hidden="true"></i>PDF</button></h2>
+                <div id="dadosPdf" class="accordion-collapse collapse" data-bs-parent="#configuracoesAccordion"><div class="accordion-body"><div class="row">
+                    <div class="col-12 col-md-6">{% include "components/form_field.html" with field=form.mensagem_cabecalho %}</div>
+                    <div class="col-12 col-md-6">{% include "components/form_field.html" with field=form.observacoes_padrao %}</div>
+                    <div class="col-12 col-md-6">{% include "components/form_field.html" with field=form.texto_rodape %}</div>
+                    <div class="col-12 col-md-6">{% include "components/form_field.html" with field=form.texto_juridico %}</div>
+                    <div class="col-12 col-md-4">{% include "components/form_field.html" with field=form.cidade_assinatura %}</div>
+                    <div class="col-12 col-md-4">{% include "components/form_field.html" with field=form.responsavel_emissao %}</div>
+                    <div class="col-12 col-md-4">{% include "components/form_field.html" with field=form.cargo_responsavel %}</div>
+                </div></div></div>
+            </div>
+
+            <div class="accordion-item">
+                <h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#dashboardPreferencias" aria-expanded="false" aria-controls="dashboardPreferencias"><i class="bi bi-speedometer2 me-2" aria-hidden="true"></i>Dashboard</button></h2>
+                <div id="dashboardPreferencias" class="accordion-collapse collapse" data-bs-parent="#configuracoesAccordion"><div class="accordion-body">
+                    {% include "components/form_field.html" with field=form.mostrar_grafico_financeiro %}
+                    {% include "components/form_field.html" with field=form.mostrar_ultimos_pagamentos %}
+                    {% include "components/form_field.html" with field=form.mostrar_ultimos_cadastros %}
+                    {% include "components/form_field.html" with field=form.mostrar_resumo_financeiro %}
+                    <p class="text-secondary small mb-0">Preferências armazenadas para evolução futura do dashboard.</p>
+                </div></div>
+            </div>
+
+            <div class="accordion-item">
+                <h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#tabelaAgua" aria-expanded="false" aria-controls="tabelaAgua"><i class="bi bi-droplet me-2" aria-hidden="true"></i>Tabela da água</button></h2>
+                <div id="tabelaAgua" class="accordion-collapse collapse" data-bs-parent="#configuracoesAccordion"><div class="accordion-body">
+                    <p class="text-secondary small">A primeira faixa é a cobrança mínima fixa. Nas demais, o valor é cobrado por m³. Deixe o final vazio somente na última faixa.</p>
+                    <div class="vstack gap-3">
+                        {% for faixa_form in formset_faixas %}
+                            <div class="border rounded-3 p-3">
+                                {{ faixa_form.id }}
+                                <div class="row align-items-end">
+                                    <div class="col-6 col-md-2">{% include "components/form_field.html" with field=faixa_form.ordem %}</div>
+                                    <div class="col-6 col-md-2">{% include "components/form_field.html" with field=faixa_form.consumo_inicial %}</div>
+                                    <div class="col-6 col-md-2">{% include "components/form_field.html" with field=faixa_form.consumo_final %}</div>
+                                    <div class="col-6 col-md-2">{% include "components/form_field.html" with field=faixa_form.valor %}</div>
+                                    <div class="col-6 col-md-2">{% include "components/form_field.html" with field=faixa_form.ativa %}</div>
+                                    <div class="col-6 col-md-2">{% include "components/form_field.html" with field=faixa_form.DELETE %}</div>
+                                </div>
+                                {{ faixa_form.non_field_errors }}
+                            </div>
+                        {% endfor %}
                     </div>
-                    <div class="card-body">
-                        {% include "components/form_field.html" with field=form.logo %}
-                        {% include "components/form_field.html" with field=form.observacoes_padrao %}
-                        {% include "components/form_field.html" with field=form.texto_rodape %}
-                    </div>
-                </section>
+                </div></div>
             </div>
         </div>
 
