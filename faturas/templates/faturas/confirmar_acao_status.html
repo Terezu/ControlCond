@@ -19,7 +19,9 @@
             <form method="post" action="{% url url_acao fatura.id %}" novalidate>
                 {% csrf_token %}
                 {% if form %}
-                    {% include "components/form_field.html" with field=form.motivo %}
+                    {% for field in form %}
+                        {% include "components/form_field.html" with field=field %}
+                    {% endfor %}
                 {% endif %}
                 <div class="d-flex flex-column flex-sm-row justify-content-end gap-2">
                     <a class="btn btn-outline-secondary" href="{% url 'faturas:detalhes' fatura.id %}">Voltar</a>

@@ -25,6 +25,45 @@ class Apartamento(models.Model):
             MaxValueValidator(LIMITE_VALOR_MONETARIO),
         ],
     )
+    valor_condominio = models.DecimalField(
+        "Valor padrão do condomínio",
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        blank=True,
+        validators=[
+            MinValueValidator(Decimal("0")),
+            MaxValueValidator(LIMITE_VALOR_MONETARIO),
+        ],
+    )
+    valor_iptu = models.DecimalField(
+        "Valor padrão do IPTU",
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        blank=True,
+        validators=[
+            MinValueValidator(Decimal("0")),
+            MaxValueValidator(LIMITE_VALOR_MONETARIO),
+        ],
+    )
+    valor_bonificacao = models.DecimalField(
+        "Valor padrão da bonificação",
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        blank=True,
+        validators=[
+            MinValueValidator(Decimal("0")),
+            MaxValueValidator(LIMITE_VALOR_MONETARIO),
+        ],
+    )
+    dia_limite_bonificacao = models.PositiveSmallIntegerField(
+        "Dia limite padrão da bonificação",
+        blank=True,
+        null=True,
+        validators=[MinValueValidator(1), MaxValueValidator(31)],
+    )
 
     leitura_base_agua = models.DecimalField(
         max_digits=10,
@@ -67,6 +106,35 @@ class Apartamento(models.Model):
                     valor_aluguel__lte=LIMITE_VALOR_MONETARIO
                 ),
                 name="apartamento_aluguel_no_limite",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(valor_condominio__gte=0),
+                name="apartamento_condominio_nao_negativo",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(valor_iptu__gte=0),
+                name="apartamento_iptu_nao_negativo",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(valor_bonificacao__gte=0),
+                name="apartamento_bonificacao_nao_negativa",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(dia_limite_bonificacao__isnull=True)
+                    | models.Q(
+                        dia_limite_bonificacao__gte=1,
+                        dia_limite_bonificacao__lte=31,
+                    )
+                ),
+                name="apartamento_dia_bonificacao_valido",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(valor_bonificacao=0)
+                    | models.Q(dia_limite_bonificacao__isnull=False)
+                ),
+                name="apartamento_bonificacao_com_dia",
             ),
             models.CheckConstraint(
                 condition=(
@@ -143,6 +211,19 @@ class Apartamento(models.Model):
             self.bloco = self.bloco.strip() or None
         if isinstance(self.observacoes, str):
             self.observacoes = self.observacoes.strip() or None
+
+        if (
+            isinstance(self.valor_bonificacao, Decimal)
+            and self.valor_bonificacao > 0
+            and self.dia_limite_bonificacao is None
+        ):
+            raise ValidationError(
+                {
+                    "dia_limite_bonificacao": (
+                        "Informe o dia limite quando houver bonificação."
+                    )
+                }
+            )
 
         if not self.numero:
             raise ValidationError(

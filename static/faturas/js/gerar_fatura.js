@@ -5,14 +5,23 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     const leitura = formulario.querySelector("#id_leitura");
-    const aluguel = formulario.querySelector("#id_valor_aluguel");
-    if (!leitura || !aluguel) {
+    const camposPadrao = [
+        "valor_aluguel",
+        "valor_condominio",
+        "valor_iptu",
+        "valor_bonificacao",
+        "dia_limite_bonificacao",
+    ];
+    if (!leitura) {
         return;
     }
 
     leitura.addEventListener("change", async () => {
         if (!leitura.value) {
-            aluguel.value = "";
+            camposPadrao.forEach((nome) => {
+                const campo = formulario.querySelector(`#id_${nome}`);
+                if (campo) campo.value = "";
+            });
             return;
         }
 
@@ -31,9 +40,25 @@ document.addEventListener("DOMContentLoaded", () => {
                 return;
             }
             const dados = await resposta.json();
-            aluguel.value = dados.valor_aluguel;
+            camposPadrao.forEach((nome) => {
+                const campo = formulario.querySelector(`#id_${nome}`);
+                if (campo) campo.value = dados[nome] ?? "";
+            });
         } catch {
             // O servidor ainda aplicará o aluguel padrão se o campo ficar vazio.
         }
     });
+
+    const outros = formulario.querySelector("#id_valor_outros");
+    const grupoObservacao = formulario.querySelector(
+        "[data-campo-observacao-outros]",
+    );
+    if (outros && grupoObservacao) {
+        const atualizarObservacao = () => {
+            const valor = Number(String(outros.value).replace(",", "."));
+            grupoObservacao.hidden = !Number.isNaN(valor) && valor === 0;
+        };
+        outros.addEventListener("input", atualizarObservacao);
+        atualizarObservacao();
+    }
 });

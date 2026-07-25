@@ -18,6 +18,7 @@ from .forms import (
     FiltrarFaturasForm,
     GerarFaturaForm,
     MotivoAlteracaoStatusForm,
+    RegistrarPagamentoForm,
 )
 from .models import Fatura
 from .pdf import gerar_pdf_fatura
@@ -25,7 +26,7 @@ from .services import (
     RegraNegocioFaturaError,
     cancelar_fatura,
     consultar_fatura,
-    consultar_valor_aluguel_leitura,
+    consultar_valores_padrao_leitura,
     editar_fatura,
     excluir_fatura,
     executar_fechamento_mensal,
@@ -259,11 +260,12 @@ def _confirmar_acao_status(request, fatura_id, acao):
             "A ação solicitada não corresponde ao status atual da fatura.",
         )
         return _redirecionar_detalhes(fatura)
-    form = (
-        MotivoAlteracaoStatusForm(acao=acao)
-        if configuracao.get("exige_motivo")
-        else None
-    )
+    if acao == "marcar_como_paga":
+        form = RegistrarPagamentoForm()
+    elif configuracao.get("exige_motivo"):
+        form = MotivoAlteracaoStatusForm(acao=acao)
+    else:
+        form = None
     return render(
         request,
         "faturas/confirmar_acao_status.html",
@@ -279,7 +281,17 @@ def _executar_acao_status(request, fatura_id, acao):
     fatura = _obter_fatura_acao(fatura_id)
     configuracao = ACOES_STATUS[acao]
     motivo = None
-    if configuracao.get("exige_motivo"):
+    data_pagamento = None
+    if acao == "marcar_como_paga":
+        form = RegistrarPagamentoForm(request.POST)
+        if not form.is_valid():
+            messages.error(request, _mensagem_formulario(form))
+            return redirect(
+                "faturas:confirmar_marcar_como_paga",
+                fatura_id=fatura.id,
+            )
+        data_pagamento = form.cleaned_data["data_pagamento"]
+    elif configuracao.get("exige_motivo"):
         form = MotivoAlteracaoStatusForm(request.POST, acao=acao)
         if not form.is_valid():
             messages.error(request, _mensagem_formulario(form))
@@ -292,6 +304,8 @@ def _executar_acao_status(request, fatura_id, acao):
         argumentos = {"usuario": request.user}
         if configuracao.get("exige_motivo"):
             argumentos["motivo"] = motivo
+        if acao == "marcar_como_paga":
+            argumentos["data_pagamento"] = data_pagamento
         _, alterada = configuracao["service"](
             fatura.id,
             **argumentos,
@@ -406,11 +420,21 @@ def alterar_valores_fatura(request, fatura_id):
         return redirect("faturas:detalhes", fatura_id=fatura.id)
 
     try:
-        editar_fatura(
-            fatura.id,
-            valor_aluguel=form.cleaned_data["valor_aluguel"],
-            desconto=form.cleaned_data["desconto"],
-        )
+        argumentos = {
+            "valor_aluguel": form.cleaned_data["valor_aluguel"],
+            "desconto": form.cleaned_data["desconto"],
+        }
+        for campo in (
+            "valor_condominio",
+            "valor_iptu",
+            "valor_bonificacao",
+            "dia_limite_bonificacao",
+            "valor_outros",
+            "observacao_outros",
+        ):
+            if campo in request.POST:
+                argumentos[campo] = form.cleaned_data[campo]
+        editar_fatura(fatura.id, **argumentos)
     except (RegraNegocioFaturaError, ValueError) as erro:
         mensagem = (
             erro.messages[0]
@@ -460,6 +484,18 @@ def gerar_fatura(request):
                     leitura.id,
                     valor_aluguel=form.cleaned_data["valor_aluguel"],
                     desconto=form.cleaned_data["desconto"],
+                    valor_condominio=form.cleaned_data["valor_condominio"],
+                    valor_iptu=form.cleaned_data["valor_iptu"],
+                    valor_bonificacao=form.cleaned_data[
+                        "valor_bonificacao"
+                    ],
+                    dia_limite_bonificacao=form.cleaned_data[
+                        "dia_limite_bonificacao"
+                    ],
+                    valor_outros=form.cleaned_data["valor_outros"],
+                    observacao_outros=form.cleaned_data[
+                        "observacao_outros"
+                    ],
                 )
             except ValueError as erro:
                 try:
@@ -527,6 +563,13 @@ def gerar_fatura(request):
                 initial={
                     "leitura": leitura,
                     "valor_aluguel": leitura.apartamento.valor_aluguel,
+                    "valor_condominio": leitura.apartamento.valor_condominio,
+                    "valor_iptu": leitura.apartamento.valor_iptu,
+                    "valor_bonificacao": leitura.apartamento.valor_bonificacao,
+                    "dia_limite_bonificacao": (
+                        leitura.apartamento.dia_limite_bonificacao
+                    ),
+                    "valor_outros": Decimal("0.00"),
                     "desconto": Decimal("0.00"),
                 },
             )
@@ -550,14 +593,21 @@ def valor_aluguel_leitura(request):
     leitura_id = request.GET.get("leitura")
     try:
         leitura_id = int(leitura_id)
-        valor = consultar_valor_aluguel_leitura(leitura_id)
+        valores = consultar_valores_padrao_leitura(leitura_id)
     except (TypeError, ValueError):
         return JsonResponse(
             {"erro": "Leitura não encontrada."},
             status=404,
         )
     return JsonResponse(
-        {"valor_aluguel": format(valor, ".2f")}
+        {
+            chave: (
+                format(valor, ".2f")
+                if isinstance(valor, Decimal)
+                else valor
+            )
+            for chave, valor in valores.items()
+        }
     )
 
 @staff_member_required

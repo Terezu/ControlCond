@@ -29,21 +29,8 @@ class Migration(migrations.Migration):
         ("faturas", "0008_limitar_ano"),
     ]
 
-    operations = [
-        migrations.RunPython(
-            corrigir_valores_totais,
-            migrations.RunPython.noop,
-        ),
-        migrations.AddConstraint(
-            model_name="fatura",
-            constraint=models.CheckConstraint(
-                condition=models.Q(
-                    valor_total=Round(
-                        models.F("valor_agua") + models.F("valor_gas"),
-                        precision=2,
-                    )
-                ),
-                name="fatura_total_igual_a_soma",
-            ),
-        ),
-    ]
+    # Esta ramificação ficou órfã quando a composição financeira passou a
+    # incluir aluguel e desconto na migration paralela 0009. Executar o
+    # RunPython antigo em bancos existentes sobrescreveria totais válidos.
+    # A migration é mantida no grafo e reconciliada pela 0011, sem operações.
+    operations = []

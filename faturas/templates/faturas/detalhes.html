@@ -87,6 +87,14 @@
                     <p class="detail-value">R$ {{ fatura.valor_aluguel|floatformat:2 }}</p>
                 </div>
                 <div class="col-12 col-sm-6 col-lg-4">
+                    <p class="detail-label">Condomínio</p>
+                    <p class="detail-value">R$ {{ fatura.valor_condominio|floatformat:2 }}</p>
+                </div>
+                <div class="col-12 col-sm-6 col-lg-4">
+                    <p class="detail-label">IPTU</p>
+                    <p class="detail-value">R$ {{ fatura.valor_iptu|floatformat:2 }}</p>
+                </div>
+                <div class="col-12 col-sm-6 col-lg-4">
                     <p class="detail-label">Subtotal</p>
                     <p class="detail-value">R$ {{ fatura.subtotal|floatformat:2 }}</p>
                 </div>
@@ -94,11 +102,52 @@
                     <p class="detail-label">Desconto</p>
                     <p class="detail-value">- R$ {{ fatura.desconto|floatformat:2 }}</p>
                 </div>
+                {% if fatura.valor_outros %}
+                    <div class="col-12 col-sm-6 col-lg-4">
+                        <p class="detail-label">Outros</p>
+                        <p class="detail-value">R$ {{ fatura.valor_outros|floatformat:2 }}</p>
+                        <p class="small text-secondary mb-0">{{ fatura.observacao_outros }}</p>
+                    </div>
+                {% endif %}
                 <div class="col-12 col-sm-6 col-lg-4">
                     <p class="detail-label">Total a pagar</p>
                     <p class="fs-5 fw-semibold mb-0">R$ {{ fatura.valor_total|floatformat:2 }}</p>
                 </div>
             </div>
+            {% if fatura.valor_bonificacao %}
+                <hr>
+                <div class="row g-4">
+                    <div class="col-12 col-sm-4">
+                        <p class="detail-label">Bonificação</p>
+                        <p class="detail-value">R$ {{ fatura.valor_bonificacao|floatformat:2 }}</p>
+                    </div>
+                    <div class="col-12 col-sm-4">
+                        <p class="detail-label">Data limite</p>
+                        <p class="detail-value">{{ fatura.data_limite_bonificacao|date:"d/m/Y" }}</p>
+                    </div>
+                    <div class="col-12 col-sm-4">
+                        <p class="detail-label">Valor antecipado</p>
+                        <p class="detail-value">R$ {{ fatura.valor_com_bonificacao|floatformat:2 }}</p>
+                    </div>
+                </div>
+            {% endif %}
+            {% if fatura.status == "paga" and fatura.data_pagamento %}
+                <hr>
+                <div class="row g-4">
+                    <div class="col-12 col-sm-4">
+                        <p class="detail-label">Data do pagamento</p>
+                        <p class="detail-value">{{ fatura.data_pagamento|date:"d/m/Y" }}</p>
+                    </div>
+                    <div class="col-12 col-sm-4">
+                        <p class="detail-label">Bonificação aplicada</p>
+                        <p class="detail-value">{{ fatura.bonificacao_aplicada|yesno:"Sim,Não" }}</p>
+                    </div>
+                    <div class="col-12 col-sm-4">
+                        <p class="detail-label">Valor pago</p>
+                        <p class="detail-value">R$ {{ fatura.valor_pago|floatformat:2 }}</p>
+                    </div>
+                </div>
+            {% endif %}
         </div>
     </section>
 
@@ -111,13 +160,31 @@
                 <form method="post" action="{% url 'faturas:alterar_valores' fatura.id %}" novalidate>
                     {% csrf_token %}
                     <div class="row align-items-end">
-                        <div class="col-12 col-md-5">
+                        <div class="col-12 col-md-4">
                             {% include "components/form_field.html" with field=form_valores.valor_aluguel %}
                         </div>
-                        <div class="col-12 col-md-5">
+                        <div class="col-12 col-md-4">
+                            {% include "components/form_field.html" with field=form_valores.valor_condominio %}
+                        </div>
+                        <div class="col-12 col-md-4">
+                            {% include "components/form_field.html" with field=form_valores.valor_iptu %}
+                        </div>
+                        <div class="col-12 col-md-4">
                             {% include "components/form_field.html" with field=form_valores.desconto %}
                         </div>
-                        <div class="col-12 col-md-2 mb-3">
+                        <div class="col-12 col-md-4">
+                            {% include "components/form_field.html" with field=form_valores.valor_outros %}
+                        </div>
+                        <div class="col-12 col-md-8">
+                            {% include "components/form_field.html" with field=form_valores.observacao_outros %}
+                        </div>
+                        <div class="col-12 col-md-4">
+                            {% include "components/form_field.html" with field=form_valores.valor_bonificacao %}
+                        </div>
+                        <div class="col-12 col-md-4">
+                            {% include "components/form_field.html" with field=form_valores.dia_limite_bonificacao %}
+                        </div>
+                        <div class="col-12 col-md-4 mb-3">
                             <button type="submit" class="btn btn-primary w-100">Salvar</button>
                         </div>
                     </div>

@@ -18,6 +18,8 @@ class FaturaAdmin(admin.ModelAdmin):
         "valor_agua",
         "valor_gas",
         "valor_total",
+        "valor_pago",
+        "bonificacao_aplicada",
         "data_geracao",
         "data_emissao",
         "data_pagamento",
@@ -33,7 +35,18 @@ class FaturaAdmin(admin.ModelAdmin):
     def get_readonly_fields(self, request, obj=None):
         campos = self.readonly_fields
         if obj is not None and obj.status != Fatura.Status.PENDENTE:
-            return (*campos, "valor_aluguel", "desconto", "status")
+            return (
+                *campos,
+                "valor_aluguel",
+                "valor_condominio",
+                "valor_iptu",
+                "valor_outros",
+                "observacao_outros",
+                "desconto",
+                "valor_bonificacao",
+                "dia_limite_bonificacao",
+                "status",
+            )
         return campos
 
     def has_add_permission(self, request):

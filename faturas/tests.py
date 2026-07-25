@@ -1,4 +1,5 @@
 from decimal import Decimal
+from datetime import date
 from io import BytesIO
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
@@ -35,6 +36,149 @@ from .services import (
     marcar_fatura_como_paga,
     reabrir_fatura,
 )
+
+
+class ComponentesFinanceirosFaturaTests(TestCase):
+    def setUp(self):
+        self.apartamento = Apartamento.objects.create(
+            numero="FIN-1",
+            valor_aluguel=Decimal("1000.00"),
+            valor_condominio=Decimal("300.00"),
+            valor_iptu=Decimal("100.00"),
+            valor_bonificacao=Decimal("80.00"),
+            dia_limite_bonificacao=10,
+        )
+
+    def criar_fatura(self, **kwargs):
+        dados = {
+            "apartamento_id": self.apartamento.id,
+            "mes": 2,
+            "ano": 2028,
+            "consumo_agua": 0,
+            "consumo_gas": 0,
+            "valor_agua": Decimal("0.00"),
+            "valor_gas": Decimal("0.00"),
+        }
+        dados.update(kwargs)
+        return cadastrar_fatura(**dados)
+
+    def test_gera_com_condominio_iptu_desconto_e_outros_positivo(self):
+        fatura = self.criar_fatura(
+            desconto=Decimal("50.00"),
+            valor_outros=Decimal("80.00"),
+            observacao_outros="Controle adicional do portão",
+        )
+        self.assertEqual(fatura.valor_total, Decimal("1430.00"))
+        self.assertEqual(fatura.valor_com_bonificacao, Decimal("1350.00"))
+
+    def test_outros_negativo_reduz_total(self):
+        fatura = self.criar_fatura(
+            valor_outros=Decimal("-250.00"),
+            observacao_outros="Reparo hidráulico pago pelo condômino",
+        )
+        self.assertEqual(fatura.valor_total, Decimal("1150.00"))
+
+    def test_outros_exige_observacao_mas_zero_permite_vazio(self):
+        with self.assertRaisesRegex(ValueError, "observação"):
+            self.criar_fatura(valor_outros=Decimal("1.00"))
+        fatura = self.criar_fatura(valor_outros=Decimal("0.00"))
+        self.assertEqual(fatura.observacao_outros, "")
+
+    def test_rejeita_componentes_nao_negativos_invalidos(self):
+        for campo in (
+            "valor_condominio",
+            "valor_iptu",
+            "valor_bonificacao",
+        ):
+            with self.subTest(campo=campo), self.assertRaisesRegex(
+                ValueError,
+                "negativo",
+            ):
+                self.criar_fatura(**{campo: Decimal("-0.01")})
+
+    def test_rejeita_bonificacao_sem_dia_e_acima_do_total(self):
+        self.apartamento.dia_limite_bonificacao = None
+        self.apartamento.valor_bonificacao = Decimal("0.00")
+        self.apartamento.save(
+            update_fields=["dia_limite_bonificacao", "valor_bonificacao"]
+        )
+        with self.assertRaisesRegex(ValueError, "dia limite"):
+            self.criar_fatura(valor_bonificacao=Decimal("10.00"))
+        with self.assertRaisesRegex(ValueError, "bonificação"):
+            self.criar_fatura(
+                valor_bonificacao=Decimal("2000.00"),
+                dia_limite_bonificacao=10,
+            )
+
+    def test_rejeita_total_normal_negativo(self):
+        with self.assertRaisesRegex(ValueError, "desconto"):
+            self.criar_fatura(
+                valor_condominio=Decimal("0.00"),
+                valor_iptu=Decimal("0.00"),
+                valor_bonificacao=Decimal("0.00"),
+                valor_outros=Decimal("-1001.00"),
+                observacao_outros="Abatimento",
+            )
+
+    def test_pagamento_antes_no_limite_e_depois(self):
+        for dia, aplicada, pago in (
+            (9, True, Decimal("1320.00")),
+            (10, True, Decimal("1320.00")),
+            (11, False, Decimal("1400.00")),
+        ):
+            with self.subTest(dia=dia):
+                fatura = self.criar_fatura()
+                marcar_fatura_como_paga(
+                    fatura.id,
+                    data_pagamento=date(2028, 2, dia),
+                )
+                fatura.refresh_from_db()
+                self.assertEqual(fatura.bonificacao_aplicada, aplicada)
+                self.assertEqual(fatura.valor_pago, pago)
+                fatura.delete()
+
+    def test_pagamento_sem_bonificacao_usa_total(self):
+        fatura = self.criar_fatura(
+            valor_bonificacao=Decimal("0.00"),
+            dia_limite_bonificacao=None,
+        )
+        marcar_fatura_como_paga(
+            fatura.id,
+            data_pagamento=date(2028, 2, 1),
+        )
+        fatura.refresh_from_db()
+        self.assertFalse(fatura.bonificacao_aplicada)
+        self.assertEqual(fatura.valor_pago, fatura.valor_total)
+
+    def test_snapshot_nao_muda_e_excecao_mensal_e_editavel(self):
+        fatura = self.criar_fatura(valor_condominio=Decimal("275.00"))
+        self.apartamento.valor_condominio = Decimal("999.00")
+        self.apartamento.save(update_fields=["valor_condominio"])
+        fatura.refresh_from_db()
+        self.assertEqual(fatura.valor_condominio, Decimal("275.00"))
+
+    def test_geracao_mensal_copia_padroes_do_apartamento(self):
+        self.apartamento.leitura_base_agua = Decimal("0.00")
+        self.apartamento.leitura_base_gas = Decimal("0.00")
+        self.apartamento.save(
+            update_fields=["leitura_base_agua", "leitura_base_gas"]
+        )
+        leitura = Leitura.objects.create(
+            apartamento=self.apartamento,
+            mes=1,
+            ano=2028,
+            leitura_agua=Decimal("1.00"),
+            leitura_gas=Decimal("1.00"),
+        )
+        fatura = gerar_fatura_mensal(leitura.id)
+        self.assertEqual(fatura.valor_condominio, Decimal("300.00"))
+        self.assertEqual(fatura.valor_iptu, Decimal("100.00"))
+        self.assertEqual(fatura.valor_bonificacao, Decimal("80.00"))
+        self.assertEqual(fatura.dia_limite_bonificacao, 10)
+
+    def test_data_limite_usa_ultimo_dia_valido(self):
+        fatura = self.criar_fatura(dia_limite_bonificacao=31)
+        self.assertEqual(fatura.data_limite_bonificacao, date(2028, 2, 29))
 
 
 class ExclusaoFaturaTests(TestCase):

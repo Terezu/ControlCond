@@ -23,12 +23,22 @@ def cadastrar_apartamento(
     bloco=None,
     observacoes=None,
     valor_aluguel=Decimal("0.00"),
+    valor_condominio=Decimal("0.00"),
+    valor_iptu=Decimal("0.00"),
+    valor_bonificacao=Decimal("0.00"),
+    dia_limite_bonificacao=None,
 ):
     """Cria e retorna um apartamento."""
     numero = _normalizar_numero(numero)
     bloco = _normalizar_texto_opcional(bloco)
     observacoes = _normalizar_texto_opcional(observacoes)
     valor_aluguel = _normalizar_valor_aluguel(valor_aluguel)
+    valores_recorrentes = _normalizar_valores_recorrentes(
+        valor_condominio,
+        valor_iptu,
+        valor_bonificacao,
+        dia_limite_bonificacao,
+    )
     leitura_base_agua, leitura_base_gas = _validar_leituras_base(
         leitura_base_agua,
         leitura_base_gas,
@@ -39,6 +49,7 @@ def cadastrar_apartamento(
         bloco=bloco,
         observacoes=observacoes,
         valor_aluguel=valor_aluguel,
+        **valores_recorrentes,
         leitura_base_agua=leitura_base_agua,
         leitura_base_gas=leitura_base_gas,
     )
@@ -56,6 +67,10 @@ def editar_apartamento(
     bloco=None,
     observacoes=None,
     valor_aluguel=Decimal("0.00"),
+    valor_condominio=Decimal("0.00"),
+    valor_iptu=Decimal("0.00"),
+    valor_bonificacao=Decimal("0.00"),
+    dia_limite_bonificacao=None,
 ):
     try:
         apartamento = (
@@ -69,6 +84,12 @@ def editar_apartamento(
     bloco = _normalizar_texto_opcional(bloco)
     observacoes = _normalizar_texto_opcional(observacoes)
     valor_aluguel = _normalizar_valor_aluguel(valor_aluguel)
+    valores_recorrentes = _normalizar_valores_recorrentes(
+        valor_condominio,
+        valor_iptu,
+        valor_bonificacao,
+        dia_limite_bonificacao,
+    )
     leitura_base_agua, leitura_base_gas = _validar_leituras_base(
         leitura_base_agua,
         leitura_base_gas,
@@ -78,6 +99,8 @@ def editar_apartamento(
     apartamento.bloco = bloco
     apartamento.observacoes = observacoes
     apartamento.valor_aluguel = valor_aluguel
+    for campo, valor in valores_recorrentes.items():
+        setattr(apartamento, campo, valor)
     apartamento.leitura_base_agua = leitura_base_agua
     apartamento.leitura_base_gas = leitura_base_gas
     _validar_modelo(apartamento)
@@ -85,6 +108,8 @@ def editar_apartamento(
         apartamento,
         update_fields=[
             "numero", "bloco", "observacoes", "valor_aluguel",
+            "valor_condominio", "valor_iptu", "valor_bonificacao",
+            "dia_limite_bonificacao",
             "leitura_base_agua", "leitura_base_gas",
         ],
     )
@@ -148,6 +173,36 @@ def _normalizar_valor_aluguel(valor):
     if valor < 0:
         raise ValueError("O valor do aluguel não pode ser negativo.")
     return valor.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def _normalizar_valores_recorrentes(
+    valor_condominio,
+    valor_iptu,
+    valor_bonificacao,
+    dia_limite_bonificacao,
+):
+    valores = {
+        "valor_condominio": _normalizar_valor_aluguel(valor_condominio),
+        "valor_iptu": _normalizar_valor_aluguel(valor_iptu),
+        "valor_bonificacao": _normalizar_valor_aluguel(valor_bonificacao),
+    }
+    if dia_limite_bonificacao in (None, ""):
+        dia = None
+    elif (
+        isinstance(dia_limite_bonificacao, bool)
+        or not str(dia_limite_bonificacao).isdigit()
+    ):
+        raise ValueError("O dia limite da bonificação deve estar entre 1 e 31.")
+    else:
+        dia = int(dia_limite_bonificacao)
+        if not 1 <= dia <= 31:
+            raise ValueError(
+                "O dia limite da bonificação deve estar entre 1 e 31."
+            )
+    if valores["valor_bonificacao"] > 0 and dia is None:
+        raise ValueError("Informe o dia limite quando houver bonificação.")
+    valores["dia_limite_bonificacao"] = dia
+    return valores
 
 
 def _normalizar_numero(numero):

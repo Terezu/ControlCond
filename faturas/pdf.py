@@ -34,8 +34,8 @@ FONTE_DESTAQUE = "Helvetica-Bold"
 ALTURA_CABECALHO = 132
 ALTURA_DADOS_FATURA = 72
 ALTURA_CARD_CONSUMO = 150
-ALTURA_COMPOSICAO = 84
-ALTURA_TOTAL = 56
+ALTURA_COMPOSICAO = 124
+ALTURA_TOTAL = 100
 ALTURA_RODAPE = 58
 
 
@@ -393,6 +393,11 @@ def desenhar_composicao_financeira(pdf, fatura, largura, y):
         ("Água e esgoto", f"R$ {formatar_valor_monetario(fatura.valor_agua)}"),
         ("Gás", f"R$ {formatar_valor_monetario(fatura.valor_gas)}"),
         ("Aluguel", f"R$ {formatar_valor_monetario(fatura.valor_aluguel)}"),
+        (
+            "Condomínio",
+            f"R$ {formatar_valor_monetario(fatura.valor_condominio)}",
+        ),
+        ("IPTU", f"R$ {formatar_valor_monetario(fatura.valor_iptu)}"),
     )
     coluna_direita = [
         ("Subtotal", f"R$ {formatar_valor_monetario(fatura.subtotal)}"),
@@ -402,6 +407,13 @@ def desenhar_composicao_financeira(pdf, fatura, largura, y):
             (
                 "Desconto",
                 f"- R$ {formatar_valor_monetario(fatura.desconto)}",
+            )
+        )
+    if fatura.valor_outros:
+        coluna_direita.append(
+            (
+                f"Outros — {fatura.observacao_outros[:45]}",
+                f"R$ {formatar_valor_monetario(fatura.valor_outros)}",
             )
         )
 
@@ -445,15 +457,48 @@ def desenhar_total(pdf, fatura, largura, y):
     pdf.setFont(FONTE_DESTAQUE, 11)
     pdf.drawString(
         MARGEM_HORIZONTAL + 16,
-        base + 22,
-        "TOTAL A PAGAR",
+        y - 28,
+        "TOTAL NORMAL",
     )
     pdf.setFont(FONTE_DESTAQUE, 20)
     pdf.drawRightString(
         largura - MARGEM_HORIZONTAL - 16,
-        base + 18,
+        y - 34,
         f"R$ {formatar_valor_monetario(fatura.valor_total)}",
     )
+    linha_y = y - 58
+    if fatura.valor_bonificacao:
+        data_limite = fatura.data_limite_bonificacao.strftime("%d/%m/%Y")
+        pdf.setFont(FONTE_REGULAR, 8)
+        pdf.drawString(
+            MARGEM_HORIZONTAL + 16,
+            linha_y,
+            f"Bonificação para pagamento até {data_limite}",
+        )
+        pdf.setFont(FONTE_DESTAQUE, 10)
+        pdf.drawRightString(
+            largura - MARGEM_HORIZONTAL - 16,
+            linha_y,
+            (
+                f"Valor até {data_limite}: R$ "
+                f"{formatar_valor_monetario(fatura.valor_com_bonificacao)}"
+            ),
+        )
+        linha_y -= 18
+    if fatura.status == fatura.Status.PAGA and fatura.data_pagamento:
+        pdf.setFont(FONTE_REGULAR, 8)
+        texto = (
+            f"Pago em {fatura.data_pagamento.strftime('%d/%m/%Y')} · "
+            f"Bonificação aplicada: "
+            f"{'sim' if fatura.bonificacao_aplicada else 'não'}"
+        )
+        pdf.drawString(MARGEM_HORIZONTAL + 16, linha_y, texto)
+        pdf.setFont(FONTE_DESTAQUE, 10)
+        pdf.drawRightString(
+            largura - MARGEM_HORIZONTAL - 16,
+            linha_y,
+            f"Valor pago: R$ {formatar_valor_monetario(fatura.valor_pago)}",
+        )
     return base - ESPACO_SECAO
 
 

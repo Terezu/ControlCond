@@ -35,6 +35,23 @@
                             <p class="detail-label">Aluguel padrão</p>
                             <p class="detail-value">R$ {{ apartamento.valor_aluguel|floatformat:2 }}</p>
                         </div>
+                        <div class="col-12 col-sm-6">
+                            <p class="detail-label">Condomínio padrão</p>
+                            <p class="detail-value">R$ {{ apartamento.valor_condominio|floatformat:2 }}</p>
+                        </div>
+                        <div class="col-12 col-sm-6">
+                            <p class="detail-label">IPTU padrão</p>
+                            <p class="detail-value">R$ {{ apartamento.valor_iptu|floatformat:2 }}</p>
+                        </div>
+                        {% if apartamento.valor_bonificacao %}
+                            <div class="col-12 col-sm-6">
+                                <p class="detail-label">Bonificação padrão</p>
+                                <p class="detail-value">
+                                    R$ {{ apartamento.valor_bonificacao|floatformat:2 }}
+                                    até o dia {{ apartamento.dia_limite_bonificacao }}
+                                </p>
+                            </div>
+                        {% endif %}
                     </div>
                 </div>
             </section>

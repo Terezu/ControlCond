@@ -32,6 +32,10 @@ def _salvar_formulario(form, apartamento_id=None):
         "bloco": dados["bloco"],
         "observacoes": dados["observacoes"],
         "valor_aluguel": dados["valor_aluguel"],
+        "valor_condominio": dados["valor_condominio"],
+        "valor_iptu": dados["valor_iptu"],
+        "valor_bonificacao": dados["valor_bonificacao"],
+        "dia_limite_bonificacao": dados["dia_limite_bonificacao"],
         "leitura_base_agua": dados["leitura_base_agua"],
         "leitura_base_gas": dados["leitura_base_gas"],
     }

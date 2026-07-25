@@ -23,16 +23,52 @@
                             </div>
                         {% endif %}
 
-                        {% include "components/form_field.html" with field=form.leitura %}
+                        <fieldset class="border rounded-3 p-3 mb-3">
+                            <legend class="float-none w-auto px-2 h6">Referência</legend>
+                            {% include "components/form_field.html" with field=form.leitura %}
+                        </fieldset>
 
-                        <div class="row">
-                            <div class="col-12 col-md-6">
-                                {% include "components/form_field.html" with field=form.valor_aluguel %}
+                        <fieldset class="border rounded-3 p-3 mb-3">
+                            <legend class="float-none w-auto px-2 h6">Valores recorrentes</legend>
+                            <div class="row">
+                                <div class="col-12 col-md-4">
+                                    {% include "components/form_field.html" with field=form.valor_aluguel %}
+                                </div>
+                                <div class="col-12 col-md-4">
+                                    {% include "components/form_field.html" with field=form.valor_condominio %}
+                                </div>
+                                <div class="col-12 col-md-4">
+                                    {% include "components/form_field.html" with field=form.valor_iptu %}
+                                </div>
                             </div>
-                            <div class="col-12 col-md-6">
-                                {% include "components/form_field.html" with field=form.desconto %}
+                        </fieldset>
+
+                        <fieldset class="border rounded-3 p-3 mb-3">
+                            <legend class="float-none w-auto px-2 h6">Ajustes do mês</legend>
+                            <div class="row">
+                                <div class="col-12 col-md-6">
+                                    {% include "components/form_field.html" with field=form.desconto %}
+                                </div>
+                                <div class="col-12 col-md-6">
+                                    {% include "components/form_field.html" with field=form.valor_outros %}
+                                </div>
+                                <div class="col-12" data-campo-observacao-outros>
+                                    {% include "components/form_field.html" with field=form.observacao_outros %}
+                                </div>
                             </div>
-                        </div>
+                        </fieldset>
+
+                        <fieldset class="border rounded-3 p-3 mb-3">
+                            <legend class="float-none w-auto px-2 h6">Pagamento antecipado</legend>
+                            <div class="row">
+                                <div class="col-12 col-md-6">
+                                    {% include "components/form_field.html" with field=form.valor_bonificacao %}
+                                </div>
+                                <div class="col-12 col-md-6">
+                                    {% include "components/form_field.html" with field=form.dia_limite_bonificacao %}
+                                </div>
+                            </div>
+                        </fieldset>
 
                         {% if apartamento_sem_leitura_base %}
                             <div class="alert alert-warning" role="alert">

@@ -1,3 +1,5 @@
+import calendar
+from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.conf import settings
@@ -84,6 +86,59 @@ class Fatura(models.Model):
             MaxValueValidator(LIMITE_VALOR_FINANCEIRO),
         ],
     )
+    valor_condominio = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        validators=[
+            MinValueValidator(Decimal("0")),
+            MaxValueValidator(LIMITE_VALOR_FINANCEIRO),
+        ],
+    )
+    valor_iptu = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        validators=[
+            MinValueValidator(Decimal("0")),
+            MaxValueValidator(LIMITE_VALOR_FINANCEIRO),
+        ],
+    )
+    valor_bonificacao = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        validators=[
+            MinValueValidator(Decimal("0")),
+            MaxValueValidator(LIMITE_VALOR_FINANCEIRO),
+        ],
+    )
+    dia_limite_bonificacao = models.PositiveSmallIntegerField(
+        blank=True,
+        null=True,
+        validators=[MinValueValidator(1), MaxValueValidator(31)],
+    )
+    valor_outros = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        validators=[
+            MinValueValidator(-LIMITE_VALOR_FINANCEIRO),
+            MaxValueValidator(LIMITE_VALOR_FINANCEIRO),
+        ],
+    )
+    observacao_outros = models.CharField(max_length=255, blank=True)
+    valor_pago = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        blank=True,
+        null=True,
+        validators=[
+            MinValueValidator(Decimal("0")),
+            MaxValueValidator(LIMITE_VALOR_FINANCEIRO),
+        ],
+    )
+    bonificacao_aplicada = models.BooleanField(default=False)
 
     valor_m3_gas_emissao = models.DecimalField(
         max_digits=8,
@@ -103,7 +158,7 @@ class Fatura(models.Model):
 
     data_geracao = models.DateTimeField(auto_now_add=True)
     data_emissao = models.DateTimeField(auto_now_add=True)
-    data_pagamento = models.DateTimeField(blank=True, null=True)
+    data_pagamento = models.DateField(blank=True, null=True)
     data_cancelamento = models.DateTimeField(blank=True, null=True)
 
     # Retrato imutável dos dados usados na emissão. A leitura e o apartamento
@@ -189,11 +244,50 @@ class Fatura(models.Model):
                 name="fatura_desconto_no_limite",
             ),
             models.CheckConstraint(
+                condition=models.Q(valor_condominio__gte=0),
+                name="fatura_condominio_nao_negativo",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(valor_iptu__gte=0),
+                name="fatura_iptu_nao_negativo",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(valor_bonificacao__gte=0),
+                name="fatura_bonificacao_nao_negativa",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(dia_limite_bonificacao__isnull=True)
+                    | models.Q(
+                        dia_limite_bonificacao__gte=1,
+                        dia_limite_bonificacao__lte=31,
+                    )
+                ),
+                name="fatura_dia_bonificacao_valido",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(valor_bonificacao=0)
+                    | models.Q(dia_limite_bonificacao__isnull=False)
+                ),
+                name="fatura_bonificacao_com_dia",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(valor_outros=0)
+                    | ~models.Q(observacao_outros="")
+                ),
+                name="fatura_outros_com_observacao",
+            ),
+            models.CheckConstraint(
                 condition=models.Q(
                     desconto__lte=(
                         models.F("valor_agua")
                         + models.F("valor_gas")
                         + models.F("valor_aluguel")
+                        + models.F("valor_condominio")
+                        + models.F("valor_iptu")
+                        + models.F("valor_outros")
                     )
                 ),
                 name="fatura_desconto_no_subtotal",
@@ -204,6 +298,9 @@ class Fatura(models.Model):
                         models.F("valor_agua")
                         + models.F("valor_gas")
                         + models.F("valor_aluguel")
+                        + models.F("valor_condominio")
+                        + models.F("valor_iptu")
+                        + models.F("valor_outros")
                         - models.F("desconto"),
                         precision=2,
                     )
@@ -268,6 +365,9 @@ class Fatura(models.Model):
         valor_agua,
         valor_gas,
         valor_aluguel,
+        valor_condominio,
+        valor_iptu,
+        valor_outros,
         desconto,
     ):
         centavos = Decimal("0.01")
@@ -277,11 +377,29 @@ class Fatura(models.Model):
                 valor_agua,
                 valor_gas,
                 valor_aluguel,
+                valor_condominio,
+                valor_iptu,
+                valor_outros,
                 desconto,
             )
         )
-        valor_agua, valor_gas, valor_aluguel, desconto = valores
-        subtotal = (valor_agua + valor_gas + valor_aluguel).quantize(
+        (
+            valor_agua,
+            valor_gas,
+            valor_aluguel,
+            valor_condominio,
+            valor_iptu,
+            valor_outros,
+            desconto,
+        ) = valores
+        subtotal = (
+            valor_agua
+            + valor_gas
+            + valor_aluguel
+            + valor_condominio
+            + valor_iptu
+            + valor_outros
+        ).quantize(
             centavos,
             rounding=ROUND_HALF_UP,
         )
@@ -304,6 +422,9 @@ class Fatura(models.Model):
             self.valor_agua,
             self.valor_gas,
             self.valor_aluguel,
+            self.valor_condominio,
+            self.valor_iptu,
+            self.valor_outros,
             self.desconto,
         )
         return subtotal
@@ -313,9 +434,30 @@ class Fatura(models.Model):
             self.valor_agua,
             self.valor_gas,
             self.valor_aluguel,
+            self.valor_condominio,
+            self.valor_iptu,
+            self.valor_outros,
             self.desconto,
         )
         return self.valor_total
+
+    @property
+    def valor_com_bonificacao(self):
+        return (self.valor_total - self.valor_bonificacao).quantize(
+            Decimal("0.01"),
+            rounding=ROUND_HALF_UP,
+        )
+
+    @property
+    def data_limite_bonificacao(self):
+        if not self.dia_limite_bonificacao:
+            return None
+        ultimo_dia = calendar.monthrange(self.ano, self.mes)[1]
+        return date(
+            self.ano,
+            self.mes,
+            min(self.dia_limite_bonificacao, ultimo_dia),
+        )
 
     def clean(self):
         super().clean()
@@ -328,6 +470,9 @@ class Fatura(models.Model):
                     self.valor_agua,
                     self.valor_gas,
                     self.valor_aluguel,
+                    self.valor_condominio,
+                    self.valor_iptu,
+                    self.valor_outros,
                     self.desconto,
                 )
             except ValidationError as exc:
@@ -340,6 +485,27 @@ class Fatura(models.Model):
                 erros["valor_total"] = (
                     "O valor total deve corresponder ao subtotal menos o desconto."
                 )
+
+        if self.valor_outros and not self.observacao_outros.strip():
+            erros["observacao_outros"] = (
+                "Informe a observação quando Outros for diferente de zero."
+            )
+        if (
+            isinstance(self.valor_bonificacao, Decimal)
+            and self.valor_bonificacao > 0
+            and self.dia_limite_bonificacao is None
+        ):
+            erros["dia_limite_bonificacao"] = (
+                "Informe o dia limite quando houver bonificação."
+            )
+        if (
+            isinstance(self.valor_bonificacao, Decimal)
+            and isinstance(self.valor_total, Decimal)
+            and self.valor_bonificacao > self.valor_total
+        ):
+            erros["valor_bonificacao"] = (
+                "A bonificação não pode ultrapassar o valor normal da fatura."
+            )
 
         if self.leitura_id is not None:
             dados_leitura = (

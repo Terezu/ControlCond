@@ -53,6 +53,40 @@ class GerarFaturaForm(forms.Form):
             attrs={"min": "0", "step": "0.01"}
         ),
     )
+    valor_condominio = forms.DecimalField(
+        required=False, label="Condomínio", min_value=0,
+        max_value=LIMITE_VALOR_FINANCEIRO, max_digits=10, decimal_places=2,
+        widget=forms.NumberInput(attrs={"min": "0", "step": "0.01"}),
+    )
+    valor_iptu = forms.DecimalField(
+        required=False, label="IPTU", min_value=0,
+        max_value=LIMITE_VALOR_FINANCEIRO, max_digits=10, decimal_places=2,
+        widget=forms.NumberInput(attrs={"min": "0", "step": "0.01"}),
+    )
+    valor_outros = forms.DecimalField(
+        required=False, label="Outros",
+        min_value=-LIMITE_VALOR_FINANCEIRO,
+        max_value=LIMITE_VALOR_FINANCEIRO,
+        max_digits=10, decimal_places=2,
+        widget=forms.NumberInput(attrs={"step": "0.01"}),
+    )
+    observacao_outros = forms.CharField(
+        required=False,
+        label="Motivo de Outros",
+        max_length=255,
+    )
+    valor_bonificacao = forms.DecimalField(
+        required=False, label="Bonificação", min_value=0,
+        max_value=LIMITE_VALOR_FINANCEIRO, max_digits=10, decimal_places=2,
+        widget=forms.NumberInput(attrs={"min": "0", "step": "0.01"}),
+    )
+    dia_limite_bonificacao = forms.IntegerField(
+        required=False,
+        label="Dia limite",
+        min_value=1,
+        max_value=31,
+        widget=forms.NumberInput(attrs={"min": "1", "max": "31", "step": "1"}),
+    )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -79,6 +113,37 @@ class GerarFaturaForm(forms.Form):
 
     def clean_desconto(self):
         return self.cleaned_data["desconto"] or Decimal("0.00")
+
+    def clean(self):
+        cleaned_data = super().clean()
+        for campo in (
+            "valor_condominio",
+            "valor_iptu",
+            "valor_outros",
+            "valor_bonificacao",
+        ):
+            if campo in cleaned_data:
+                cleaned_data[campo] = cleaned_data[campo] or Decimal("0.00")
+        if (
+            cleaned_data.get("valor_outros", Decimal("0.00")) != 0
+            and not cleaned_data.get("observacao_outros", "").strip()
+        ):
+            self.add_error(
+                "observacao_outros",
+                "Informe o motivo quando Outros for diferente de zero.",
+            )
+        if (
+            (
+                cleaned_data.get("valor_bonificacao")
+                or Decimal("0.00")
+            ) > 0
+            and not cleaned_data.get("dia_limite_bonificacao")
+        ):
+            self.add_error(
+                "dia_limite_bonificacao",
+                "Informe o dia limite quando houver bonificação.",
+            )
+        return cleaned_data
 
     @staticmethod
     def descrever_leitura(leitura):
@@ -147,6 +212,22 @@ class MotivoAlteracaoStatusForm(forms.Form):
         )
 
 
+class RegistrarPagamentoForm(forms.Form):
+    data_pagamento = forms.DateField(
+        required=False,
+        label="Data do pagamento",
+        widget=forms.DateInput(attrs={"type": "date"}),
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        _aplicar_estilo_bootstrap(self.fields)
+        self.fields["data_pagamento"].initial = timezone.localdate()
+
+    def clean_data_pagamento(self):
+        return self.cleaned_data["data_pagamento"] or timezone.localdate()
+
+
 class EditarValoresFaturaForm(forms.Form):
     valor_aluguel = forms.DecimalField(
         label="Valor do aluguel",
@@ -169,6 +250,37 @@ class EditarValoresFaturaForm(forms.Form):
             attrs={"min": "0", "step": "0.01"}
         ),
     )
+    valor_condominio = forms.DecimalField(
+        required=False, label="Condomínio", min_value=0,
+        max_value=LIMITE_VALOR_FINANCEIRO,
+        max_digits=10, decimal_places=2,
+        widget=forms.NumberInput(attrs={"min": "0", "step": "0.01"}),
+    )
+    valor_iptu = forms.DecimalField(
+        required=False, label="IPTU", min_value=0,
+        max_value=LIMITE_VALOR_FINANCEIRO,
+        max_digits=10, decimal_places=2,
+        widget=forms.NumberInput(attrs={"min": "0", "step": "0.01"}),
+    )
+    valor_outros = forms.DecimalField(
+        required=False, label="Outros",
+        min_value=-LIMITE_VALOR_FINANCEIRO,
+        max_value=LIMITE_VALOR_FINANCEIRO,
+        max_digits=10, decimal_places=2,
+        widget=forms.NumberInput(attrs={"step": "0.01"}),
+    )
+    observacao_outros = forms.CharField(
+        required=False, label="Motivo de Outros", max_length=255,
+    )
+    valor_bonificacao = forms.DecimalField(
+        required=False, label="Bonificação", min_value=0,
+        max_value=LIMITE_VALOR_FINANCEIRO, max_digits=10, decimal_places=2,
+        widget=forms.NumberInput(attrs={"min": "0", "step": "0.01"}),
+    )
+    dia_limite_bonificacao = forms.IntegerField(
+        required=False, label="Dia limite", min_value=1, max_value=31,
+        widget=forms.NumberInput(attrs={"min": "1", "max": "31", "step": "1"}),
+    )
 
     def __init__(self, *args, fatura=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -177,12 +289,42 @@ class EditarValoresFaturaForm(forms.Form):
         if fatura is not None:
             self.fields["valor_aluguel"].initial = fatura.valor_aluguel
             self.fields["desconto"].initial = fatura.desconto
+            for campo in (
+                "valor_condominio", "valor_iptu", "valor_outros",
+                "observacao_outros", "valor_bonificacao",
+                "dia_limite_bonificacao",
+            ):
+                self.fields[campo].initial = getattr(
+                    fatura,
+                    campo,
+                    None,
+                )
 
     def clean_desconto(self):
         return self.cleaned_data["desconto"] or Decimal("0.00")
 
     def clean(self):
         cleaned_data = super().clean()
+        valor_outros = cleaned_data.get("valor_outros")
+        if (
+            valor_outros not in (None, Decimal("0.00"))
+            and not cleaned_data.get("observacao_outros", "").strip()
+        ):
+            self.add_error(
+                "observacao_outros",
+                "Informe o motivo quando Outros for diferente de zero.",
+            )
+        if (
+            (
+                cleaned_data.get("valor_bonificacao")
+                or Decimal("0.00")
+            ) > 0
+            and not cleaned_data.get("dia_limite_bonificacao")
+        ):
+            self.add_error(
+                "dia_limite_bonificacao",
+                "Informe o dia limite quando houver bonificação.",
+            )
         if self.fatura is not None:
             try:
                 validar_edicao_financeira(self.fatura)

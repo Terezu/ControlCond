@@ -12,10 +12,16 @@ from calculos.services import calcular_agua, calcular_gas
 from configuracoes.services import obter_configuracao
 from leituras.models import Leitura
 
-from .models import ANO_MAXIMO, Fatura, HistoricoStatusFatura
+from .models import (
+    ANO_MAXIMO,
+    LIMITE_VALOR_FINANCEIRO,
+    Fatura,
+    HistoricoStatusFatura,
+)
 
 
 logger = logging.getLogger(__name__)
+_NAO_INFORMADO = object()
 
 
 @dataclass(frozen=True)
@@ -171,6 +177,23 @@ def _normalizar_valor_financeiro(valor, descricao, *, padrao=None):
         ) from exc
 
 
+def _normalizar_valor_outros(valor):
+    if valor in (None, ""):
+        valor = Decimal("0.00")
+    if isinstance(valor, bool):
+        raise ValueError("O valor de Outros deve ser um número válido.")
+    try:
+        valor = Decimal(str(valor))
+        if not valor.is_finite():
+            raise InvalidOperation
+        valor = valor.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    except (InvalidOperation, TypeError, ValueError) as exc:
+        raise ValueError("O valor de Outros deve ser um número válido.") from exc
+    if abs(valor) > LIMITE_VALOR_FINANCEIRO:
+        raise ValueError("O valor de Outros excede o limite permitido.")
+    return valor
+
+
 def _calcular_dados_da_leitura(leitura_atual, valor_m3_gas):
     if (
         leitura_atual.leitura_agua is None
@@ -260,6 +283,12 @@ def cadastrar_fatura(
     leitura_gas_atual=None,
     valor_aluguel=None,
     desconto=None,
+    valor_condominio=None,
+    valor_iptu=None,
+    valor_bonificacao=None,
+    dia_limite_bonificacao=_NAO_INFORMADO,
+    valor_outros=None,
+    observacao_outros=None,
 ):
     apartamento = _consultar_apartamento_para_atualizacao(apartamento_id)
     valor_m3_gas = obter_configuracao().valor_m3_gas
@@ -273,6 +302,42 @@ def cadastrar_fatura(
         "O desconto",
         padrao=Decimal("0.00"),
     )
+    valor_condominio = _normalizar_valor_financeiro(
+        valor_condominio,
+        "O valor do condomínio",
+        padrao=apartamento.valor_condominio,
+    )
+    valor_iptu = _normalizar_valor_financeiro(
+        valor_iptu,
+        "O valor do IPTU",
+        padrao=apartamento.valor_iptu,
+    )
+    valor_bonificacao = _normalizar_valor_financeiro(
+        valor_bonificacao,
+        "O valor da bonificação",
+        padrao=apartamento.valor_bonificacao,
+    )
+    if dia_limite_bonificacao is _NAO_INFORMADO:
+        dia_limite_bonificacao = apartamento.dia_limite_bonificacao
+    elif dia_limite_bonificacao == "":
+        dia_limite_bonificacao = None
+    if (
+        dia_limite_bonificacao is not None
+        and (
+            isinstance(dia_limite_bonificacao, bool)
+            or not isinstance(dia_limite_bonificacao, int)
+            or not 1 <= dia_limite_bonificacao <= 31
+        )
+    ):
+        raise ValueError("O dia limite da bonificação deve estar entre 1 e 31.")
+    valor_outros = _normalizar_valor_outros(valor_outros)
+    observacao_outros = (observacao_outros or "").strip()
+    if valor_outros != 0 and not observacao_outros:
+        raise ValueError(
+            "Informe a observação quando Outros for diferente de zero."
+        )
+    if valor_bonificacao > 0 and dia_limite_bonificacao is None:
+        raise ValueError("Informe o dia limite quando houver bonificação.")
 
     if (
         isinstance(mes, bool)
@@ -460,6 +525,12 @@ def cadastrar_fatura(
         valor_gas=valor_gas,
         valor_aluguel=valor_aluguel,
         desconto=desconto,
+        valor_condominio=valor_condominio,
+        valor_iptu=valor_iptu,
+        valor_bonificacao=valor_bonificacao,
+        dia_limite_bonificacao=dia_limite_bonificacao,
+        valor_outros=valor_outros,
+        observacao_outros=observacao_outros,
         valor_total=Decimal("0.00"),
         valor_m3_gas_emissao=valor_m3_gas,
         status=status,
@@ -610,7 +681,7 @@ def _executar_acao_status(
     fatura.status = novo_status
 
     if novo_status == Fatura.Status.PAGA:
-        fatura.data_pagamento = agora
+        fatura.data_pagamento = agora.date()
         fatura.data_cancelamento = None
         campos_atualizados.extend(
             ["data_pagamento", "data_cancelamento"]
@@ -623,7 +694,11 @@ def _executar_acao_status(
         )
     elif status_anterior == Fatura.Status.PAGA:
         fatura.data_pagamento = None
-        campos_atualizados.append("data_pagamento")
+        fatura.valor_pago = None
+        fatura.bonificacao_aplicada = False
+        campos_atualizados.extend(
+            ["data_pagamento", "valor_pago", "bonificacao_aplicada"]
+        )
     elif status_anterior == Fatura.Status.CANCELADA:
         fatura.data_cancelamento = None
         campos_atualizados.append("data_cancelamento")
@@ -646,14 +721,50 @@ def _executar_acao_status(
     return fatura, True
 
 
-def marcar_fatura_como_paga(fatura_id, usuario=None):
-    return _executar_acao_status(
+@transaction.atomic
+def marcar_fatura_como_paga(
+    fatura_id,
+    usuario=None,
+    data_pagamento=None,
+):
+    if data_pagamento is None:
+        data_pagamento = timezone.localdate()
+    if not all(
+        hasattr(data_pagamento, atributo)
+        for atributo in ("year", "month", "day")
+    ):
+        raise RegraNegocioFaturaError("Informe uma data de pagamento válida.")
+    fatura = _consultar_fatura_para_atualizacao(fatura_id)
+    aplica_bonificacao = bool(
+        fatura.valor_bonificacao > 0
+        and fatura.dia_limite_bonificacao
+        and data_pagamento.year == fatura.ano
+        and data_pagamento.month == fatura.mes
+        and data_pagamento.day <= fatura.dia_limite_bonificacao
+    )
+    fatura, alterada = _executar_acao_status(
         fatura_id,
         status_origem=Fatura.Status.PENDENTE,
         novo_status=Fatura.Status.PAGA,
         acao=HistoricoStatusFatura.Acao.PAGAMENTO_CONFIRMADO,
         usuario=usuario,
     )
+    if alterada:
+        fatura.data_pagamento = data_pagamento
+        fatura.bonificacao_aplicada = aplica_bonificacao
+        fatura.valor_pago = (
+            fatura.valor_com_bonificacao
+            if aplica_bonificacao
+            else fatura.valor_total
+        )
+        fatura.save(
+            update_fields=[
+                "data_pagamento",
+                "bonificacao_aplicada",
+                "valor_pago",
+            ]
+        )
+    return fatura, alterada
 
 
 def cancelar_fatura(fatura_id, usuario=None):
@@ -696,11 +807,28 @@ def editar_fatura(
     *,
     valor_aluguel=None,
     desconto=None,
+    valor_condominio=None,
+    valor_iptu=None,
+    valor_bonificacao=None,
+    dia_limite_bonificacao=_NAO_INFORMADO,
+    valor_outros=None,
+    observacao_outros=None,
 ):
     fatura = _consultar_fatura_para_atualizacao(fatura_id)
 
     campos_atualizados = []
-    if valor_aluguel is not None or desconto is not None:
+    if any(
+        valor is not None
+        for valor in (
+            valor_aluguel,
+            desconto,
+            valor_condominio,
+            valor_iptu,
+            valor_bonificacao,
+            valor_outros,
+            observacao_outros,
+        )
+    ):
         validar_edicao_financeira(fatura)
         if valor_aluguel is not None:
             fatura.valor_aluguel = _normalizar_valor_financeiro(
@@ -714,6 +842,34 @@ def editar_fatura(
                 "O desconto",
             )
             campos_atualizados.append("desconto")
+        for campo, valor, descricao in (
+            ("valor_condominio", valor_condominio, "O valor do condomínio"),
+            ("valor_iptu", valor_iptu, "O valor do IPTU"),
+            ("valor_bonificacao", valor_bonificacao, "O valor da bonificação"),
+        ):
+            if valor is not None:
+                setattr(
+                    fatura,
+                    campo,
+                    _normalizar_valor_financeiro(valor, descricao),
+                )
+                campos_atualizados.append(campo)
+        if valor_bonificacao is not None:
+            if (
+                dia_limite_bonificacao is not None
+                and not 1 <= dia_limite_bonificacao <= 31
+            ):
+                raise ValueError(
+                    "O dia limite da bonificação deve estar entre 1 e 31."
+                )
+            fatura.dia_limite_bonificacao = dia_limite_bonificacao
+            campos_atualizados.append("dia_limite_bonificacao")
+        if valor_outros is not None:
+            fatura.valor_outros = _normalizar_valor_outros(valor_outros)
+            campos_atualizados.append("valor_outros")
+        if observacao_outros is not None:
+            fatura.observacao_outros = observacao_outros.strip()
+            campos_atualizados.append("observacao_outros")
         try:
             fatura.recalcular_valor_total()
         except ValidationError as exc:
@@ -779,15 +935,21 @@ def buscar_leitura_anterior(leitura_atual, campo=None):
     return queryset.order_by("-ano", "-mes", "-id").first()
 
 
-def consultar_valor_aluguel_leitura(leitura_id):
+def consultar_valores_padrao_leitura(leitura_id):
     try:
-        return (
+        apartamento = (
             Leitura.objects
             .select_related("apartamento")
             .get(pk=leitura_id)
             .apartamento
-            .valor_aluguel
         )
+        return {
+            "valor_aluguel": apartamento.valor_aluguel,
+            "valor_condominio": apartamento.valor_condominio,
+            "valor_iptu": apartamento.valor_iptu,
+            "valor_bonificacao": apartamento.valor_bonificacao,
+            "dia_limite_bonificacao": apartamento.dia_limite_bonificacao,
+        }
     except Leitura.DoesNotExist as exc:
         raise ValueError("Leitura não encontrada.") from exc
 
@@ -828,6 +990,12 @@ def gerar_fatura_mensal(
     *,
     valor_aluguel=None,
     desconto=None,
+    valor_condominio=None,
+    valor_iptu=None,
+    valor_bonificacao=None,
+    dia_limite_bonificacao=_NAO_INFORMADO,
+    valor_outros=None,
+    observacao_outros=None,
 ):
     leitura_atual = _consultar_contexto_leitura_para_atualizacao(leitura_id)
 
@@ -838,6 +1006,12 @@ def gerar_fatura_mensal(
         ano=leitura_atual.ano,
         valor_aluguel=valor_aluguel,
         desconto=desconto,
+        valor_condominio=valor_condominio,
+        valor_iptu=valor_iptu,
+        valor_bonificacao=valor_bonificacao,
+        dia_limite_bonificacao=dia_limite_bonificacao,
+        valor_outros=valor_outros,
+        observacao_outros=observacao_outros,
     )
 
 
