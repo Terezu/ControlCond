@@ -59,6 +59,26 @@
                                 <p class="fs-4 fw-semibold text-warning mb-0">{{ resultado.total_sem_leitura }}</p>
                             </div>
                         </div>
+                        {% if periodo_download.total_faturas %}
+                            <div class="border-top mt-4 pt-4">
+                                <p class="text-secondary small mb-3">
+                                    Total de faturas pendentes ou pagas disponíveis:
+                                    {{ periodo_download.total_faturas }}.
+                                </p>
+                                <a
+                                    href="{% url 'faturas:baixar_faturas_mes' periodo_download.ano periodo_download.mes %}"
+                                    class="btn btn-outline-primary w-100"
+                                    aria-label="Baixar faturas do mês selecionado em arquivo ZIP"
+                                >
+                                    <i class="bi bi-file-earmark-zip me-1" aria-hidden="true"></i>
+                                    Baixar faturas do mês
+                                </a>
+                            </div>
+                        {% else %}
+                            <div class="alert alert-secondary mt-4 mb-0" role="status">
+                                Nenhuma fatura pendente ou paga está disponível para download neste período.
+                            </div>
+                        {% endif %}
                     </div>
                 </section>
 

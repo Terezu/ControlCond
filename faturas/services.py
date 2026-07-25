@@ -1098,3 +1098,27 @@ def executar_fechamento_mensal(mes, ano):
         resultado.total_sem_leitura,
     )
     return resultado
+
+
+def listar_faturas_para_download_mensal(mes, ano):
+    if isinstance(mes, bool) or not isinstance(mes, int) or not 1 <= mes <= 12:
+        raise ValueError("O mês deve estar entre 1 e 12.")
+    if (
+        isinstance(ano, bool)
+        or not isinstance(ano, int)
+        or ano < 2000
+        or ano > ANO_MAXIMO
+    ):
+        raise ValueError("Informe um ano válido.")
+
+    return (
+        Fatura.objects
+        .select_related("apartamento", "leitura")
+        .filter(mes=mes, ano=ano)
+        .exclude(status=Fatura.Status.CANCELADA)
+        .order_by(
+            "apartamento_bloco_emissao",
+            "apartamento_numero_emissao",
+            "id",
+        )
+    )

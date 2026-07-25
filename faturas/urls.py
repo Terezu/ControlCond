@@ -13,6 +13,11 @@ urlpatterns = [
         name="fechamento_mensal",
     ),
     path(
+        "fechamento-mensal/<int:ano>/<int:mes>/baixar/",
+        views.baixar_faturas_mes,
+        name="baixar_faturas_mes",
+    ),
+    path(
         "valor-aluguel-leitura/",
         views.valor_aluguel_leitura,
         name="valor_aluguel_leitura",

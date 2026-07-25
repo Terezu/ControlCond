@@ -1,4 +1,5 @@
 from pathlib import Path
+from io import BytesIO
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -618,3 +619,14 @@ def gerar_pdf_fatura(fatura, destino, configuracao=None):
 
     pdf.showPage()
     pdf.save()
+
+
+def gerar_pdf_fatura_bytes(fatura, configuracao=None):
+    """Gera a mesma fatura individual e devolve seu conteúdo binário."""
+    destino = BytesIO()
+    gerar_pdf_fatura(
+        fatura=fatura,
+        destino=destino,
+        configuracao=configuracao,
+    )
+    return destino.getvalue()

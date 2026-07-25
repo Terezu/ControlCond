@@ -4,6 +4,7 @@ from io import BytesIO
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import patch
+from zipfile import ZipFile
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
@@ -23,7 +24,11 @@ from .forms import (
     MotivoAlteracaoStatusForm,
 )
 from .models import Fatura, HistoricoStatusFatura
-from .pdf import gerar_pdf_fatura, obter_leituras_fatura
+from .pdf import (
+    gerar_pdf_fatura,
+    gerar_pdf_fatura_bytes,
+    obter_leituras_fatura,
+)
 from .services import (
     RegraNegocioFaturaError,
     cadastrar_fatura,
@@ -1423,16 +1428,16 @@ class DownloadPdfFaturaTests(TestCase):
 
         self.assertEqual(resposta.status_code, 404)
 
-    @patch("faturas.views.gerar_pdf_fatura")
+    @patch("faturas.views.gerar_pdf_fatura_bytes")
     def test_download_usa_valores_atualizados_do_banco(self, gerar_pdf):
         self.fatura.valor_aluguel = Decimal("1250.00")
         self.fatura.valor_total = Decimal("1250.00")
         self.fatura.save(update_fields=["valor_aluguel", "valor_total"])
 
-        def escrever_pdf(*, fatura, destino):
+        def escrever_pdf(fatura):
             self.assertEqual(fatura.valor_aluguel, Decimal("1250.00"))
             self.assertEqual(fatura.valor_total, Decimal("1250.00"))
-            destino.write(b"%PDF-1.4 atualizado")
+            return b"%PDF-1.4 atualizado"
 
         gerar_pdf.side_effect = escrever_pdf
 
@@ -1442,6 +1447,172 @@ class DownloadPdfFaturaTests(TestCase):
         self.assertEqual(resposta.status_code, 200)
         self.assertEqual(conteudo, b"%PDF-1.4 atualizado")
         gerar_pdf.assert_called_once()
+
+    def test_helper_binario_reutiliza_gerador_de_pdf(self):
+        conteudo = gerar_pdf_fatura_bytes(self.fatura)
+        self.assertTrue(conteudo.startswith(b"%PDF"))
+
+
+class DownloadZipFaturasMensaisTests(TestCase):
+    def setUp(self):
+        self.usuario = get_user_model().objects.create_user(
+            username="operador-download-zip",
+            password="senha-de-teste",
+            is_staff=True,
+        )
+        self.client.force_login(self.usuario)
+        self.apartamento_a = Apartamento.objects.create(
+            numero="101 / Sul",
+            bloco="A/B",
+        )
+        self.apartamento_b = Apartamento.objects.create(numero="101 / Sul")
+        self.pendente = self.criar_fatura(self.apartamento_a)
+        self.paga = self.criar_fatura(
+            self.apartamento_b,
+            status=Fatura.Status.PAGA,
+        )
+        self.cancelada = self.criar_fatura(
+            Apartamento.objects.create(numero="303"),
+            status=Fatura.Status.CANCELADA,
+        )
+        self.outro_mes = self.criar_fatura(
+            Apartamento.objects.create(numero="404"),
+            mes=10,
+        )
+        self.outro_ano = self.criar_fatura(
+            Apartamento.objects.create(numero="505"),
+            ano=2025,
+        )
+        self.url = reverse(
+            "faturas:baixar_faturas_mes",
+            args=[2026, 11],
+        )
+
+    @staticmethod
+    def criar_fatura(
+        apartamento,
+        *,
+        mes=11,
+        ano=2026,
+        status=Fatura.Status.PENDENTE,
+    ):
+        return Fatura.objects.create(
+            apartamento=apartamento,
+            mes=mes,
+            ano=ano,
+            consumo_agua=0,
+            consumo_gas=0,
+            valor_aluguel=Decimal("100.00"),
+            valor_total=Decimal("100.00"),
+            status=status,
+            apartamento_numero_emissao=apartamento.numero,
+            apartamento_bloco_emissao=apartamento.bloco,
+        )
+
+    def abrir_zip(self, resposta):
+        return ZipFile(BytesIO(resposta.content))
+
+    def test_staff_baixa_zip_valido_com_pendentes_e_pagas(self):
+        resposta = self.client.get(self.url)
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta["Content-Type"], "application/zip")
+        self.assertIn(
+            'filename="faturas_2026_11.zip"',
+            resposta["Content-Disposition"],
+        )
+        with self.abrir_zip(resposta) as arquivo:
+            nomes = arquivo.namelist()
+            self.assertEqual(len(nomes), 2)
+            self.assertEqual(len(nomes), len(set(nomes)))
+            self.assertTrue(all(nome.endswith(".pdf") for nome in nomes))
+            self.assertTrue(all("/" not in nome and "\\" not in nome for nome in nomes))
+            ids = {self.pendente.id, self.paga.id}
+            self.assertTrue(
+                all(any(f"fatura-{fatura_id}_" in nome for fatura_id in ids)
+                    for nome in nomes)
+            )
+            for nome in nomes:
+                self.assertTrue(arquivo.read(nome).startswith(b"%PDF"))
+
+    def test_nao_inclui_cancelada_outro_mes_ou_outro_ano(self):
+        resposta = self.client.get(self.url)
+        with self.abrir_zip(resposta) as arquivo:
+            nomes = " ".join(arquivo.namelist())
+        for fatura in (self.cancelada, self.outro_mes, self.outro_ano):
+            self.assertNotIn(f"fatura-{fatura.id}_", nomes)
+
+    def test_inclui_fatura_existente_e_recem_gerada_no_fechamento(self):
+        apartamentos = [
+            Apartamento.objects.create(
+                numero=f"LOTE-{indice}",
+                leitura_base_agua=Decimal("0.00"),
+                leitura_base_gas=Decimal("0.00"),
+            )
+            for indice in (1, 2)
+        ]
+        leituras = [
+            Leitura.objects.create(
+                apartamento=apartamento,
+                mes=9,
+                ano=2027,
+                leitura_agua=Decimal("1.00"),
+                leitura_gas=Decimal("1.00"),
+            )
+            for apartamento in apartamentos
+        ]
+        existente = gerar_fatura_mensal(leituras[0].id)
+        resultado = executar_fechamento_mensal(9, 2027)
+        self.assertEqual(resultado.faturas_existentes, 1)
+        self.assertEqual(resultado.faturas_geradas, 1)
+        gerada = Fatura.objects.get(leitura=leituras[1])
+
+        resposta = self.client.get(
+            reverse("faturas:baixar_faturas_mes", args=[2027, 9])
+        )
+        with self.abrir_zip(resposta) as arquivo:
+            nomes = " ".join(arquivo.namelist())
+        self.assertIn(f"fatura-{existente.id}_", nomes)
+        self.assertIn(f"fatura-{gerada.id}_", nomes)
+
+    def test_periodo_sem_faturas_e_periodos_invalidos_retornam_404(self):
+        urls = (
+            reverse("faturas:baixar_faturas_mes", args=[2026, 12]),
+            reverse("faturas:baixar_faturas_mes", args=[2026, 13]),
+            reverse("faturas:baixar_faturas_mes", args=[1999, 11]),
+        )
+        for url in urls:
+            with self.subTest(url=url):
+                self.assertEqual(self.client.get(url).status_code, 404)
+
+    def test_acesso_exige_usuario_staff(self):
+        self.client.logout()
+        resposta_anonima = self.client.get(self.url)
+        self.assertRedirects(
+            resposta_anonima,
+            f"/admin/login/?next={self.url}",
+        )
+        usuario_comum = get_user_model().objects.create_user(
+            username="morador-download-zip",
+            password="senha-de-teste",
+        )
+        self.client.force_login(usuario_comum)
+        resposta_sem_permissao = self.client.get(self.url)
+        self.assertEqual(resposta_sem_permissao.status_code, 302)
+        self.assertIn("/admin/login/", resposta_sem_permissao.url)
+
+    @patch(
+        "faturas.views.gerar_pdf_fatura_bytes",
+        side_effect=RuntimeError("falha simulada"),
+    )
+    def test_falha_de_pdf_interrompe_zip_com_resposta_segura(self, _gerar):
+        resposta = self.client.get(self.url)
+        self.assertEqual(resposta.status_code, 500)
+        self.assertContains(
+            resposta,
+            "Não foi possível gerar o arquivo",
+            status_code=500,
+        )
+        self.assertNotEqual(resposta["Content-Type"], "application/zip")
 
 
 class RegrasStatusFaturaTests(TestCase):
@@ -1905,6 +2076,14 @@ class FaturaPresentationTests(TestCase):
         self.assertContains(resposta_post, "Fechamento concluído")
         self.assertContains(resposta_post, "Faturas geradas")
         self.assertContains(resposta_post, ">1<", html=False)
+        self.assertContains(resposta_post, "Baixar faturas do mês")
+        self.assertContains(
+            resposta_post,
+            reverse(
+                "faturas:baixar_faturas_mes",
+                args=[2026, 7],
+            ),
+        )
         self.assertEqual(Fatura.objects.count(), 1)
 
     def test_fechamento_lista_apartamentos_sem_leitura(self):
@@ -1931,6 +2110,15 @@ class FaturaPresentationTests(TestCase):
         self.assertEqual(resposta.status_code, 200)
         self.assertFalse(Fatura.objects.exists())
         self.assertNotContains(resposta, "Fechamento concluído")
+
+    def test_fechamento_sem_faturas_nao_exibe_botao_de_download(self):
+        resposta = self.client.post(
+            reverse("faturas:fechamento_mensal"),
+            {"mes": "8", "ano": "2026"},
+        )
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Nenhuma fatura pendente ou paga")
+        self.assertNotContains(resposta, "Baixar faturas do mês")
 
     def test_geracao_usa_formulario_padrao_e_mantem_cancelamento(self):
         resposta = self.client.get(reverse("faturas:gerar"))

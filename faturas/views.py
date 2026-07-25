@@ -1,11 +1,12 @@
 from decimal import Decimal
 from io import BytesIO
 import logging
+from zipfile import ZIP_DEFLATED, ZipFile
 
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.core.paginator import Paginator
-from django.http import FileResponse, Http404, JsonResponse
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.text import slugify
@@ -21,7 +22,9 @@ from .forms import (
     RegistrarPagamentoForm,
 )
 from .models import Fatura
-from .pdf import gerar_pdf_fatura
+from configuracoes.services import obter_configuracao
+
+from .pdf import gerar_pdf_fatura_bytes
 from .services import (
     RegraNegocioFaturaError,
     cancelar_fatura,
@@ -33,6 +36,7 @@ from .services import (
     estornar_pagamento,
     gerar_fatura_mensal,
     listar_faturas,
+    listar_faturas_para_download_mensal,
     marcar_fatura_como_paga,
     obter_contexto_geracao_fatura,
     reabrir_fatura,
@@ -364,6 +368,7 @@ confirmar_reabrir, reabrir = _criar_views_acao("reabrir")
 @require_http_methods(["GET", "POST"])
 def fechamento_mensal(request):
     resultado = None
+    periodo_download = None
     form = FechamentoMensalForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
         try:
@@ -371,6 +376,15 @@ def fechamento_mensal(request):
                 form.cleaned_data["mes"],
                 form.cleaned_data["ano"],
             )
+            mes = form.cleaned_data["mes"]
+            ano = form.cleaned_data["ano"]
+            periodo_download = {
+                "mes": mes,
+                "ano": ano,
+                "total_faturas": (
+                    listar_faturas_para_download_mensal(mes, ano).count()
+                ),
+            }
         except ValueError as erro:
             form.add_error(None, str(erro))
         except Exception:
@@ -387,8 +401,70 @@ def fechamento_mensal(request):
         {
             "form": form,
             "resultado": resultado,
+            "periodo_download": periodo_download,
         },
     )
+
+
+def _nome_pdf_no_zip(fatura):
+    partes = [f"fatura-{fatura.id}"]
+    bloco = slugify(fatura.apartamento_bloco_emissao or "")
+    numero = slugify(
+        fatura.apartamento_numero_emissao
+        or fatura.apartamento.numero
+        or ""
+    )
+    if bloco:
+        partes.append(f"bloco-{bloco}")
+    partes.append(f"apartamento-{numero or fatura.apartamento_id}")
+    partes.append(f"{fatura.ano}-{fatura.mes:02d}")
+    return "_".join(partes) + ".pdf"
+
+
+@staff_member_required
+@never_cache
+@require_safe
+def baixar_faturas_mes(request, ano, mes):
+    try:
+        faturas = list(listar_faturas_para_download_mensal(mes, ano))
+    except ValueError as exc:
+        raise Http404(str(exc)) from exc
+    if not faturas:
+        raise Http404("Nenhuma fatura disponível para este período.")
+
+    destino = BytesIO()
+    try:
+        configuracao = obter_configuracao()
+        with ZipFile(destino, mode="w", compression=ZIP_DEFLATED) as arquivo_zip:
+            for fatura in faturas:
+                arquivo_zip.writestr(
+                    _nome_pdf_no_zip(fatura),
+                    gerar_pdf_fatura_bytes(
+                        fatura,
+                        configuracao=configuracao,
+                    ),
+                )
+    except Exception:
+        logger.exception(
+            "Falha ao gerar ZIP de faturas para %02d/%d.",
+            mes,
+            ano,
+            extra={"usuario_id": request.user.id},
+        )
+        return HttpResponse(
+            "Não foi possível gerar o arquivo de faturas.",
+            status=500,
+            content_type="text/plain; charset=utf-8",
+        )
+
+    resposta = HttpResponse(
+        destino.getvalue(),
+        content_type="application/zip",
+    )
+    resposta["Content-Disposition"] = (
+        f'attachment; filename="faturas_{ano}_{mes:02d}.zip"'
+    )
+    return resposta
 
 
 @staff_member_required
@@ -618,9 +694,7 @@ def baixar_pdf_fatura(request, fatura_id):
         Fatura.objects.select_related("apartamento", "leitura"),
         id=fatura_id,
     )
-    buffer = BytesIO()
-    gerar_pdf_fatura(fatura=fatura, destino=buffer)
-    buffer.seek(0)
+    buffer = BytesIO(gerar_pdf_fatura_bytes(fatura))
 
     apartamento = slugify(
         str(fatura.apartamento_numero_emissao)
