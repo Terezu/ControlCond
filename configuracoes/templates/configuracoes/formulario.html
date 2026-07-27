@@ -56,7 +56,20 @@
                     <div class="col-12 col-md-4">{% include "components/form_field.html" with field=form.cor_primaria %}</div>
                     <div class="col-12 col-md-4">{% include "components/form_field.html" with field=form.cor_secundaria %}</div>
                     <div class="col-12 col-md-4">{% include "components/form_field.html" with field=form.cor_destaque %}</div>
-                    <p class="text-secondary small mb-0">As cores ficam armazenadas para evolução futura do tema.</p>
+                    <div class="col-12 d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-2">
+                        <p id="orientacao-cores-tema" class="text-secondary small mb-0">As cores são aplicadas ao tema do condomínio após salvar.</p>
+                        <button
+                            type="button"
+                            class="btn btn-sm btn-outline-secondary"
+                            id="restaurar-cores-padrao"
+                            data-cor-primaria="{{ cor_primaria_padrao }}"
+                            data-cor-secundaria="{{ cor_secundaria_padrao }}"
+                            data-cor-destaque="{{ cor_destaque_padrao }}"
+                            aria-describedby="orientacao-cores-tema"
+                        >
+                            <i class="bi bi-arrow-counterclockwise me-1" aria-hidden="true"></i>Restaurar cores padrão
+                        </button>
+                    </div>
                 </div></div></div>
             </div>
 

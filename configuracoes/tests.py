@@ -8,12 +8,15 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
-from condominios.models import Condominio
+from condominios.models import Condominio, VinculoUsuarioCondominio
 
 from .forms import ConfiguracaoCondominioForm
 from .admin import ConfiguracaoCondominioAdmin
 from .models import (
     CHAVE_CONFIGURACAO,
+    COR_DESTAQUE_PADRAO,
+    COR_PRIMARIA_PADRAO,
+    COR_SECUNDARIA_PADRAO,
     ConfiguracaoCondominio,
     FaixaTarifaAgua,
     TabelaTarifariaAgua,
@@ -301,6 +304,10 @@ class ConfiguracaoCondominioViewTests(TestCase):
             password="senha-de-teste",
             is_staff=True,
         )
+        VinculoUsuarioCondominio.objects.create(
+            usuario=self.usuario,
+            condominio=Condominio.objects.get(),
+        )
 
     def test_telas_exigem_usuario_staff(self):
         for url in (
@@ -338,9 +345,9 @@ class ConfiguracaoCondominioViewTests(TestCase):
             {
                 "nome": "Residencial Teste",
                 "valor_m3_gas": "23.40",
-                "cor_primaria": "#1F4E5F",
-                "cor_secundaria": "#64748B",
-                "cor_destaque": "#E8F1F4",
+                "cor_primaria": "#7B2CBF",
+                "cor_secundaria": "#4361EE",
+                "cor_destaque": "#F3E8FF",
                 "moeda": "BRL",
                 "dias_vencimento_padrao": "10",
                 "percentual_multa_padrao": "0",
@@ -356,6 +363,9 @@ class ConfiguracaoCondominioViewTests(TestCase):
         configuracao = ConfiguracaoCondominio.objects.get()
         self.assertEqual(configuracao.nome, "Residencial Teste")
         self.assertEqual(configuracao.valor_m3_gas, Decimal("23.40"))
+        self.assertEqual(configuracao.cor_primaria, "#7B2CBF")
+        self.assertEqual(configuracao.cor_secundaria, "#4361EE")
+        self.assertEqual(configuracao.cor_destaque, "#F3E8FF")
         self.assertEqual(ConfiguracaoCondominio.objects.count(), 1)
 
     def test_cabecalho_usa_nome_configurado_e_fallback(self):
@@ -379,6 +389,132 @@ class ConfiguracaoCondominioViewTests(TestCase):
         self.assertContains(
             resposta_configurada,
             "Residencial das Araucárias",
+        )
+
+    def test_tema_configurado_persiste_e_chega_ao_template_base(self):
+        self.client.force_login(self.usuario)
+        configuracao = atualizar_configuracao(
+            {
+                "cor_primaria": "#7B2CBF",
+                "cor_secundaria": "#4361EE",
+                "cor_destaque": "#F3E8FF",
+            }
+        )
+
+        self.assertEqual(configuracao.cor_primaria, "#7B2CBF")
+        self.assertEqual(configuracao.cor_secundaria, "#4361EE")
+        self.assertEqual(configuracao.cor_destaque, "#F3E8FF")
+
+        for url in (
+            reverse("dashboard:inicio"),
+            reverse("apartamentos:lista"),
+            reverse("leituras:lista"),
+            reverse("faturas:lista"),
+            reverse("configuracoes:detalhes"),
+            reverse("configuracoes:editar"),
+        ):
+            with self.subTest(url=url):
+                resposta = self.client.get(url)
+                self.assertContains(
+                    resposta,
+                    "--controlcond-primary: #7B2CBF",
+                )
+                self.assertContains(
+                    resposta,
+                    "--controlcond-secondary: #4361EE",
+                )
+                self.assertContains(
+                    resposta,
+                    "--controlcond-highlight: #F3E8FF",
+                )
+                conteudo = resposta.content.decode()
+                self.assertLess(
+                    conteudo.index("css/style.css"),
+                    conteudo.index('id="controlcond-theme"'),
+                )
+                self.assertIn(
+                    "background-color: var(--controlcond-primary) !important",
+                    conteudo,
+                )
+
+        self.client.logout()
+        self.client.force_login(self.usuario)
+        resposta_apos_novo_login = self.client.get(
+            reverse("dashboard:inicio")
+        )
+        self.assertContains(
+            resposta_apos_novo_login,
+            "--controlcond-primary: #7B2CBF",
+        )
+
+    def test_tema_acompanha_troca_de_condominio(self):
+        outro_condominio = Condominio.objects.create(nome="Edifício Azul")
+        VinculoUsuarioCondominio.objects.create(
+            usuario=self.usuario,
+            condominio=outro_condominio,
+        )
+        atualizar_configuracao_por_condominio(
+            outro_condominio,
+            {
+                "cor_primaria": "#0057B8",
+                "cor_secundaria": "#334155",
+                "cor_destaque": "#DBEAFE",
+            },
+        )
+        self.client.force_login(self.usuario)
+
+        self.client.post(
+            reverse("condominios:selecionar"),
+            {"condominio": outro_condominio.pk},
+        )
+        resposta_outro = self.client.get(reverse("dashboard:inicio"))
+        self.assertContains(
+            resposta_outro,
+            "--controlcond-primary: #0057B8",
+        )
+
+        condominio_inicial = Condominio.objects.exclude(
+            pk=outro_condominio.pk
+        ).get()
+        self.client.post(
+            reverse("condominios:selecionar"),
+            {"condominio": condominio_inicial.pk},
+        )
+        resposta_inicial = self.client.get(reverse("dashboard:inicio"))
+        self.assertContains(
+            resposta_inicial,
+            "--controlcond-primary: #1F4E5F",
+        )
+
+    def test_formulario_oferece_restauracao_das_tres_cores_padrao(self):
+        self.client.force_login(self.usuario)
+
+        resposta = self.client.get(reverse("configuracoes:editar"))
+
+        self.assertContains(resposta, "Restaurar cores padrão")
+        self.assertContains(
+            resposta,
+            f'data-cor-primaria="{COR_PRIMARIA_PADRAO}"',
+        )
+        self.assertContains(
+            resposta,
+            f'data-cor-secundaria="{COR_SECUNDARIA_PADRAO}"',
+        )
+        self.assertContains(
+            resposta,
+            f'data-cor-destaque="{COR_DESTAQUE_PADRAO}"',
+        )
+        self.assertEqual(
+            ConfiguracaoCondominio._meta.get_field("cor_primaria").default,
+            COR_PRIMARIA_PADRAO,
+        )
+        self.assertEqual(
+            ConfiguracaoCondominio._meta.get_field("cor_secundaria").default,
+            COR_SECUNDARIA_PADRAO,
+        )
+        self.assertEqual(
+            ConfiguracaoCondominio._meta.get_field("cor_destaque").default,
+            COR_DESTAQUE_PADRAO,
         )
 
     def test_views_rejeitam_metodos_inesperados_e_nao_usam_cache(self):

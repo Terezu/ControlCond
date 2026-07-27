@@ -17,6 +17,9 @@ from condominios.models import obter_condominio_padrao_id
 
 CHAVE_CONFIGURACAO = 1
 LIMITE_VALOR_GAS = Decimal("999999.99")
+COR_PRIMARIA_PADRAO = "#1F4E5F"
+COR_SECUNDARIA_PADRAO = "#64748B"
+COR_DESTAQUE_PADRAO = "#E8F1F4"
 ESTADOS_BRASILEIROS = (
     ("AC", "Acre"),
     ("AL", "Alagoas"),
@@ -163,7 +166,7 @@ class ConfiguracaoCondominio(models.Model):
     cor_primaria = models.CharField(
         "Cor primária",
         max_length=7,
-        default="#1F4E5F",
+        default=COR_PRIMARIA_PADRAO,
         validators=[
             RegexValidator(
                 r"^#[0-9A-Fa-f]{6}$",
@@ -174,7 +177,7 @@ class ConfiguracaoCondominio(models.Model):
     cor_secundaria = models.CharField(
         "Cor secundária",
         max_length=7,
-        default="#64748B",
+        default=COR_SECUNDARIA_PADRAO,
         validators=[
             RegexValidator(
                 r"^#[0-9A-Fa-f]{6}$",
@@ -185,7 +188,7 @@ class ConfiguracaoCondominio(models.Model):
     cor_destaque = models.CharField(
         "Cor de destaque",
         max_length=7,
-        default="#E8F1F4",
+        default=COR_DESTAQUE_PADRAO,
         validators=[
             RegexValidator(
                 r"^#[0-9A-Fa-f]{6}$",

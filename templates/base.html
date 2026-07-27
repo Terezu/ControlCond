@@ -28,13 +28,57 @@
 
     <link
     rel="stylesheet"
-    href="{% static 'css/style.css' %}?v=20260724-dashboard"
+    href="{% static 'css/style.css' %}?v=20260727-theme-fix"
     >
+
+    <style id="controlcond-theme">
+        :root {
+            --controlcond-primary: {{ cor_primaria }};
+            --controlcond-primary-rgb: {{ cor_primaria_rgb }};
+            --controlcond-primary-contrast: {{ cor_texto_primaria }};
+            --controlcond-secondary: {{ cor_secundaria }};
+            --controlcond-secondary-rgb: {{ cor_secundaria_rgb }};
+            --controlcond-secondary-contrast: {{ cor_texto_secundaria }};
+            --controlcond-highlight: {{ cor_destaque }};
+            --controlcond-highlight-rgb: {{ cor_destaque_rgb }};
+        }
+
+        /* Estilo crítico: mantém a navbar íntegra mesmo com CSS em cache. */
+        .controlcond-navbar {
+            background-color: var(--controlcond-primary) !important;
+            --bs-navbar-active-color: var(--controlcond-primary-contrast);
+            --bs-navbar-brand-color: var(--controlcond-primary-contrast);
+            --bs-navbar-brand-hover-color: var(--controlcond-primary-contrast);
+            --bs-navbar-color: var(--controlcond-primary-contrast);
+            --bs-navbar-hover-color: var(--controlcond-primary-contrast);
+            --bs-navbar-toggler-border-color:
+                var(--controlcond-primary-contrast);
+            color: var(--controlcond-primary-contrast);
+        }
+
+        .controlcond-navbar :is(
+            .link-light,
+            .text-light-emphasis,
+            .text-white
+        ) {
+            color: var(--controlcond-primary-contrast) !important;
+        }
+
+        .controlcond-navbar .navbar-toggler-icon {
+            background-image:
+                linear-gradient(currentcolor, currentcolor),
+                linear-gradient(currentcolor, currentcolor),
+                linear-gradient(currentcolor, currentcolor);
+            background-position: center 25%, center 50%, center 75%;
+            background-repeat: no-repeat;
+            background-size: 100% 2px;
+        }
+    </style>
 </head>
 
 <body class="bg-light">
 
-<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+<nav class="navbar navbar-expand-lg navbar-dark controlcond-navbar">
     <div class="container">
         <a
             class="navbar-brand fw-bold"
@@ -163,6 +207,7 @@
 <script
     src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"
 ></script>
+<script src="{% static 'js/theme-preview.js' %}?v=20260727-theme-reset"></script>
 
 </body>
 </html>
