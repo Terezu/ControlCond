@@ -44,6 +44,18 @@ class ResultadoFechamento:
         return len(self.falhas_tarifarias)
 
 
+@dataclass(frozen=True)
+class ResultadoPagamento:
+    valor_original: Decimal
+    desconto: Decimal
+    bonificacao: Decimal
+    multa: Decimal
+    juros: Decimal
+    valor_final: Decimal
+    dias_em_atraso: int
+    dias_antecipados: int
+
+
 class RegraNegocioFaturaError(ValidationError):
     """Indica uma operação incompatível com o estado atual da fatura."""
 
@@ -700,6 +712,84 @@ def _normalizar_motivo(motivo, acao):
     return motivo
 
 
+def calcular_pagamento_fatura(fatura, data_pagamento):
+    if not all(
+        hasattr(data_pagamento, atributo)
+        for atributo in ("year", "month", "day")
+    ):
+        raise RegraNegocioFaturaError("Informe uma data de pagamento válida.")
+
+    diferenca_vencimento = data_pagamento - fatura.data_vencimento
+    dias_em_atraso = max(diferenca_vencimento.days, 0)
+    dias_antecipados = max(-diferenca_vencimento.days, 0)
+    dias_com_encargos = max(
+        dias_em_atraso - fatura.dias_tolerancia_emissao,
+        0,
+    )
+    fator_percentual = Decimal("100")
+    valor_original = fatura.valor_original
+    base_calculo = valor_original - fatura.desconto
+    multa = (
+        (
+            base_calculo
+            * fatura.percentual_multa_emissao
+            / fator_percentual
+        ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        if dias_com_encargos
+        else Decimal("0.00")
+    )
+    if dias_com_encargos:
+        multiplicador_juros = Decimal(dias_com_encargos)
+        if fatura.tipo_juros_emissao == Fatura.TipoJuros.MENSAL:
+            multiplicador_juros /= Decimal("30")
+        juros = (
+            base_calculo
+            * fatura.percentual_juros_emissao
+            / fator_percentual
+            * multiplicador_juros
+        ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    else:
+        juros = Decimal("0.00")
+
+    aplica_bonificacao = bool(
+        (
+            fatura.percentual_bonificacao_emissao > 0
+            or fatura.valor_bonificacao > 0
+        )
+        and fatura.data_limite_bonificacao
+        and data_pagamento <= fatura.data_limite_bonificacao
+    )
+    bonificacao = (
+        (
+            base_calculo
+            * fatura.percentual_bonificacao_emissao
+            / fator_percentual
+        ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        if (
+            aplica_bonificacao
+            and fatura.percentual_bonificacao_emissao > 0
+        )
+        else (
+            fatura.valor_bonificacao
+            if aplica_bonificacao
+            else Decimal("0.00")
+        )
+    )
+    valor_final = (
+        base_calculo + multa + juros - bonificacao
+    ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return ResultadoPagamento(
+        valor_original=valor_original,
+        desconto=fatura.desconto,
+        bonificacao=bonificacao,
+        multa=multa,
+        juros=juros,
+        valor_final=valor_final,
+        dias_em_atraso=dias_em_atraso,
+        dias_antecipados=dias_antecipados,
+    )
+
+
 @transaction.atomic
 def _executar_acao_status(
     fatura_id,
@@ -800,11 +890,6 @@ def marcar_fatura_como_paga(
 ):
     if data_pagamento is None:
         data_pagamento = timezone.localdate()
-    if not all(
-        hasattr(data_pagamento, atributo)
-        for atributo in ("year", "month", "day")
-    ):
-        raise RegraNegocioFaturaError("Informe uma data de pagamento válida.")
     if forma_pagamento not in Fatura.FormaPagamento.values:
         raise RegraNegocioFaturaError("Informe uma forma de pagamento válida.")
     observacoes_pagamento = (observacoes_pagamento or "").strip()
@@ -813,14 +898,7 @@ def marcar_fatura_como_paga(
             "As observações do pagamento devem ter no máximo 500 caracteres."
         )
     fatura = _consultar_fatura_para_atualizacao(fatura_id)
-    aplica_bonificacao = bool(
-        (
-            fatura.percentual_bonificacao_emissao > 0
-            or fatura.valor_bonificacao > 0
-        )
-        and fatura.data_limite_bonificacao
-        and data_pagamento <= fatura.data_limite_bonificacao
-    )
+    resultado = calcular_pagamento_fatura(fatura, data_pagamento)
     fatura, alterada = _executar_acao_status(
         fatura_id,
         status_origem=Fatura.Status.PENDENTE,
@@ -829,67 +907,15 @@ def marcar_fatura_como_paga(
         usuario=usuario,
     )
     if alterada:
-        diferenca_vencimento = data_pagamento - fatura.data_vencimento
-        dias_em_atraso = max(diferenca_vencimento.days, 0)
-        dias_com_encargos = max(
-            dias_em_atraso - fatura.dias_tolerancia_emissao,
-            0,
-        )
         fatura.data_pagamento = data_pagamento
-        fatura.dias_em_atraso = dias_em_atraso
-        fatura.dias_antecipados = max(-diferenca_vencimento.days, 0)
-        fator_percentual = Decimal("100")
-        fatura.valor_original = fatura.valor_total
-        fatura.valor_multa_aplicada = (
-            (
-                fatura.valor_original
-                * fatura.percentual_multa_emissao
-                / fator_percentual
-            ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-            if dias_com_encargos
-            else Decimal("0.00")
-        )
-        if dias_com_encargos:
-            multiplicador_juros = Decimal(dias_com_encargos)
-            if (
-                fatura.tipo_juros_emissao
-                == Fatura.TipoJuros.MENSAL
-            ):
-                multiplicador_juros /= Decimal("30")
-            fatura.valor_juros_aplicados = (
-                fatura.valor_original
-                * fatura.percentual_juros_emissao
-                / fator_percentual
-                * multiplicador_juros
-            ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        else:
-            fatura.valor_juros_aplicados = Decimal("0.00")
-        fatura.bonificacao_aplicada = aplica_bonificacao
-        fatura.valor_bonificacao_aplicada = (
-            (
-                fatura.valor_original
-                * fatura.percentual_bonificacao_emissao
-                / fator_percentual
-            ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-            if (
-                aplica_bonificacao
-                and fatura.percentual_bonificacao_emissao > 0
-            )
-            else (
-                fatura.valor_bonificacao
-                if aplica_bonificacao
-                else Decimal("0.00")
-            )
-        )
-        fatura.valor_final = (
-            fatura.valor_original
-            + fatura.valor_multa_aplicada
-            + fatura.valor_juros_aplicados
-            - fatura.valor_bonificacao_aplicada
-        ).quantize(
-            Decimal("0.01"),
-            rounding=ROUND_HALF_UP,
-        )
+        fatura.dias_em_atraso = resultado.dias_em_atraso
+        fatura.dias_antecipados = resultado.dias_antecipados
+        fatura.valor_original = resultado.valor_original
+        fatura.valor_multa_aplicada = resultado.multa
+        fatura.valor_juros_aplicados = resultado.juros
+        fatura.valor_bonificacao_aplicada = resultado.bonificacao
+        fatura.bonificacao_aplicada = resultado.bonificacao > 0
+        fatura.valor_final = resultado.valor_final
         fatura.valor_pago = fatura.valor_final
         fatura.forma_pagamento = forma_pagamento
         fatura.observacoes_pagamento = observacoes_pagamento
@@ -1019,7 +1045,7 @@ def editar_fatura(
             fatura.recalcular_valor_total()
         except ValidationError as exc:
             raise ValueError(" ".join(exc.messages)) from exc
-        fatura.valor_original = fatura.valor_total
+        fatura.valor_original = fatura.subtotal
         campos_atualizados.extend(["valor_total", "valor_original"])
 
     if campos_atualizados:

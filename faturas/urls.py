@@ -38,6 +38,11 @@ urlpatterns = [
         name="confirmar_marcar_como_paga",
     ),
     path(
+        "<int:fatura_id>/pagamento/previsao/",
+        views.previsao_pagamento,
+        name="previsao_pagamento",
+    ),
+    path(
         "<int:fatura_id>/marcar-como-paga/",
         views.marcar_como_paga,
         name="marcar_como_paga",

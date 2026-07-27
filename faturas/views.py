@@ -1,4 +1,5 @@
 from decimal import Decimal
+from datetime import date
 from io import BytesIO
 import logging
 from zipfile import ZIP_DEFLATED, ZipFile
@@ -28,6 +29,7 @@ from condominios.services import obter_condominio_ativo
 from .pdf import gerar_pdf_fatura_bytes
 from .services import (
     RegraNegocioFaturaError,
+    calcular_pagamento_fatura,
     cancelar_fatura,
     consultar_fatura,
     consultar_fatura_no_condominio,
@@ -279,18 +281,59 @@ def _confirmar_acao_status(request, fatura_id, acao):
         return _redirecionar_detalhes(fatura)
     if acao == "marcar_como_paga":
         form = RegistrarPagamentoForm()
+        previsao_pagamento = calcular_pagamento_fatura(
+            fatura,
+            form.fields["data_pagamento"].initial,
+        )
     elif configuracao.get("exige_motivo"):
         form = MotivoAlteracaoStatusForm(acao=acao)
     else:
         form = None
+    if acao != "marcar_como_paga":
+        previsao_pagamento = None
     return render(
         request,
         "faturas/confirmar_acao_status.html",
         {
             "fatura": fatura,
             "form": form,
+            "previsao_pagamento": previsao_pagamento,
             **configuracao,
         },
+    )
+
+
+@staff_member_required
+@never_cache
+@require_safe
+def previsao_pagamento(request, fatura_id):
+    fatura = _obter_fatura_acao(request, fatura_id)
+    if fatura.status != Fatura.Status.PENDENTE:
+        return JsonResponse(
+            {"erro": "Somente faturas pendentes podem receber pagamento."},
+            status=409,
+        )
+    try:
+        data_pagamento = date.fromisoformat(
+            request.GET.get("data_pagamento", "")
+        )
+        resultado = calcular_pagamento_fatura(fatura, data_pagamento)
+    except (TypeError, ValueError, RegraNegocioFaturaError):
+        return JsonResponse(
+            {"erro": "Informe uma data de pagamento válida."},
+            status=400,
+        )
+    return JsonResponse(
+        {
+            "valor_original": f"{resultado.valor_original:.2f}",
+            "desconto": f"{resultado.desconto:.2f}",
+            "bonificacao": f"{resultado.bonificacao:.2f}",
+            "multa": f"{resultado.multa:.2f}",
+            "juros": f"{resultado.juros:.2f}",
+            "valor_final": f"{resultado.valor_final:.2f}",
+            "dias_em_atraso": resultado.dias_em_atraso,
+            "dias_antecipados": resultado.dias_antecipados,
+        }
     )
 
 

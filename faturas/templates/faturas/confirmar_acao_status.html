@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}{{ rotulo }} | ControlCond{% endblock %}
 
@@ -16,6 +17,48 @@
             </p>
             <div class="alert alert-warning" role="alert">{{ aviso }}</div>
 
+            {% if previsao_pagamento %}
+                <div
+                    class="border rounded-3 p-3 mb-4"
+                    id="resumo-pagamento"
+                    data-preview-url="{% url 'faturas:previsao_pagamento' fatura.id %}"
+                    aria-live="polite"
+                >
+                    <h3 class="h6 mb-3">Resumo do pagamento</h3>
+                    <div class="row g-3">
+                        <div class="col-6 col-md-4">
+                            <span class="detail-label d-block">Valor original</span>
+                            <strong id="pagamento-valor-original">R$ {{ previsao_pagamento.valor_original|floatformat:2 }}</strong>
+                        </div>
+                        <div class="col-6 col-md-4">
+                            <span class="detail-label d-block">Descontos</span>
+                            <strong id="pagamento-desconto">- R$ {{ previsao_pagamento.desconto|floatformat:2 }}</strong>
+                        </div>
+                        <div class="col-6 col-md-4">
+                            <span class="detail-label d-block">Bonificação</span>
+                            <strong id="pagamento-bonificacao">- R$ {{ previsao_pagamento.bonificacao|floatformat:2 }}</strong>
+                        </div>
+                        <div class="col-6 col-md-4">
+                            <span class="detail-label d-block">Multa</span>
+                            <strong id="pagamento-multa">R$ {{ previsao_pagamento.multa|floatformat:2 }}</strong>
+                        </div>
+                        <div class="col-6 col-md-4">
+                            <span class="detail-label d-block">Juros</span>
+                            <strong id="pagamento-juros">R$ {{ previsao_pagamento.juros|floatformat:2 }}</strong>
+                        </div>
+                        <div class="col-6 col-md-4">
+                            <span class="detail-label d-block">Valor final</span>
+                            <strong class="fs-5 text-primary" id="pagamento-valor-final">R$ {{ previsao_pagamento.valor_final|floatformat:2 }}</strong>
+                        </div>
+                    </div>
+                    <p class="small text-secondary mb-0 mt-3" id="pagamento-periodo">
+                        {{ previsao_pagamento.dias_em_atraso }} dias em atraso ·
+                        {{ previsao_pagamento.dias_antecipados }} dias antecipados
+                    </p>
+                    <p class="small text-danger mb-0 mt-2 d-none" id="erro-previsao-pagamento"></p>
+                </div>
+            {% endif %}
+
             <form method="post" action="{% url url_acao fatura.id %}" novalidate>
                 {% csrf_token %}
                 {% if form %}
@@ -30,4 +73,10 @@
             </form>
         </div>
     </section>
+{% endblock %}
+
+{% block extra_scripts %}
+    {% if previsao_pagamento %}
+        <script src="{% static 'js/payment-preview.js' %}?v=20260727-payment"></script>
+    {% endif %}
 {% endblock %}

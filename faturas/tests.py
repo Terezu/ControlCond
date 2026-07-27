@@ -45,6 +45,7 @@ from .services import (
     RegraNegocioFaturaError,
     cadastrar_fatura,
     cancelar_fatura,
+    calcular_pagamento_fatura,
     editar_fatura,
     estornar_pagamento,
     executar_fechamento_mensal,
@@ -430,6 +431,38 @@ class ComponentesFinanceirosFaturaTests(TestCase):
                 "observacoes_pagamento",
             ),
         )
+
+    def test_previsao_e_confirmacao_usam_o_mesmo_calculo(self):
+        atualizar_configuracao(
+            {
+                "dias_tolerancia_pagamento": 1,
+                "percentual_multa_padrao": Decimal("2.000"),
+                "percentual_juros_padrao": Decimal("0.100"),
+                "tipo_juros": "diario",
+            }
+        )
+        fatura = self.criar_fatura(
+            valor_bonificacao=Decimal("0.00"),
+            dia_limite_bonificacao=None,
+        )
+        previsao = calcular_pagamento_fatura(
+            fatura,
+            date(2028, 2, 13),
+        )
+
+        marcar_fatura_como_paga(
+            fatura.id,
+            data_pagamento=date(2028, 2, 13),
+        )
+        fatura.refresh_from_db()
+
+        self.assertEqual(fatura.valor_multa_aplicada, previsao.multa)
+        self.assertEqual(fatura.valor_juros_aplicados, previsao.juros)
+        self.assertEqual(
+            fatura.valor_bonificacao_aplicada,
+            previsao.bonificacao,
+        )
+        self.assertEqual(fatura.valor_final, previsao.valor_final)
 
 
 class ExclusaoFaturaTests(TestCase):
@@ -2217,6 +2250,39 @@ class RegrasStatusFaturaTests(TestCase):
             'name="observacoes_pagamento"',
         )
         self.assertNotContains(resposta_pagamento, 'name="valor_final"')
+        for rotulo in (
+            "Valor original",
+            "Descontos",
+            "Bonificação",
+            "Multa",
+            "Juros",
+            "Valor final",
+        ):
+            with self.subTest(rotulo=rotulo):
+                self.assertContains(resposta_pagamento, rotulo)
+
+    def test_endpoint_previsao_retorna_calculo_sem_alterar_fatura(self):
+        atualizar_configuracao(
+            {
+                "percentual_multa_padrao": Decimal("2.000"),
+                "percentual_juros_padrao": Decimal("0.100"),
+                "tipo_juros": "diario",
+            }
+        )
+        fatura = self.criar_fatura()
+
+        resposta = self.client.get(
+            reverse("faturas:previsao_pagamento", args=[fatura.id]),
+            {"data_pagamento": "2026-01-12"},
+        )
+        fatura.refresh_from_db()
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta.json()["multa"], "2.00")
+        self.assertEqual(resposta.json()["juros"], "0.20")
+        self.assertEqual(resposta.json()["valor_final"], "102.20")
+        self.assertEqual(fatura.status, Fatura.Status.PENDENTE)
+        self.assertIsNone(fatura.valor_final)
 
     def test_endpoints_exigem_autenticacao_de_equipe(self):
         fatura = self.criar_fatura()

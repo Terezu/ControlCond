@@ -634,7 +634,12 @@ class Fatura(models.Model):
                 self.data_limite_bonificacao = (
                     self.calcular_data_limite_bonificacao_legada()
                 )
-        self.valor_original = self.valor_total
+        self.valor_original = (
+            self.valor_total + self.desconto
+        ).quantize(
+            Decimal("0.01"),
+            rounding=ROUND_HALF_UP,
+        )
 
     def save(self, *args, **kwargs):
         if self._state.adding:
