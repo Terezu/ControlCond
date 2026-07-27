@@ -25,6 +25,76 @@ from .models import (
 
 logger = logging.getLogger(__name__)
 _NAO_INFORMADO = object()
+_CAMPOS_HISTORICO_FINANCEIRO = (
+    "status",
+    "valor_agua",
+    "valor_gas",
+    "valor_aluguel",
+    "valor_condominio",
+    "valor_iptu",
+    "valor_outros",
+    "desconto",
+    "valor_bonificacao",
+    "valor_original",
+    "valor_total",
+    "valor_multa_aplicada",
+    "valor_juros_aplicados",
+    "valor_bonificacao_aplicada",
+    "valor_final",
+    "valor_pago",
+    "data_vencimento",
+    "data_pagamento",
+    "dias_em_atraso",
+    "dias_antecipados",
+    "forma_pagamento",
+)
+
+
+def _normalizar_usuario_historico(usuario):
+    if usuario is not None and not getattr(
+        usuario,
+        "is_authenticated",
+        False,
+    ):
+        return None
+    return usuario
+
+
+def _serializar_valor_historico(valor):
+    if isinstance(valor, Decimal):
+        return f"{valor:.2f}"
+    if hasattr(valor, "isoformat"):
+        return valor.isoformat()
+    return valor
+
+
+def _snapshot_financeiro(fatura):
+    return {
+        campo: _serializar_valor_historico(getattr(fatura, campo))
+        for campo in _CAMPOS_HISTORICO_FINANCEIRO
+    }
+
+
+def _registrar_historico_financeiro(
+    fatura,
+    acao,
+    *,
+    usuario=None,
+    valores_anteriores=None,
+    motivo="",
+):
+    return HistoricoStatusFatura.objects.create(
+        fatura=fatura,
+        status_anterior=(
+            valores_anteriores or {}
+        ).get("status", fatura.status),
+        novo_status=fatura.status,
+        acao=acao,
+        motivo=motivo,
+        usuario=_normalizar_usuario_historico(usuario),
+        valores_anteriores=valores_anteriores or {},
+        valores_novos=_snapshot_financeiro(fatura),
+    )
 
 
 @dataclass(frozen=True)
@@ -318,6 +388,7 @@ def cadastrar_fatura(
     dia_limite_bonificacao=_NAO_INFORMADO,
     valor_outros=None,
     observacao_outros=None,
+    usuario=None,
 ):
     apartamento = _consultar_apartamento_para_atualizacao(apartamento_id)
     valor_aluguel = _normalizar_valor_financeiro(
@@ -587,6 +658,11 @@ def cadastrar_fatura(
         )
         with transaction.atomic():
             fatura.save(force_insert=True)
+            _registrar_historico_financeiro(
+                fatura,
+                HistoricoStatusFatura.Acao.FATURA_CRIADA,
+                usuario=usuario,
+            )
     except ValidationError as exc:
         raise ValueError(" ".join(exc.messages)) from exc
     except IntegrityError as exc:
@@ -814,6 +890,7 @@ def _executar_acao_status(
         if exige_motivo
         else ""
     )
+    valores_anteriores = _snapshot_financeiro(fatura)
     status_anterior = fatura.status
     agora = timezone.now()
     campos_atualizados = ["status"]
@@ -863,19 +940,12 @@ def _executar_acao_status(
         campos_atualizados.append("data_cancelamento")
 
     fatura.save(update_fields=campos_atualizados)
-    if usuario is not None and not getattr(
-        usuario,
-        "is_authenticated",
-        False,
-    ):
-        usuario = None
-    HistoricoStatusFatura.objects.create(
-        fatura=fatura,
-        status_anterior=status_anterior,
-        novo_status=novo_status,
-        acao=acao,
-        motivo=motivo,
+    _registrar_historico_financeiro(
+        fatura,
+        acao,
         usuario=usuario,
+        valores_anteriores=valores_anteriores,
+        motivo=motivo,
     )
     return fatura, True
 
@@ -935,6 +1005,9 @@ def marcar_fatura_como_paga(
                 "observacoes_pagamento",
             ]
         )
+        evento = fatura.historico_status.order_by("-id").first()
+        evento.valores_novos = _snapshot_financeiro(fatura)
+        evento.save(update_fields=["valores_novos"])
     return fatura, alterada
 
 
@@ -984,8 +1057,10 @@ def editar_fatura(
     dia_limite_bonificacao=_NAO_INFORMADO,
     valor_outros=None,
     observacao_outros=None,
+    usuario=None,
 ):
     fatura = _consultar_fatura_para_atualizacao(fatura_id)
+    valores_anteriores = _snapshot_financeiro(fatura)
 
     campos_atualizados = []
     if any(
@@ -1055,6 +1130,14 @@ def editar_fatura(
                 validate_constraints=False,
             )
             fatura.save(update_fields=campos_atualizados)
+            valores_novos = _snapshot_financeiro(fatura)
+            if valores_novos != valores_anteriores:
+                _registrar_historico_financeiro(
+                    fatura,
+                    HistoricoStatusFatura.Acao.VALORES_FINANCEIROS_ALTERADOS,
+                    usuario=usuario,
+                    valores_anteriores=valores_anteriores,
+                )
         except ValidationError as exc:
             raise ValueError(" ".join(exc.messages)) from exc
         except IntegrityError as exc:
@@ -1168,6 +1251,7 @@ def gerar_fatura_mensal(
     dia_limite_bonificacao=_NAO_INFORMADO,
     valor_outros=None,
     observacao_outros=None,
+    usuario=None,
 ):
     leitura_atual = _consultar_contexto_leitura_para_atualizacao(leitura_id)
 
@@ -1184,6 +1268,7 @@ def gerar_fatura_mensal(
         dia_limite_bonificacao=dia_limite_bonificacao,
         valor_outros=valor_outros,
         observacao_outros=observacao_outros,
+        usuario=usuario,
     )
 
 

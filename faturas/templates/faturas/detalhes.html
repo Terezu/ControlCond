@@ -301,8 +301,8 @@
 
     <section class="card shadow-sm mt-4" aria-labelledby="titulo-historico-status">
         <div class="card-header bg-light py-3">
-            <h2 id="titulo-historico-status" class="h5 mb-1">Histórico de status</h2>
-            <p class="text-secondary small mb-0">Alterações registradas da mais recente para a mais antiga.</p>
+            <h2 id="titulo-historico-status" class="h5 mb-1">Histórico financeiro</h2>
+            <p class="text-secondary small mb-0">Criação, pagamentos e alterações registrados da mais recente para a mais antiga.</p>
         </div>
         <div class="card-body">
             {% if historico_status %}
@@ -319,6 +319,22 @@
                             {% if evento.motivo %}
                                 <p class="mb-1"><strong>Motivo:</strong> {{ evento.motivo }}</p>
                             {% endif %}
+                            {% if evento.alteracoes_financeiras %}
+                                <div class="table-responsive my-2">
+                                    <table class="table table-sm mb-0">
+                                        <thead><tr><th>Campo</th><th>Valor anterior</th><th>Valor novo</th></tr></thead>
+                                        <tbody>
+                                            {% for alteracao in evento.alteracoes_financeiras %}
+                                                <tr>
+                                                    <td>{{ alteracao.campo }}</td>
+                                                    <td>{{ alteracao.anterior|default_if_none:"—" }}</td>
+                                                    <td>{{ alteracao.novo|default_if_none:"—" }}</td>
+                                                </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            {% endif %}
                             <p class="text-secondary small mb-0">
                                 <strong>Usuário:</strong> {{ evento.usuario.get_username|default:"Sistema" }}
                             </p>
@@ -326,7 +342,7 @@
                     {% endfor %}
                 </div>
             {% else %}
-                <p class="text-secondary mb-0">Nenhuma alteração de status registrada.</p>
+                <p class="text-secondary mb-0">Nenhum evento financeiro registrado.</p>
             {% endif %}
         </div>
     </section>

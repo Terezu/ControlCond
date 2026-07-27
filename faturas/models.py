@@ -850,10 +850,39 @@ class Fatura(models.Model):
 
 
 class HistoricoStatusFatura(models.Model):
+    ROTULOS_VALORES = {
+        "status": "Status",
+        "valor_agua": "Água",
+        "valor_gas": "Gás",
+        "valor_aluguel": "Aluguel",
+        "valor_condominio": "Condomínio",
+        "valor_iptu": "IPTU",
+        "valor_outros": "Outros",
+        "desconto": "Desconto",
+        "valor_bonificacao": "Bonificação configurada",
+        "valor_original": "Valor original",
+        "valor_total": "Valor da fatura",
+        "valor_multa_aplicada": "Multa aplicada",
+        "valor_juros_aplicados": "Juros aplicados",
+        "valor_bonificacao_aplicada": "Bonificação aplicada",
+        "valor_final": "Valor final",
+        "valor_pago": "Valor pago",
+        "data_vencimento": "Vencimento",
+        "data_pagamento": "Pagamento",
+        "dias_em_atraso": "Dias em atraso",
+        "dias_antecipados": "Dias antecipados",
+        "forma_pagamento": "Forma de pagamento",
+    }
+
     class Acao(models.TextChoices):
+        FATURA_CRIADA = "fatura_criada", "Fatura criada"
         PAGAMENTO_CONFIRMADO = (
             "pagamento_confirmado",
             "Pagamento confirmado",
+        )
+        VALORES_FINANCEIROS_ALTERADOS = (
+            "valores_financeiros_alterados",
+            "Valores financeiros alterados",
         )
         FATURA_CANCELADA = "fatura_cancelada", "Fatura cancelada"
         PAGAMENTO_ESTORNADO = (
@@ -877,6 +906,8 @@ class HistoricoStatusFatura(models.Model):
     )
     acao = models.CharField(max_length=30, choices=Acao.choices)
     motivo = models.TextField(blank=True, max_length=500)
+    valores_anteriores = models.JSONField(default=dict, blank=True)
+    valores_novos = models.JSONField(default=dict, blank=True)
     usuario = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -894,3 +925,26 @@ class HistoricoStatusFatura(models.Model):
         return (
             f"{self.get_acao_display()} - Fatura {self.fatura_id}"
         )
+
+    @property
+    def alteracoes_financeiras(self):
+        campos = dict.fromkeys(
+            (
+                *self.valores_anteriores.keys(),
+                *self.valores_novos.keys(),
+            )
+        )
+        alteracoes = []
+        for campo in campos:
+            anterior = self.valores_anteriores.get(campo)
+            novo = self.valores_novos.get(campo)
+            if anterior == novo and self.valores_anteriores:
+                continue
+            alteracoes.append(
+                {
+                    "campo": self.ROTULOS_VALORES.get(campo, campo),
+                    "anterior": anterior,
+                    "novo": novo,
+                }
+            )
+        return tuple(alteracoes)

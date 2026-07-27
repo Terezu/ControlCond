@@ -2065,6 +2065,64 @@ class RegrasStatusFaturaTests(TestCase):
                 self.assertEqual(evento.motivo, "")
                 self.assertEqual(evento.usuario, self.usuario)
                 self.assertIsNotNone(evento.criado_em)
+                self.assertEqual(
+                    evento.valores_anteriores["status"],
+                    Fatura.Status.PENDENTE,
+                )
+                self.assertEqual(
+                    evento.valores_novos["status"],
+                    novo_status,
+                )
+
+    def test_criacao_registra_usuario_e_snapshot_financeiro(self):
+        fatura = cadastrar_fatura(
+            apartamento_id=self.apartamento.id,
+            mes=12,
+            ano=2026,
+            consumo_agua=0,
+            consumo_gas=0,
+            valor_aluguel=Decimal("100.00"),
+            desconto=Decimal("10.00"),
+            usuario=self.usuario,
+        )
+
+        evento = fatura.historico_status.get()
+        self.assertEqual(
+            evento.acao,
+            HistoricoStatusFatura.Acao.FATURA_CRIADA,
+        )
+        self.assertEqual(evento.usuario, self.usuario)
+        self.assertEqual(evento.valores_anteriores, {})
+        self.assertEqual(evento.valores_novos["desconto"], "10.00")
+        self.assertEqual(evento.valores_novos["valor_total"], "90.00")
+
+    def test_edicao_registra_desconto_e_bonificacao_antes_e_depois(self):
+        fatura = self.criar_fatura()
+
+        editar_fatura(
+            fatura.id,
+            desconto=Decimal("10.00"),
+            valor_bonificacao=Decimal("5.00"),
+            dia_limite_bonificacao=5,
+            usuario=self.usuario,
+        )
+
+        evento = fatura.historico_status.get()
+        self.assertEqual(
+            evento.acao,
+            HistoricoStatusFatura.Acao.VALORES_FINANCEIROS_ALTERADOS,
+        )
+        self.assertEqual(evento.usuario, self.usuario)
+        self.assertEqual(evento.valores_anteriores["desconto"], "0.00")
+        self.assertEqual(evento.valores_novos["desconto"], "10.00")
+        self.assertEqual(
+            evento.valores_anteriores["valor_bonificacao"],
+            "0.00",
+        )
+        self.assertEqual(
+            evento.valores_novos["valor_bonificacao"],
+            "5.00",
+        )
 
     def test_estorno_e_reabertura_exigem_motivo_e_limpam_datas(self):
         paga = self.criar_fatura(mes=1)
@@ -2442,13 +2500,15 @@ class RegrasStatusFaturaTests(TestCase):
             reverse("faturas:detalhes", args=[fatura.id])
         )
 
-        self.assertContains(resposta, "Histórico de status")
+        self.assertContains(resposta, "Histórico financeiro")
         self.assertContains(resposta, "Pagamento estornado")
         self.assertContains(
             resposta,
             "Pagamento lançado na unidade errada.",
         )
         self.assertContains(resposta, self.usuario.username)
+        self.assertContains(resposta, "Valor anterior")
+        self.assertContains(resposta, "Valor novo")
         self.assertContains(
             resposta,
             "Editar valores da fatura",

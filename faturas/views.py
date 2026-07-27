@@ -584,7 +584,11 @@ def alterar_valores_fatura(request, fatura_id):
         ):
             if campo in request.POST:
                 argumentos[campo] = form.cleaned_data[campo]
-        editar_fatura(fatura.id, **argumentos)
+        editar_fatura(
+            fatura.id,
+            usuario=request.user,
+            **argumentos,
+        )
     except (RegraNegocioFaturaError, ValueError) as erro:
         mensagem = (
             erro.messages[0]
@@ -633,6 +637,7 @@ def gerar_fatura(request):
             try:
                 fatura = gerar_fatura_mensal(
                     leitura.id,
+                    usuario=request.user,
                     valor_aluguel=form.cleaned_data["valor_aluguel"],
                     desconto=form.cleaned_data["desconto"],
                     valor_condominio=form.cleaned_data["valor_condominio"],

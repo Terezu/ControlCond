@@ -104,6 +104,8 @@ class HistoricoStatusFaturaAdmin(admin.ModelAdmin):
         "novo_status",
         "acao",
         "motivo",
+        "valores_anteriores",
+        "valores_novos",
         "usuario",
         "criado_em",
     )
