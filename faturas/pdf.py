@@ -46,6 +46,8 @@ ALTURA_DADOS_FATURA = 72
 ALTURA_CARD_CONSUMO = 150
 ALTURA_COMPOSICAO = 124
 ALTURA_TOTAL = 100
+ALTURA_TOTAL_PAGO = 142
+ALTURA_TOTAL_PAGO_COM_BONIFICACAO = 160
 ALTURA_RODAPE = 58
 
 
@@ -284,9 +286,10 @@ def desenhar_dados_apartamento(pdf, fatura, largura, y):
         ("Bloco", fatura.apartamento_bloco_emissao or "Não informado"),
         ("Referência", f"{fatura.mes:02d}/{fatura.ano}"),
         ("Emissão", fatura.data_emissao.strftime("%d/%m/%Y")),
+        ("Vencimento", fatura.data_vencimento.strftime("%d/%m/%Y")),
         ("Status", fatura.get_status_display()),
     )
-    larguras = (0.23, 0.16, 0.19, 0.21, 0.21)
+    larguras = (0.20, 0.13, 0.16, 0.17, 0.18, 0.16)
     x = MARGEM_HORIZONTAL + 14
     for (rotulo, valor), proporcao in zip(campos, larguras, strict=True):
         _desenhar_campo_resumo(pdf, rotulo, valor, x, y - 24)
@@ -530,16 +533,103 @@ def desenhar_composicao_financeira(pdf, fatura, largura, y):
     return base - ESPACO_SECAO
 
 
+def _desenhar_detalhes_pagamento(pdf, fatura, largura, y):
+    x_inicial = MARGEM_HORIZONTAL + 16
+    x_final = largura - MARGEM_HORIZONTAL - 16
+    largura_util = x_final - x_inicial
+    data_pagamento = fatura.data_pagamento.strftime("%d/%m/%Y")
+    forma_pagamento = (
+        fatura.get_forma_pagamento_display()
+        if fatura.forma_pagamento
+        else "Não informada"
+    )
+    dias_atraso = fatura.dias_em_atraso or 0
+    texto_atraso = (
+        f"{dias_atraso} dia{'s' if dias_atraso != 1 else ''} em atraso"
+        if dias_atraso
+        else "Sem atraso"
+    )
+
+    pdf.setFillColor(COR_SECUNDARIA)
+    pdf.setFont(FONTE_REGULAR, 8)
+    pdf.drawString(
+        x_inicial,
+        y,
+        f"Pagamento: {data_pagamento} · {texto_atraso}",
+    )
+    pdf.drawRightString(
+        x_final,
+        y,
+        f"Forma: {forma_pagamento}",
+    )
+
+    largura_coluna = largura_util / 3
+    itens = (
+        (
+            "Valor original",
+            f"R$ {formatar_valor_monetario(fatura.valor_original)}",
+        ),
+        (
+            "Multa",
+            f"R$ {formatar_valor_monetario(fatura.valor_multa_aplicada)}",
+        ),
+        (
+            "Juros",
+            f"R$ {formatar_valor_monetario(fatura.valor_juros_aplicados)}",
+        ),
+    )
+    for indice, (rotulo, valor) in enumerate(itens):
+        x = x_inicial + (indice * largura_coluna)
+        pdf.setFillColor(COR_SECUNDARIA)
+        pdf.setFont(FONTE_REGULAR, 7.5)
+        pdf.drawString(x, y - 22, rotulo.upper())
+        pdf.setFillColor(COR_TEXTO)
+        pdf.setFont(FONTE_DESTAQUE, 9.5)
+        pdf.drawString(x, y - 36, valor)
+
+    valor_efetivo = (
+        fatura.valor_final
+        if fatura.valor_final is not None
+        else (
+            fatura.valor_pago
+            if fatura.valor_pago is not None
+            else fatura.valor_total
+        )
+    )
+    pdf.setStrokeColor(COR_BORDA)
+    pdf.setLineWidth(0.6)
+    pdf.line(x_inicial, y - 48, x_final, y - 48)
+    pdf.setFillColor(COR_PRIMARIA)
+    pdf.setFont(FONTE_DESTAQUE, 9)
+    pdf.drawString(x_inicial, y - 65, "VALOR EFETIVAMENTE PAGO")
+    pdf.setFont(FONTE_DESTAQUE, 12)
+    pdf.drawRightString(
+        x_final,
+        y - 65,
+        f"R$ {formatar_valor_monetario(valor_efetivo)}",
+    )
+
+
 def desenhar_total(pdf, fatura, largura, y):
     largura_util = largura - (2 * MARGEM_HORIZONTAL)
-    base = y - ALTURA_TOTAL
+    pagamento_confirmado = (
+        fatura.status == fatura.Status.PAGA
+        and fatura.data_pagamento is not None
+    )
+    if pagamento_confirmado and fatura.valor_bonificacao:
+        altura = ALTURA_TOTAL_PAGO_COM_BONIFICACAO
+    elif pagamento_confirmado:
+        altura = ALTURA_TOTAL_PAGO
+    else:
+        altura = ALTURA_TOTAL
+    base = y - altura
     pdf.setFillColor(COR_TOTAL)
     pdf.setStrokeColor(COR_PRIMARIA)
     pdf.roundRect(
         MARGEM_HORIZONTAL,
         base,
         largura_util,
-        ALTURA_TOTAL,
+        altura,
         RAIO_CARD,
         stroke=1,
         fill=1,
@@ -576,20 +666,8 @@ def desenhar_total(pdf, fatura, largura, y):
             ),
         )
         linha_y -= 18
-    if fatura.status == fatura.Status.PAGA and fatura.data_pagamento:
-        pdf.setFont(FONTE_REGULAR, 8)
-        texto = (
-            f"Pago em {fatura.data_pagamento.strftime('%d/%m/%Y')} · "
-            f"Bonificação aplicada: "
-            f"{'sim' if fatura.bonificacao_aplicada else 'não'}"
-        )
-        pdf.drawString(MARGEM_HORIZONTAL + 16, linha_y, texto)
-        pdf.setFont(FONTE_DESTAQUE, 10)
-        pdf.drawRightString(
-            largura - MARGEM_HORIZONTAL - 16,
-            linha_y,
-            f"Valor pago: R$ {formatar_valor_monetario(fatura.valor_pago)}",
-        )
+    if pagamento_confirmado:
+        _desenhar_detalhes_pagamento(pdf, fatura, largura, linha_y)
     return base - ESPACO_SECAO
 
 

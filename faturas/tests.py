@@ -1381,6 +1381,65 @@ class GerarFaturaMensalTests(TestCase):
             with self.subTest(esperado=esperado):
                 self.assertIn(esperado, conteudo)
 
+    def test_pdf_exibe_fechamento_financeiro_da_fatura_paga(self):
+        fatura = Fatura.objects.create(
+            apartamento=self.apartamento,
+            mes=1,
+            ano=2026,
+            consumo_agua=0,
+            consumo_gas=0,
+            valor_aluguel=Decimal("1000.00"),
+            valor_total=Decimal("1000.00"),
+            apartamento_numero_emissao=self.apartamento.numero,
+        )
+        Fatura.objects.filter(pk=fatura.pk).update(
+            status=Fatura.Status.PAGA,
+            data_vencimento=date(2026, 1, 10),
+            data_pagamento=date(2026, 1, 14),
+            dias_em_atraso=4,
+            valor_original=Decimal("1000.00"),
+            valor_multa_aplicada=Decimal("20.00"),
+            valor_juros_aplicados=Decimal("4.00"),
+            valor_pago=Decimal("1024.00"),
+            valor_final=Decimal("1024.00"),
+            forma_pagamento=Fatura.FormaPagamento.PIX,
+        )
+        fatura.refresh_from_db()
+
+        with patch("faturas.pdf.canvas.Canvas") as canvas_mock:
+            pdf_mock = canvas_mock.return_value
+            pdf_mock.stringWidth.return_value = 0
+            gerar_pdf_fatura(
+                fatura,
+                BytesIO(),
+                configuracao=obter_configuracao(),
+            )
+
+        textos = [
+            chamada.args[2]
+            for chamada in (
+                pdf_mock.drawString.call_args_list
+                + pdf_mock.drawRightString.call_args_list
+            )
+        ]
+        conteudo = " ".join(textos)
+        for esperado in (
+            "VENCIMENTO",
+            "10/01/2026",
+            "Pagamento: 14/01/2026 · 4 dias em atraso",
+            "Forma: PIX",
+            "VALOR ORIGINAL",
+            "R$ 1.000,00",
+            "MULTA",
+            "R$ 20,00",
+            "JUROS",
+            "R$ 4,00",
+            "VALOR EFETIVAMENTE PAGO",
+            "R$ 1.024,00",
+        ):
+            with self.subTest(esperado=esperado):
+                self.assertIn(esperado, conteudo)
+
     def test_pdf_usa_dados_configurados(self):
         configuracao = atualizar_configuracao(
             {
