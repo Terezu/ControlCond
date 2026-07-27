@@ -32,6 +32,14 @@ COR_TOTAL = colors.HexColor("#E8F1F4")
 FONTE_REGULAR = "Helvetica"
 FONTE_DESTAQUE = "Helvetica-Bold"
 
+# Hierarquia financeira
+TAMANHO_ROTULO_FINANCEIRO = 9
+TAMANHO_VALOR_FINANCEIRO = 11
+FONTE_ROTULO_FINANCEIRO = FONTE_REGULAR
+FONTE_VALOR_FINANCEIRO = FONTE_DESTAQUE
+ENTRELINHA_FINANCEIRA = 21
+ESPACO_ANTES_VALOR_FINANCEIRO = 10
+
 # Alturas dos blocos
 ALTURA_CABECALHO = 132
 ALTURA_DADOS_FATURA = 72
@@ -287,12 +295,55 @@ def desenhar_dados_apartamento(pdf, fatura, largura, y):
     return base - ESPACO_SECAO
 
 
-def _desenhar_linha_valor(pdf, rotulo, valor, x, y, largura):
+def _ajustar_texto_em_largura(pdf, texto, largura, fonte, tamanho):
+    """Mantém rótulos longos dentro da área reservada à descrição."""
+    texto = str(texto)
+    if pdf.stringWidth(texto, fonte, tamanho) <= largura:
+        return texto
+
+    sufixo = "..."
+    largura_sufixo = pdf.stringWidth(sufixo, fonte, tamanho)
+    while (
+        texto
+        and pdf.stringWidth(texto, fonte, tamanho) + largura_sufixo > largura
+    ):
+        texto = texto[:-1].rstrip()
+    return f"{texto}{sufixo}" if texto else sufixo
+
+
+def _desenhar_linha_valor(
+    pdf,
+    rotulo,
+    valor,
+    x,
+    y,
+    largura,
+    *,
+    fonte_rotulo=FONTE_ROTULO_FINANCEIRO,
+    tamanho_rotulo=TAMANHO_ROTULO_FINANCEIRO,
+):
+    largura_valor = pdf.stringWidth(
+        valor,
+        FONTE_VALOR_FINANCEIRO,
+        TAMANHO_VALOR_FINANCEIRO,
+    )
+    largura_rotulo = max(
+        0,
+        largura - largura_valor - ESPACO_ANTES_VALOR_FINANCEIRO,
+    )
+    rotulo = _ajustar_texto_em_largura(
+        pdf,
+        rotulo,
+        largura_rotulo,
+        fonte_rotulo,
+        tamanho_rotulo,
+    )
+
     pdf.setFillColor(COR_SECUNDARIA)
-    pdf.setFont(FONTE_REGULAR, 8)
+    pdf.setFont(fonte_rotulo, tamanho_rotulo)
     pdf.drawString(x, y, rotulo)
     pdf.setFillColor(COR_TEXTO)
-    pdf.setFont(FONTE_DESTAQUE, 10)
+    pdf.setFont(FONTE_VALOR_FINANCEIRO, TAMANHO_VALOR_FINANCEIRO)
     pdf.drawRightString(x + largura, y, valor)
 
 
@@ -351,13 +402,14 @@ def _desenhar_card_consumo(
     pdf.drawRightString(x + largura - 14, topo - 104, "VALOR")
 
     pdf.setFillColor(COR_TEXTO)
-    pdf.setFont(FONTE_DESTAQUE, 14)
+    pdf.setFont(FONTE_DESTAQUE, 12)
     pdf.drawString(
         x + 14,
         topo - 126,
         f"{formatar_decimal(consumo)} m³",
     )
     pdf.setFillColor(COR_PRIMARIA)
+    pdf.setFont(FONTE_VALOR_FINANCEIRO, TAMANHO_VALOR_FINANCEIRO)
     pdf.drawRightString(
         x + largura - 14,
         topo - 126,
@@ -442,14 +494,22 @@ def desenhar_composicao_financeira(pdf, fatura, largura, y):
             )
         )
 
-    largura_coluna = (largura_util - 42) / 2
+    largura_coluna = (largura_util - 56) / 2
+    x_esquerda = MARGEM_HORIZONTAL + 14
+    x_direita = MARGEM_HORIZONTAL + largura_coluna + 42
+
+    separador_x = MARGEM_HORIZONTAL + (largura_util / 2)
+    pdf.setStrokeColor(COR_BORDA)
+    pdf.setLineWidth(0.6)
+    pdf.line(separador_x, base + 14, separador_x, y - 14)
+
     for indice, (rotulo, valor) in enumerate(coluna_esquerda):
         _desenhar_linha_valor(
             pdf,
             rotulo,
             valor,
-            MARGEM_HORIZONTAL + 14,
-            y - 22 - (indice * 20),
+            x_esquerda,
+            y - 22 - (indice * ENTRELINHA_FINANCEIRA),
             largura_coluna,
         )
     for indice, (rotulo, valor) in enumerate(coluna_direita):
@@ -457,9 +517,15 @@ def desenhar_composicao_financeira(pdf, fatura, largura, y):
             pdf,
             rotulo,
             valor,
-            MARGEM_HORIZONTAL + largura_coluna + 28,
-            y - 22 - (indice * 20),
+            x_direita,
+            y - 22 - (indice * ENTRELINHA_FINANCEIRA),
             largura_coluna,
+            fonte_rotulo=(
+                FONTE_DESTAQUE if indice == 0 else FONTE_ROTULO_FINANCEIRO
+            ),
+            tamanho_rotulo=(
+                10 if indice == 0 else TAMANHO_ROTULO_FINANCEIRO
+            ),
         )
     return base - ESPACO_SECAO
 
