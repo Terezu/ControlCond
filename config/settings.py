@@ -15,16 +15,15 @@ from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
 from django.utils.csp import CSP
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / ".env", override=False)
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
-
-from django.utils.csp import CSP
-
 
 def _env_bool(nome, padrao=False):
     valor = os.environ.get(nome)
@@ -72,7 +71,7 @@ if not SECRET_KEY or not SECRET_KEY.strip():
         raise ImproperlyConfigured(
             "Defina DJANGO_SECRET_KEY ao executar o sistema em produção."
         )
-    SECRET_KEY = "controlcond-chave-exclusiva-para-desenvolvimento-local-2026"
+    SECRET_KEY = "django-insecure-local-only-change-me"
 
 ALLOWED_HOSTS = [
     host.strip()
