@@ -3,12 +3,15 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from django.db.models import (
     Count,
+    DecimalField,
     Exists,
     OuterRef,
     Q,
     Subquery,
     Sum,
 )
+from django.db.models.functions import Coalesce
+from django.utils import timezone
 
 from apartamentos.models import Apartamento
 from faturas.models import Fatura
@@ -51,7 +54,15 @@ class ResumoDashboard:
     apartamentos_sem_fatura: int
     faturas_pendentes: int
     faturas_pagas: int
+    faturas_vencidas: int
     faturas_canceladas: int
+    receitas_previstas: Decimal
+    receitas_recebidas: Decimal
+    receitas_pendentes: Decimal
+    receitas_vencidas: Decimal
+    total_bonificacoes_concedidas: Decimal
+    total_multas_arrecadadas: Decimal
+    receita_liquida: Decimal
     valor_faturado: Decimal
     valor_recebido: Decimal
     valor_pendente: Decimal
@@ -81,7 +92,8 @@ def _limitar(queryset):
     )
 
 
-def obter_resumo_dashboard(condominio, mes, ano):
+def obter_resumo_dashboard(condominio, mes, ano, data_referencia=None):
+    data_referencia = data_referencia or timezone.localdate()
     leituras_competencia = Q(leituras__mes=mes, leituras__ano=ano)
     faturas_competencia_apartamento = Q(
         faturas__mes=mes,
@@ -107,16 +119,36 @@ def obter_resumo_dashboard(condominio, mes, ano):
     apartamentos_com_leitura = apartamentos["com_leitura"]
     apartamentos_com_fatura = apartamentos["com_fatura"]
 
-    faturas = Fatura.objects.filter(
+    faturas_queryset = Fatura.objects.filter(
         apartamento__condominio=condominio, mes=mes, ano=ano
-    ).aggregate(
+    )
+    pendente = Q(status=Fatura.Status.PENDENTE)
+    paga = Q(status=Fatura.Status.PAGA)
+    nao_cancelada = Q(
+        status__in=(Fatura.Status.PENDENTE, Fatura.Status.PAGA)
+    )
+    vencida = Q(
+        status=Fatura.Status.PENDENTE,
+        data_vencimento__lt=data_referencia,
+    )
+    valor_recebido = Coalesce(
+        "valor_final",
+        "valor_pago",
+        "valor_total",
+        output_field=DecimalField(max_digits=10, decimal_places=2),
+    )
+    faturas = faturas_queryset.aggregate(
         pendentes=Count(
             "id",
-            filter=Q(status=Fatura.Status.PENDENTE),
+            filter=pendente,
         ),
         pagas=Count(
             "id",
-            filter=Q(status=Fatura.Status.PAGA),
+            filter=paga,
+        ),
+        vencidas=Count(
+            "id",
+            filter=vencida,
         ),
         canceladas=Count(
             "id",
@@ -124,27 +156,37 @@ def obter_resumo_dashboard(condominio, mes, ano):
         ),
         faturado=Sum(
             "valor_total",
-            filter=Q(
-                status__in=(
-                    Fatura.Status.PENDENTE,
-                    Fatura.Status.PAGA,
-                )
-            ),
+            filter=nao_cancelada,
             default=Decimal("0.00"),
         ),
         recebido=Sum(
-            "valor_total",
-            filter=Q(status=Fatura.Status.PAGA),
+            valor_recebido,
+            filter=paga,
             default=Decimal("0.00"),
         ),
         pendente=Sum(
             "valor_total",
-            filter=Q(status=Fatura.Status.PENDENTE),
+            filter=pendente,
+            default=Decimal("0.00"),
+        ),
+        vencido=Sum(
+            "valor_total",
+            filter=vencida,
             default=Decimal("0.00"),
         ),
         cancelado=Sum(
             "valor_total",
             filter=Q(status=Fatura.Status.CANCELADA),
+            default=Decimal("0.00"),
+        ),
+        bonificacoes=Sum(
+            "valor_bonificacao_aplicada",
+            filter=paga,
+            default=Decimal("0.00"),
+        ),
+        multas=Sum(
+            "valor_multa_aplicada",
+            filter=paga,
             default=Decimal("0.00"),
         ),
     )
@@ -208,7 +250,15 @@ def obter_resumo_dashboard(condominio, mes, ano):
         ),
         faturas_pendentes=faturas["pendentes"],
         faturas_pagas=faturas["pagas"],
+        faturas_vencidas=faturas["vencidas"],
         faturas_canceladas=faturas["canceladas"],
+        receitas_previstas=faturas["faturado"],
+        receitas_recebidas=faturas["recebido"],
+        receitas_pendentes=faturas["pendente"],
+        receitas_vencidas=faturas["vencido"],
+        total_bonificacoes_concedidas=faturas["bonificacoes"],
+        total_multas_arrecadadas=faturas["multas"],
+        receita_liquida=faturas["recebido"],
         valor_faturado=faturas["faturado"],
         valor_recebido=faturas["recebido"],
         valor_pendente=faturas["pendente"],
@@ -218,7 +268,7 @@ def obter_resumo_dashboard(condominio, mes, ano):
             total_nao_canceladas,
         ),
         taxa_inadimplencia=_percentual(
-            faturas["pendentes"],
+            faturas["vencidas"],
             total_nao_canceladas,
         ),
         cobertura_leituras=_percentual(

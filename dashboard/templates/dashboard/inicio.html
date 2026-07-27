@@ -44,9 +44,9 @@
             <article class="card shadow-sm dashboard-hero-card dashboard-accent-primary h-100">
                 <div class="card-body">
                     <span class="dashboard-card-icon"><i class="bi bi-graph-up-arrow" aria-hidden="true"></i></span>
-                    <span class="dashboard-hero-label">Valor faturado</span>
-                    <p class="dashboard-hero-value">{{ resumo.valor_faturado|moeda_br }}</p>
-                    <small>Receita prevista do mês</small>
+                    <span class="dashboard-hero-label">Receitas previstas</span>
+                    <p class="dashboard-hero-value">{{ resumo.receitas_previstas|moeda_br }}</p>
+                    <small>Total não cancelado do mês</small>
                 </div>
             </article>
         </div>
@@ -54,9 +54,9 @@
             <article class="card shadow-sm dashboard-hero-card dashboard-accent-success h-100">
                 <div class="card-body">
                     <span class="dashboard-card-icon"><i class="bi bi-check2-circle" aria-hidden="true"></i></span>
-                    <span class="dashboard-hero-label">Valor recebido</span>
-                    <p class="dashboard-hero-value">{{ resumo.valor_recebido|moeda_br }}</p>
-                    <small>Pagamentos confirmados</small>
+                    <span class="dashboard-hero-label">Receitas recebidas</span>
+                    <p class="dashboard-hero-value">{{ resumo.receitas_recebidas|moeda_br }}</p>
+                    <small>Valores finais confirmados</small>
                 </div>
             </article>
         </div>
@@ -64,8 +64,8 @@
             <article class="card shadow-sm dashboard-hero-card dashboard-accent-warning h-100">
                 <div class="card-body">
                     <span class="dashboard-card-icon"><i class="bi bi-hourglass-split" aria-hidden="true"></i></span>
-                    <span class="dashboard-hero-label">Valor pendente</span>
-                    <p class="dashboard-hero-value">{{ resumo.valor_pendente|moeda_br }}</p>
+                    <span class="dashboard-hero-label">Receitas pendentes</span>
+                    <p class="dashboard-hero-value">{{ resumo.receitas_pendentes|moeda_br }}</p>
                     <a href="{{ links.faturas_pendentes }}">Ver faturas pendentes <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
                 </div>
             </article>
@@ -73,10 +73,10 @@
         <div class="col-12 col-md-6 col-xl-3">
             <article class="card shadow-sm dashboard-hero-card dashboard-accent-warning h-100">
                 <div class="card-body">
-                    <span class="dashboard-card-icon"><i class="bi bi-droplet" aria-hidden="true"></i></span>
-                    <span class="dashboard-hero-label">Apartamentos sem leitura</span>
-                    <p class="dashboard-hero-value">{{ resumo.apartamentos_sem_leitura }}</p>
-                    <button class="btn btn-link p-0" type="button" data-bs-toggle="collapse" data-bs-target="#detalhesSemLeitura" aria-expanded="false" aria-controls="detalhesSemLeitura">Necessitam lançamento <i class="bi bi-arrow-right" aria-hidden="true"></i></button>
+                    <span class="dashboard-card-icon"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i></span>
+                    <span class="dashboard-hero-label">Receitas vencidas</span>
+                    <p class="dashboard-hero-value">{{ resumo.receitas_vencidas|moeda_br }}</p>
+                    <a href="{{ links.faturas_pendentes }}">{{ resumo.faturas_vencidas }} faturas vencidas <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
                 </div>
             </article>
         </div>
@@ -109,6 +109,7 @@
                 <div class="dashboard-status-legend">
                     <a href="{{ links.faturas_pagas }}"><span><i class="is-paid" aria-hidden="true"></i>Pagas</span><strong>{{ resumo.faturas_pagas }}</strong></a>
                     <a href="{{ links.faturas_pendentes }}"><span><i class="is-pending" aria-hidden="true"></i>Pendentes</span><strong>{{ resumo.faturas_pendentes }}</strong></a>
+                    <a href="{{ links.faturas_pendentes }}"><span><i class="is-overdue" aria-hidden="true"></i>Vencidas</span><strong>{{ resumo.faturas_vencidas }}</strong></a>
                     <a href="{{ links.faturas_canceladas }}"><span><i class="is-cancelled" aria-hidden="true"></i>Canceladas</span><strong>{{ resumo.faturas_canceladas }}</strong></a>
                     <a href="{% url 'faturas:fechamento_mensal' %}"><span><i class="is-missing" aria-hidden="true"></i>Sem fatura</span><strong>{{ resumo.apartamentos_sem_fatura }}</strong></a>
                 </div>
@@ -166,7 +167,10 @@
         <div><span class="detail-label">Cobertura de leituras</span><p class="detail-value">{{ resumo.cobertura_leituras|percentual }}</p></div>
         <div><span class="detail-label">Cobertura de faturamento</span><p class="detail-value">{{ resumo.cobertura_faturamento|percentual }}</p></div>
         <div><span class="detail-label">Taxa de pagamento</span><p class="detail-value">{{ resumo.taxa_pagamento|percentual }}</p></div>
-        <div><span class="detail-label">Percentual não pago</span><p class="detail-value">{{ resumo.taxa_inadimplencia|percentual }}</p></div>
+        <div><span class="detail-label">Inadimplência</span><p class="detail-value">{{ resumo.taxa_inadimplencia|percentual }}</p></div>
+        <div><span class="detail-label">Bonificações concedidas</span><p class="detail-value">{{ resumo.total_bonificacoes_concedidas|moeda_br }}</p></div>
+        <div><span class="detail-label">Multas arrecadadas</span><p class="detail-value">{{ resumo.total_multas_arrecadadas|moeda_br }}</p></div>
+        <div><span class="detail-label">Receita líquida do período</span><p class="detail-value">{{ resumo.receita_liquida|moeda_br }}</p></div>
     </div></div>
 </section>
 {% endblock %}

@@ -361,6 +361,7 @@ textarea {
 .dashboard-status-legend .is-paid { background: #2da771; }
 .dashboard-status-legend .is-pending { background: #e4aa3f; }
 .dashboard-status-legend .is-cancelled { background: #d65f6e; }
+.dashboard-status-legend .is-overdue { background: #b42318; }
 .dashboard-status-legend .is-missing { background: #adb5bd; }
 
 .dashboard-attention-list > div {

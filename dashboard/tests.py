@@ -181,6 +181,20 @@ class DashboardResumoTests(TestCase):
         resumo = obter_resumo_dashboard(Condominio.objects.get(), 7, 2026)
 
         self.assertEqual(resumo.total_apartamentos, 0)
+        self.assertEqual(resumo.faturas_vencidas, 0)
+        self.assertEqual(resumo.receitas_previstas, Decimal("0.00"))
+        self.assertEqual(resumo.receitas_recebidas, Decimal("0.00"))
+        self.assertEqual(resumo.receitas_pendentes, Decimal("0.00"))
+        self.assertEqual(resumo.receitas_vencidas, Decimal("0.00"))
+        self.assertEqual(
+            resumo.total_bonificacoes_concedidas,
+            Decimal("0.00"),
+        )
+        self.assertEqual(
+            resumo.total_multas_arrecadadas,
+            Decimal("0.00"),
+        )
+        self.assertEqual(resumo.receita_liquida, Decimal("0.00"))
         self.assertEqual(resumo.valor_faturado, Decimal("0.00"))
         self.assertEqual(resumo.valor_recebido, Decimal("0.00"))
         self.assertEqual(resumo.valor_pendente, Decimal("0.00"))
@@ -233,6 +247,66 @@ class DashboardResumoTests(TestCase):
             resumo.cobertura_faturamento,
             Decimal("75.0"),
         )
+
+    def test_indicadores_financeiros_consideram_vencimento_e_valor_final(self):
+        paga = self.criar_fatura(
+            self.criar_apartamento("201"),
+            Fatura.Status.PAGA,
+            Decimal("200.00"),
+        )
+        vencida = self.criar_fatura(
+            self.criar_apartamento("202"),
+            Fatura.Status.PENDENTE,
+            Decimal("100.00"),
+        )
+        a_vencer = self.criar_fatura(
+            self.criar_apartamento("203"),
+            Fatura.Status.PENDENTE,
+            Decimal("150.00"),
+        )
+        self.criar_fatura(
+            self.criar_apartamento("204"),
+            Fatura.Status.CANCELADA,
+            Decimal("50.00"),
+        )
+        Fatura.objects.filter(pk=paga.pk).update(
+            valor_final=Decimal("195.00"),
+            valor_pago=Decimal("195.00"),
+            valor_bonificacao_aplicada=Decimal("10.00"),
+            valor_multa_aplicada=Decimal("5.00"),
+            data_pagamento=date(2026, 7, 5),
+        )
+        Fatura.objects.filter(pk=vencida.pk).update(
+            data_vencimento=date(2026, 7, 10),
+        )
+        Fatura.objects.filter(pk=a_vencer.pk).update(
+            data_vencimento=date(2026, 7, 25),
+        )
+
+        resumo = obter_resumo_dashboard(
+            Condominio.objects.get(),
+            7,
+            2026,
+            data_referencia=date(2026, 7, 20),
+        )
+
+        self.assertEqual(resumo.receitas_previstas, Decimal("450.00"))
+        self.assertEqual(resumo.receitas_recebidas, Decimal("195.00"))
+        self.assertEqual(resumo.receitas_pendentes, Decimal("250.00"))
+        self.assertEqual(resumo.receitas_vencidas, Decimal("100.00"))
+        self.assertEqual(resumo.faturas_pagas, 1)
+        self.assertEqual(resumo.faturas_pendentes, 2)
+        self.assertEqual(resumo.faturas_vencidas, 1)
+        self.assertEqual(resumo.taxa_inadimplencia, Decimal("33.3"))
+        self.assertEqual(
+            resumo.total_bonificacoes_concedidas,
+            Decimal("10.00"),
+        )
+        self.assertEqual(
+            resumo.total_multas_arrecadadas,
+            Decimal("5.00"),
+        )
+        self.assertEqual(resumo.receita_liquida, Decimal("195.00"))
 
     def test_percentuais_arredondam_com_uma_casa(self):
         apartamentos = [
@@ -338,12 +412,18 @@ class DashboardResumoTests(TestCase):
             "Apartamentos sem fatura",
             "Faturas pendentes",
             "Pagas",
+            "Vencidas",
             "Canceladas",
-            "Valor faturado",
-            "Valor recebido",
-            "Valor pendente",
+            "Receitas previstas",
+            "Receitas recebidas",
+            "Receitas pendentes",
+            "Receitas vencidas",
             "Valor cancelado",
             "Taxa de pagamento",
+            "Inadimplência",
+            "Bonificações concedidas",
+            "Multas arrecadadas",
+            "Receita líquida do período",
             "Cobertura de faturamento",
         ):
             with self.subTest(texto=texto):
@@ -413,5 +493,5 @@ class DashboardResumoTests(TestCase):
         )
 
         self.assertContains(resposta, "Nenhum apartamento cadastrado")
-        self.assertContains(resposta, "R$ 0,00", count=4)
+        self.assertContains(resposta, "R$ 0,00", count=8)
 
