@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Tabelas de água | ControlCond{% endblock %}
+{% block content %}
+{% url "configuracoes:tabela_agua_nova" as nova_url %}
+{% include "components/page_header.html" with titulo="Tabelas de água" subtitulo="Histórico e vigências das faixas de cobrança." url_acao=nova_url texto_acao="Nova tabela" icone_acao="bi-plus-lg" %}
+<div class="card shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead><tr><th>Nome</th><th>Vigência</th><th>Faixas</th><th>Situação</th><th class="text-end">Ações</th></tr></thead>
+      <tbody>
+      {% for tabela in tabelas %}
+        <tr>
+          <td class="fw-semibold">{{ tabela.nome }}</td>
+          <td>{{ tabela.data_inicio_vigencia|date:"d/m/Y" }} — {{ tabela.data_fim_vigencia|date:"d/m/Y"|default:"sem término" }}</td>
+          <td>{{ tabela.faixas.count }}</td>
+          <td><span class="badge text-bg-{% if tabela.ativa %}success{% else %}secondary{% endif %}">{{ tabela.ativa|yesno:"Disponível,Inativa" }}</span></td>
+          <td class="text-end">
+            <a class="btn btn-sm btn-outline-primary" href="{% url 'configuracoes:tabela_agua_detalhe' tabela.id %}">Visualizar</a>
+            <a class="btn btn-sm btn-outline-secondary" href="{% url 'configuracoes:tabela_agua_duplicar' tabela.id %}">Duplicar</a>
+          </td>
+        </tr>
+      {% empty %}<tr><td colspan="5" class="text-center text-secondary py-5">Nenhuma tabela cadastrada.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

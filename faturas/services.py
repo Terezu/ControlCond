@@ -1,5 +1,6 @@
 import logging
 from dataclasses import dataclass
+from datetime import timedelta
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 from django.core.exceptions import ValidationError
@@ -12,6 +13,7 @@ from calculos.services import calcular_agua, calcular_gas
 from configuracoes.services import (
     ConsumoSemFaixaError,
     TarifaNaoConfiguradaError,
+    obter_configuracao,
 )
 from leituras.models import Leitura
 
@@ -19,7 +21,7 @@ from .models import (
     ANO_MAXIMO,
     LIMITE_VALOR_FINANCEIRO,
     Fatura,
-    HistoricoStatusFatura,
+    HistoricoFinanceiroFatura,
 )
 
 
@@ -35,6 +37,10 @@ _CAMPOS_HISTORICO_FINANCEIRO = (
     "valor_outros",
     "desconto",
     "valor_bonificacao",
+    "origem_bonificacao_emissao",
+    "tipo_bonificacao_emissao",
+    "percentual_bonificacao_emissao",
+    "valor_bonificacao_fixa_emissao",
     "valor_original",
     "valor_total",
     "valor_multa_aplicada",
@@ -83,7 +89,7 @@ def _registrar_historico_financeiro(
     valores_anteriores=None,
     motivo="",
 ):
-    return HistoricoStatusFatura.objects.create(
+    return HistoricoFinanceiroFatura.objects.create(
         fatura=fatura,
         status_anterior=(
             valores_anteriores or {}
@@ -95,6 +101,111 @@ def _registrar_historico_financeiro(
         valores_anteriores=valores_anteriores or {},
         valores_novos=_snapshot_financeiro(fatura),
     )
+
+
+def _configurar_bonificacao_fatura(
+    fatura,
+    *,
+    modo=None,
+    tipo=None,
+    valor=None,
+    valor_legado=Decimal("0.00"),
+    dia_limite_legado=None,
+):
+    configuracao = obter_configuracao(fatura.apartamento.condominio)
+    fatura.dias_antecedencia_bonificacao_emissao = (
+        configuracao.dias_antecedencia_bonificacao
+    )
+
+    if modo is None:
+        modo = (
+            Fatura.OrigemBonificacao.ESPECIFICA
+            if valor_legado > 0
+            else Fatura.OrigemBonificacao.CONDOMINIO
+        )
+        if valor_legado > 0:
+            tipo = Fatura.TipoBonificacao.VALOR_FIXO
+            valor = valor_legado
+
+    if modo not in Fatura.OrigemBonificacao.values:
+        raise ValueError("Selecione uma opção de bonificação válida.")
+
+    fatura.valor_bonificacao = Decimal("0.00")
+    fatura.dia_limite_bonificacao = None
+    fatura.percentual_bonificacao_emissao = Decimal("0.000")
+    fatura.valor_bonificacao_fixa_emissao = Decimal("0.00")
+    fatura.data_limite_bonificacao = None
+
+    if modo == Fatura.OrigemBonificacao.NENHUMA:
+        fatura.origem_bonificacao_emissao = modo
+        fatura.tipo_bonificacao_emissao = (
+            Fatura.TipoBonificacao.NENHUMA
+        )
+        return
+
+    if modo == Fatura.OrigemBonificacao.CONDOMINIO:
+        percentual = configuracao.percentual_bonificacao_padrao
+        if percentual <= 0:
+            fatura.origem_bonificacao_emissao = (
+                Fatura.OrigemBonificacao.NENHUMA
+            )
+            fatura.tipo_bonificacao_emissao = (
+                Fatura.TipoBonificacao.NENHUMA
+            )
+            return
+        fatura.origem_bonificacao_emissao = modo
+        fatura.tipo_bonificacao_emissao = (
+            Fatura.TipoBonificacao.PERCENTUAL
+        )
+        fatura.percentual_bonificacao_emissao = percentual
+    else:
+        if tipo not in (
+            Fatura.TipoBonificacao.PERCENTUAL,
+            Fatura.TipoBonificacao.VALOR_FIXO,
+        ):
+            raise ValueError("Informe o tipo da bonificação específica.")
+        if tipo == Fatura.TipoBonificacao.PERCENTUAL:
+            valor = _normalizar_decimal(
+                valor,
+                "A bonificação específica",
+            ).quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
+        else:
+            valor = _normalizar_valor_financeiro(
+                valor,
+                "A bonificação específica",
+            )
+        if valor <= 0:
+            raise ValueError(
+                "A bonificação específica deve ser maior que zero."
+            )
+        fatura.origem_bonificacao_emissao = modo
+        fatura.tipo_bonificacao_emissao = tipo
+        if tipo == Fatura.TipoBonificacao.PERCENTUAL:
+            if valor > Decimal("100"):
+                raise ValueError(
+                    "O percentual da bonificação deve estar entre 0 e 100."
+                )
+            fatura.percentual_bonificacao_emissao = valor
+        else:
+            fatura.valor_bonificacao_fixa_emissao = valor
+            # Mantém a representação antiga preenchida para documentos
+            # emitidos por integrações que ainda consultem esse campo.
+            fatura.valor_bonificacao = valor
+            if dia_limite_legado:
+                fatura.dia_limite_bonificacao = dia_limite_legado
+
+    if fatura.data_vencimento:
+        if fatura.dia_limite_bonificacao:
+            fatura.data_limite_bonificacao = (
+                fatura.calcular_data_limite_bonificacao_legada()
+            )
+        else:
+            fatura.data_limite_bonificacao = (
+                fatura.data_vencimento
+                - timedelta(
+                    days=fatura.dias_antecedencia_bonificacao_emissao
+                )
+            )
 
 
 @dataclass(frozen=True)
@@ -386,6 +497,9 @@ def cadastrar_fatura(
     valor_iptu=None,
     valor_bonificacao=None,
     dia_limite_bonificacao=_NAO_INFORMADO,
+    modo_bonificacao=None,
+    tipo_bonificacao=None,
+    bonificacao_especifica=None,
     valor_outros=None,
     observacao_outros=None,
     usuario=None,
@@ -414,10 +528,14 @@ def cadastrar_fatura(
     valor_bonificacao = _normalizar_valor_financeiro(
         valor_bonificacao,
         "O valor da bonificação",
-        padrao=apartamento.valor_bonificacao,
+        padrao=Decimal("0.00"),
     )
     if dia_limite_bonificacao is _NAO_INFORMADO:
-        dia_limite_bonificacao = apartamento.dia_limite_bonificacao
+        dia_limite_bonificacao = (
+            apartamento.dia_limite_bonificacao
+            if modo_bonificacao is None and valor_bonificacao > 0
+            else None
+        )
     elif dia_limite_bonificacao == "":
         dia_limite_bonificacao = None
     if (
@@ -648,6 +766,23 @@ def cadastrar_fatura(
     )
     try:
         fatura.recalcular_valor_total()
+        _configurar_bonificacao_fatura(
+            fatura,
+            modo=modo_bonificacao,
+            tipo=tipo_bonificacao,
+            valor=bonificacao_especifica,
+            valor_legado=valor_bonificacao,
+            dia_limite_legado=dia_limite_bonificacao,
+        )
+        if (
+            fatura.tipo_bonificacao_emissao
+            == Fatura.TipoBonificacao.VALOR_FIXO
+            and fatura.valor_bonificacao_fixa_emissao
+            > fatura.valor_total
+        ):
+            raise ValueError(
+                "A bonificação não pode superar o valor elegível da cobrança."
+            )
         fatura._preencher_snapshots_emissao()
     except ValidationError as exc:
         raise ValueError(" ".join(exc.messages)) from exc
@@ -660,7 +795,7 @@ def cadastrar_fatura(
             fatura.save(force_insert=True)
             _registrar_historico_financeiro(
                 fatura,
-                HistoricoStatusFatura.Acao.FATURA_CRIADA,
+                HistoricoFinanceiroFatura.Acao.FATURA_CRIADA,
                 usuario=usuario,
             )
     except ValidationError as exc:
@@ -769,7 +904,7 @@ def _normalizar_motivo(motivo, acao):
     motivo = (motivo or "").strip()
     rotulo = (
         "estorno"
-        if acao == HistoricoStatusFatura.Acao.PAGAMENTO_ESTORNADO
+        if acao == HistoricoFinanceiroFatura.Acao.PAGAMENTO_ESTORNADO
         else "reabertura"
     )
     if not motivo:
@@ -828,29 +963,29 @@ def calcular_pagamento_fatura(fatura, data_pagamento):
         juros = Decimal("0.00")
 
     aplica_bonificacao = bool(
-        (
-            fatura.percentual_bonificacao_emissao > 0
-            or fatura.valor_bonificacao > 0
-        )
+        fatura.possui_bonificacao
         and fatura.data_limite_bonificacao
         and data_pagamento <= fatura.data_limite_bonificacao
     )
-    bonificacao = (
-        (
+    if (
+        aplica_bonificacao
+        and fatura.tipo_bonificacao_emissao
+        == Fatura.TipoBonificacao.PERCENTUAL
+    ):
+        bonificacao = (
             base_calculo
             * fatura.percentual_bonificacao_emissao
             / fator_percentual
         ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        if (
-            aplica_bonificacao
-            and fatura.percentual_bonificacao_emissao > 0
-        )
-        else (
-            fatura.valor_bonificacao
-            if aplica_bonificacao
-            else Decimal("0.00")
-        )
-    )
+    elif (
+        aplica_bonificacao
+        and fatura.tipo_bonificacao_emissao
+        == Fatura.TipoBonificacao.VALOR_FIXO
+    ):
+        bonificacao = fatura.valor_bonificacao_fixa_emissao
+    else:
+        bonificacao = Decimal("0.00")
+    bonificacao = min(bonificacao, base_calculo)
     valor_final = (
         base_calculo + multa + juros - bonificacao
     ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
@@ -973,7 +1108,7 @@ def marcar_fatura_como_paga(
         fatura_id,
         status_origem=Fatura.Status.PENDENTE,
         novo_status=Fatura.Status.PAGA,
-        acao=HistoricoStatusFatura.Acao.PAGAMENTO_CONFIRMADO,
+        acao=HistoricoFinanceiroFatura.Acao.PAGAMENTO_CONFIRMADO,
         usuario=usuario,
     )
     if alterada:
@@ -1005,7 +1140,7 @@ def marcar_fatura_como_paga(
                 "observacoes_pagamento",
             ]
         )
-        evento = fatura.historico_status.order_by("-id").first()
+        evento = fatura.historico_financeiro.order_by("-id").first()
         evento.valores_novos = _snapshot_financeiro(fatura)
         evento.save(update_fields=["valores_novos"])
     return fatura, alterada
@@ -1016,7 +1151,7 @@ def cancelar_fatura(fatura_id, usuario=None):
         fatura_id,
         status_origem=Fatura.Status.PENDENTE,
         novo_status=Fatura.Status.CANCELADA,
-        acao=HistoricoStatusFatura.Acao.FATURA_CANCELADA,
+        acao=HistoricoFinanceiroFatura.Acao.FATURA_CANCELADA,
         usuario=usuario,
     )
 
@@ -1026,7 +1161,7 @@ def estornar_pagamento(fatura_id, motivo, usuario=None):
         fatura_id,
         status_origem=Fatura.Status.PAGA,
         novo_status=Fatura.Status.PENDENTE,
-        acao=HistoricoStatusFatura.Acao.PAGAMENTO_ESTORNADO,
+        acao=HistoricoFinanceiroFatura.Acao.PAGAMENTO_ESTORNADO,
         motivo=motivo,
         usuario=usuario,
         exige_motivo=True,
@@ -1038,7 +1173,7 @@ def reabrir_fatura(fatura_id, motivo, usuario=None):
         fatura_id,
         status_origem=Fatura.Status.CANCELADA,
         novo_status=Fatura.Status.PENDENTE,
-        acao=HistoricoStatusFatura.Acao.FATURA_REABERTA,
+        acao=HistoricoFinanceiroFatura.Acao.FATURA_REABERTA,
         motivo=motivo,
         usuario=usuario,
         exige_motivo=True,
@@ -1055,22 +1190,28 @@ def editar_fatura(
     valor_iptu=None,
     valor_bonificacao=None,
     dia_limite_bonificacao=_NAO_INFORMADO,
+    modo_bonificacao=None,
+    tipo_bonificacao=None,
+    bonificacao_especifica=None,
     valor_outros=None,
     observacao_outros=None,
     usuario=None,
 ):
     fatura = _consultar_fatura_para_atualizacao(fatura_id)
     valores_anteriores = _snapshot_financeiro(fatura)
+    edita_bonificacao = (
+        modo_bonificacao is not None
+        or valor_bonificacao is not None
+    )
 
     campos_atualizados = []
-    if any(
+    if edita_bonificacao or any(
         valor is not None
         for valor in (
             valor_aluguel,
             desconto,
             valor_condominio,
             valor_iptu,
-            valor_bonificacao,
             valor_outros,
             observacao_outros,
         )
@@ -1091,7 +1232,6 @@ def editar_fatura(
         for campo, valor, descricao in (
             ("valor_condominio", valor_condominio, "O valor do condomínio"),
             ("valor_iptu", valor_iptu, "O valor do IPTU"),
-            ("valor_bonificacao", valor_bonificacao, "O valor da bonificação"),
         ):
             if valor is not None:
                 setattr(
@@ -1100,16 +1240,31 @@ def editar_fatura(
                     _normalizar_valor_financeiro(valor, descricao),
                 )
                 campos_atualizados.append(campo)
-        if valor_bonificacao is not None:
-            if (
-                dia_limite_bonificacao is not None
-                and not 1 <= dia_limite_bonificacao <= 31
-            ):
-                raise ValueError(
-                    "O dia limite da bonificação deve estar entre 1 e 31."
-                )
-            fatura.dia_limite_bonificacao = dia_limite_bonificacao
-            campos_atualizados.append("dia_limite_bonificacao")
+        if edita_bonificacao:
+            _configurar_bonificacao_fatura(
+                fatura,
+                modo=modo_bonificacao,
+                tipo=tipo_bonificacao,
+                valor=bonificacao_especifica,
+                valor_legado=valor_bonificacao or Decimal("0.00"),
+                dia_limite_legado=(
+                    None
+                    if dia_limite_bonificacao is _NAO_INFORMADO
+                    else dia_limite_bonificacao
+                ),
+            )
+            campos_atualizados.extend(
+                [
+                    "valor_bonificacao",
+                    "dia_limite_bonificacao",
+                    "origem_bonificacao_emissao",
+                    "tipo_bonificacao_emissao",
+                    "percentual_bonificacao_emissao",
+                    "valor_bonificacao_fixa_emissao",
+                    "dias_antecedencia_bonificacao_emissao",
+                    "data_limite_bonificacao",
+                ]
+            )
         if valor_outros is not None:
             fatura.valor_outros = _normalizar_valor_outros(valor_outros)
             campos_atualizados.append("valor_outros")
@@ -1118,6 +1273,16 @@ def editar_fatura(
             campos_atualizados.append("observacao_outros")
         try:
             fatura.recalcular_valor_total()
+            if (
+                fatura.tipo_bonificacao_emissao
+                == Fatura.TipoBonificacao.VALOR_FIXO
+                and fatura.valor_bonificacao_fixa_emissao
+                > fatura.valor_total
+            ):
+                raise ValueError(
+                    "A bonificação não pode superar o valor elegível "
+                    "da cobrança."
+                )
         except ValidationError as exc:
             raise ValueError(" ".join(exc.messages)) from exc
         fatura.valor_original = fatura.subtotal
@@ -1134,7 +1299,7 @@ def editar_fatura(
             if valores_novos != valores_anteriores:
                 _registrar_historico_financeiro(
                     fatura,
-                    HistoricoStatusFatura.Acao.VALORES_FINANCEIROS_ALTERADOS,
+                    HistoricoFinanceiroFatura.Acao.VALORES_FINANCEIROS_ALTERADOS,
                     usuario=usuario,
                     valores_anteriores=valores_anteriores,
                 )
@@ -1249,6 +1414,9 @@ def gerar_fatura_mensal(
     valor_iptu=None,
     valor_bonificacao=None,
     dia_limite_bonificacao=_NAO_INFORMADO,
+    modo_bonificacao=None,
+    tipo_bonificacao=None,
+    bonificacao_especifica=None,
     valor_outros=None,
     observacao_outros=None,
     usuario=None,
@@ -1266,6 +1434,9 @@ def gerar_fatura_mensal(
         valor_iptu=valor_iptu,
         valor_bonificacao=valor_bonificacao,
         dia_limite_bonificacao=dia_limite_bonificacao,
+        modo_bonificacao=modo_bonificacao,
+        tipo_bonificacao=tipo_bonificacao,
+        bonificacao_especifica=bonificacao_especifica,
         valor_outros=valor_outros,
         observacao_outros=observacao_outros,
         usuario=usuario,
@@ -1366,33 +1537,50 @@ def executar_fechamento_mensal(mes, ano):
     return resultado
 
 
+@transaction.atomic
 def executar_fechamento_mensal_por_condominio(condominio, mes, ano):
-    """Versão isolada; mantém o wrapper global apenas durante a Sprint 1."""
+    """Executa o fechamento somente no condomínio informado."""
     if isinstance(mes, bool) or not isinstance(mes, int) or not 1 <= mes <= 12:
         raise ValueError("O mês deve estar entre 1 e 12.")
     if isinstance(ano, bool) or not isinstance(ano, int) or not 2000 <= ano <= ANO_MAXIMO:
         raise ValueError("Informe um ano válido.")
-    # O algoritmo é idêntico ao legado, mas o universo é previamente limitado.
+    leituras_competencia = (
+        Leitura.objects
+        .filter(mes=mes, ano=ano)
+        .select_related("apartamento")
+        .order_by("id")
+    )
+    faturas_competencia = Fatura.objects.filter(mes=mes, ano=ano)
     apartamentos = list(
-        Apartamento.objects.filter(condominio=condominio).order_by("id")
+        Apartamento.objects
+        .select_for_update()
+        .filter(condominio=condominio)
+        .order_by("id")
+        .prefetch_related(
+            Prefetch(
+                "leituras",
+                queryset=leituras_competencia,
+                to_attr="leituras_fechamento",
+            ),
+            Prefetch(
+                "faturas",
+                queryset=faturas_competencia,
+                to_attr="faturas_fechamento",
+            ),
+        )
     )
     geradas = existentes = 0
     sem_leitura = []
     falhas = []
     for apartamento in apartamentos:
-        leitura = Leitura.objects.filter(
-            apartamento=apartamento, mes=mes, ano=ano
-        ).order_by("id").first()
-        if leitura is None:
+        if not apartamento.leituras_fechamento:
             sem_leitura.append(apartamento)
             continue
-        if Fatura.objects.filter(
-            apartamento=apartamento, mes=mes, ano=ano
-        ).exists():
+        if apartamento.faturas_fechamento:
             existentes += 1
             continue
         try:
-            gerar_fatura_mensal(leitura.id)
+            gerar_fatura_mensal(apartamento.leituras_fechamento[0].id)
             geradas += 1
         except (TarifaNaoConfiguradaError, ConsumoSemFaixaError) as exc:
             falhas.append((apartamento, str(exc)))

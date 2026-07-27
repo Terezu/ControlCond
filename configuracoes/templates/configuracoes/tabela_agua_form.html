@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Tabela de água | ControlCond{% endblock %}
+{% block content %}
+{% include "components/page_header.html" with titulo="Tabela de água" subtitulo="Defina a vigência e as faixas contínuas de consumo." %}
+<form method="post" novalidate>{% csrf_token %}
+<div class="card shadow-sm mb-4"><div class="card-body"><div class="row g-3">
+{% for field in form %}<div class="col-12 col-md-6">{% include "components/form_field.html" with field=field %}</div>{% endfor %}
+{{ form.non_field_errors }}</div></div></div>
+<div class="card shadow-sm"><div class="card-header"><h2 class="h5 mb-0">Faixas</h2></div><div class="card-body">
+{{ formset.management_form }}{{ formset.non_form_errors }}
+<div class="table-responsive"><table class="table align-middle"><thead><tr><th>Inicial</th><th>Final</th><th>Valor</th><th>Ordem</th><th>Ativa</th><th>Descrição</th><th>Remover</th></tr></thead><tbody>
+{% for faixa_form in formset %}<tr>{{ faixa_form.id }}<td>{{ faixa_form.consumo_inicial }}{{ faixa_form.consumo_inicial.errors }}</td><td>{{ faixa_form.consumo_final }}{{ faixa_form.consumo_final.errors }}</td><td>{{ faixa_form.valor }}{{ faixa_form.valor.errors }}</td><td>{{ faixa_form.ordem }}</td><td>{{ faixa_form.ativa }}</td><td>{{ faixa_form.descricao }}</td><td>{{ faixa_form.DELETE }}</td></tr>{% endfor %}
+</tbody></table></div>
+<button class="btn btn-primary" type="submit">Salvar tabela</button>
+<a class="btn btn-outline-secondary" href="{% url 'configuracoes:tabelas_agua' %}">Cancelar</a>
+</div></div></form>
+{% endblock %}

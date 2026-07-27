@@ -21,6 +21,19 @@ LIMITE_VALOR_FINANCEIRO = Decimal("99999999.99")
 class Fatura(models.Model):
     TipoJuros = ConfiguracaoCondominio.TipoJuros
 
+    class OrigemBonificacao(models.TextChoices):
+        CONDOMINIO = (
+            "condominio",
+            "Usar bonificação padrão do condomínio",
+        )
+        ESPECIFICA = "especifica", "Definir bonificação específica"
+        NENHUMA = "nenhuma", "Não aplicar bonificação"
+
+    class TipoBonificacao(models.TextChoices):
+        PERCENTUAL = "percentual", "Percentual"
+        VALOR_FIXO = "valor_fixo", "Valor fixo"
+        NENHUMA = "nenhuma", "Nenhuma"
+
     class Status(models.TextChoices):
         PENDENTE = "pendente", "Pendente"
         PAGA = "paga", "Paga"
@@ -229,6 +242,25 @@ class Fatura(models.Model):
             MaxValueValidator(Decimal("100")),
         ],
     )
+    origem_bonificacao_emissao = models.CharField(
+        max_length=12,
+        choices=OrigemBonificacao.choices,
+        default=OrigemBonificacao.CONDOMINIO,
+    )
+    tipo_bonificacao_emissao = models.CharField(
+        max_length=10,
+        choices=TipoBonificacao.choices,
+        default=TipoBonificacao.NENHUMA,
+    )
+    valor_bonificacao_fixa_emissao = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        validators=[
+            MinValueValidator(Decimal("0")),
+            MaxValueValidator(LIMITE_VALOR_FINANCEIRO),
+        ],
+    )
     dias_antecedencia_bonificacao_emissao = (
         models.PositiveSmallIntegerField(default=0)
     )
@@ -300,6 +332,12 @@ class Fatura(models.Model):
     class Meta:
         db_table = "faturas"
         ordering = ["-ano", "-mes"]
+        indexes = [
+            models.Index(
+                fields=["ano", "mes", "status", "data_vencimento"],
+                name="fatura_comp_status_venc_idx",
+            ),
+        ]
 
         constraints = [
             models.UniqueConstraint(
@@ -382,6 +420,19 @@ class Fatura(models.Model):
                 name="fatura_bonificacao_nao_negativa",
             ),
             models.CheckConstraint(
+                condition=models.Q(
+                    percentual_bonificacao_emissao__gte=0,
+                    percentual_bonificacao_emissao__lte=100,
+                ),
+                name="fatura_bonus_percentual_emissao_valido",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(
+                    valor_bonificacao_fixa_emissao__gte=0,
+                ),
+                name="fatura_bonus_fixo_emissao_nao_negativo",
+            ),
+            models.CheckConstraint(
                 condition=(
                     models.Q(dia_limite_bonificacao__isnull=True)
                     | models.Q(
@@ -395,6 +446,7 @@ class Fatura(models.Model):
                 condition=(
                     models.Q(valor_bonificacao=0)
                     | models.Q(dia_limite_bonificacao__isnull=False)
+                    | models.Q(data_limite_bonificacao__isnull=False)
                 ),
                 name="fatura_bonificacao_com_dia",
             ),
@@ -569,7 +621,48 @@ class Fatura(models.Model):
 
     @property
     def valor_com_bonificacao(self):
-        return (self.valor_total - self.valor_bonificacao).quantize(
+        return (self.valor_total - self.valor_bonificacao_configurada).quantize(
+            Decimal("0.01"),
+            rounding=ROUND_HALF_UP,
+        )
+
+    @property
+    def possui_bonificacao(self):
+        return (
+            self.origem_bonificacao_emissao
+            != self.OrigemBonificacao.NENHUMA
+            and self.tipo_bonificacao_emissao
+            != self.TipoBonificacao.NENHUMA
+            and self.valor_bonificacao_configurada > 0
+        )
+
+    @property
+    def descricao_origem_bonificacao(self):
+        return {
+            self.OrigemBonificacao.CONDOMINIO: "Padrão do condomínio",
+            self.OrigemBonificacao.ESPECIFICA: "Específica da fatura",
+            self.OrigemBonificacao.NENHUMA: "Nenhuma",
+        }[self.origem_bonificacao_emissao]
+
+    @property
+    def valor_bonificacao_configurada(self):
+        if (
+            self.tipo_bonificacao_emissao
+            == self.TipoBonificacao.PERCENTUAL
+        ):
+            valor = (
+                self.valor_total
+                * self.percentual_bonificacao_emissao
+                / Decimal("100")
+            )
+        elif (
+            self.tipo_bonificacao_emissao
+            == self.TipoBonificacao.VALOR_FIXO
+        ):
+            valor = self.valor_bonificacao_fixa_emissao
+        else:
+            valor = Decimal("0.00")
+        return min(valor, self.valor_total).quantize(
             Decimal("0.01"),
             rounding=ROUND_HALF_UP,
         )
@@ -601,12 +694,40 @@ class Fatura(models.Model):
             self.dias_tolerancia_emissao = (
                 configuracao.dias_tolerancia_pagamento
             )
-            self.percentual_bonificacao_emissao = (
-                configuracao.percentual_bonificacao_padrao
-            )
             self.dias_antecedencia_bonificacao_emissao = (
                 configuracao.dias_antecedencia_bonificacao
             )
+        if (
+            self.valor_bonificacao > 0
+            and self.origem_bonificacao_emissao
+            == self.OrigemBonificacao.CONDOMINIO
+        ):
+            self.origem_bonificacao_emissao = (
+                self.OrigemBonificacao.ESPECIFICA
+            )
+            self.tipo_bonificacao_emissao = (
+                self.TipoBonificacao.VALOR_FIXO
+            )
+            self.valor_bonificacao_fixa_emissao = self.valor_bonificacao
+            self.percentual_bonificacao_emissao = Decimal("0.000")
+        elif (
+            self.origem_bonificacao_emissao
+            == self.OrigemBonificacao.CONDOMINIO
+        ):
+            self.percentual_bonificacao_emissao = (
+                configuracao.percentual_bonificacao_padrao
+                if configuracao is not None
+                else Decimal("0.000")
+            )
+            self.tipo_bonificacao_emissao = (
+                self.TipoBonificacao.PERCENTUAL
+                if self.percentual_bonificacao_emissao > 0
+                else self.TipoBonificacao.NENHUMA
+            )
+            if self.percentual_bonificacao_emissao <= 0:
+                self.origem_bonificacao_emissao = (
+                    self.OrigemBonificacao.NENHUMA
+                )
         if self.data_vencimento is None:
             dia_vencimento = (
                 configuracao.dia_vencimento_padrao
@@ -622,7 +743,10 @@ class Fatura(models.Model):
                 min(dia_vencimento, ultimo_dia),
             )
         if self.data_limite_bonificacao is None:
-            if self.percentual_bonificacao_emissao > 0:
+            if self.possui_bonificacao and not (
+                self.valor_bonificacao > 0
+                and self.dia_limite_bonificacao
+            ):
                 from datetime import timedelta
                 self.data_limite_bonificacao = (
                     self.data_vencimento
@@ -655,6 +779,10 @@ class Fatura(models.Model):
                 "valor_juros_aplicados",
                 "bonificacao_aplicada",
                 "valor_bonificacao_aplicada",
+                "origem_bonificacao_emissao",
+                "tipo_bonificacao_emissao",
+                "percentual_bonificacao_emissao",
+                "valor_bonificacao_fixa_emissao",
                 "valor_original",
                 "valor_final",
                 "valor_pago",
@@ -742,10 +870,10 @@ class Fatura(models.Model):
         if (
             isinstance(self.valor_bonificacao, Decimal)
             and self.valor_bonificacao > 0
-            and self.dia_limite_bonificacao is None
+            and self.data_limite_bonificacao is None
         ):
-            erros["dia_limite_bonificacao"] = (
-                "Informe o dia limite quando houver bonificação."
+            erros["data_limite_bonificacao"] = (
+                "A bonificação deve possuir uma data limite."
             )
         if (
             isinstance(self.valor_bonificacao, Decimal)
@@ -849,7 +977,7 @@ class Fatura(models.Model):
             raise ValidationError(erros)
 
 
-class HistoricoStatusFatura(models.Model):
+class HistoricoFinanceiroFatura(models.Model):
     ROTULOS_VALORES = {
         "status": "Status",
         "valor_agua": "Água",
@@ -894,7 +1022,7 @@ class HistoricoStatusFatura(models.Model):
     fatura = models.ForeignKey(
         Fatura,
         on_delete=models.CASCADE,
-        related_name="historico_status",
+        related_name="historico_financeiro",
     )
     status_anterior = models.CharField(
         max_length=20,
@@ -913,7 +1041,7 @@ class HistoricoStatusFatura(models.Model):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="alteracoes_status_faturas",
+        related_name="alteracoes_financeiras_faturas",
     )
     criado_em = models.DateTimeField(auto_now_add=True)
 

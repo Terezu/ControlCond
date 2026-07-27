@@ -31,18 +31,14 @@ from .services import (
     RegraNegocioFaturaError,
     calcular_pagamento_fatura,
     cancelar_fatura,
-    consultar_fatura,
     consultar_fatura_no_condominio,
     consultar_valores_padrao_leitura,
     editar_fatura,
     excluir_fatura,
-    executar_fechamento_mensal,
     executar_fechamento_mensal_por_condominio,
     estornar_pagamento,
     gerar_fatura_mensal,
-    listar_faturas,
     listar_faturas_por_condominio,
-    listar_faturas_para_download_mensal,
     listar_faturas_download_por_condominio,
     marcar_fatura_como_paga,
     obter_contexto_geracao_fatura,
@@ -109,9 +105,6 @@ def lista_faturas(request):
 @staff_member_required
 @never_cache
 @require_safe
-@staff_member_required
-@never_cache
-@require_safe
 def detalhes_fatura(request, fatura_id):
     try:
         fatura = consultar_fatura_no_condominio(
@@ -121,7 +114,7 @@ def detalhes_fatura(request, fatura_id):
         raise Http404(str(erro)) from erro
 
     form_valores = EditarValoresFaturaForm(fatura=fatura)
-    historico_status = fatura.historico_status.select_related(
+    historico_financeiro = fatura.historico_financeiro.select_related(
         "usuario"
     ).all()
 
@@ -131,7 +124,7 @@ def detalhes_fatura(request, fatura_id):
         {
             "fatura": fatura,
             "form_valores": form_valores,
-            "historico_status": historico_status,
+            "historico_financeiro": historico_financeiro,
         },
     )
 
@@ -577,13 +570,20 @@ def alterar_valores_fatura(request, fatura_id):
         for campo in (
             "valor_condominio",
             "valor_iptu",
-            "valor_bonificacao",
-            "dia_limite_bonificacao",
             "valor_outros",
             "observacao_outros",
         ):
             if campo in request.POST:
                 argumentos[campo] = form.cleaned_data[campo]
+        argumentos.update(
+            {
+                "modo_bonificacao": form.cleaned_data["modo_bonificacao"],
+                "tipo_bonificacao": form.cleaned_data["tipo_bonificacao"],
+                "bonificacao_especifica": form.cleaned_data[
+                    "bonificacao_especifica"
+                ],
+            }
+        )
         editar_fatura(
             fatura.id,
             usuario=request.user,
@@ -642,11 +642,10 @@ def gerar_fatura(request):
                     desconto=form.cleaned_data["desconto"],
                     valor_condominio=form.cleaned_data["valor_condominio"],
                     valor_iptu=form.cleaned_data["valor_iptu"],
-                    valor_bonificacao=form.cleaned_data[
-                        "valor_bonificacao"
-                    ],
-                    dia_limite_bonificacao=form.cleaned_data[
-                        "dia_limite_bonificacao"
+                    modo_bonificacao=form.cleaned_data["modo_bonificacao"],
+                    tipo_bonificacao=form.cleaned_data["tipo_bonificacao"],
+                    bonificacao_especifica=form.cleaned_data[
+                        "bonificacao_especifica"
                     ],
                     valor_outros=form.cleaned_data["valor_outros"],
                     observacao_outros=form.cleaned_data[
@@ -721,9 +720,8 @@ def gerar_fatura(request):
                     "valor_aluguel": leitura.apartamento.valor_aluguel,
                     "valor_condominio": leitura.apartamento.valor_condominio,
                     "valor_iptu": leitura.apartamento.valor_iptu,
-                    "valor_bonificacao": leitura.apartamento.valor_bonificacao,
-                    "dia_limite_bonificacao": (
-                        leitura.apartamento.dia_limite_bonificacao
+                    "modo_bonificacao": (
+                        Fatura.OrigemBonificacao.CONDOMINIO
                     ),
                     "valor_outros": Decimal("0.00"),
                     "desconto": Decimal("0.00"),
@@ -739,6 +737,7 @@ def gerar_fatura(request):
         {
             "form": form,
             "apartamento_sem_leitura_base": apartamento_sem_leitura_base,
+            "configuracao_financeira": obter_configuracao(condominio),
         },
     )
 

@@ -616,7 +616,7 @@ def desenhar_total(pdf, fatura, largura, y):
         fatura.status == fatura.Status.PAGA
         and fatura.data_pagamento is not None
     )
-    if pagamento_confirmado and fatura.valor_bonificacao:
+    if pagamento_confirmado and fatura.possui_bonificacao:
         altura = ALTURA_TOTAL_PAGO_COM_BONIFICACAO
     elif pagamento_confirmado:
         altura = ALTURA_TOTAL_PAGO
@@ -648,13 +648,30 @@ def desenhar_total(pdf, fatura, largura, y):
         f"R$ {formatar_valor_monetario(fatura.valor_total)}",
     )
     linha_y = y - 58
-    if fatura.valor_bonificacao:
+    if fatura.possui_bonificacao:
         data_limite = fatura.data_limite_bonificacao.strftime("%d/%m/%Y")
+        if (
+            fatura.tipo_bonificacao_emissao
+            == fatura.TipoBonificacao.PERCENTUAL
+        ):
+            bonus_configurado = (
+                f"{formatar_decimal(fatura.percentual_bonificacao_emissao)}%"
+            )
+        else:
+            bonus_configurado = (
+                "R$ "
+                f"{formatar_valor_monetario(
+                    fatura.valor_bonificacao_fixa_emissao
+                )}"
+            )
         pdf.setFont(FONTE_REGULAR, 8)
         pdf.drawString(
             MARGEM_HORIZONTAL + 16,
             linha_y,
-            f"Bonificação para pagamento até {data_limite}",
+            (
+                f"Bonificação {fatura.descricao_origem_bonificacao}: "
+                f"{bonus_configurado} até {data_limite}"
+            ),
         )
         pdf.setFont(FONTE_DESTAQUE, 10)
         pdf.drawRightString(

@@ -60,13 +60,21 @@
 
                         <fieldset class="border rounded-3 p-3 mb-3">
                             <legend class="float-none w-auto px-2 h6">Pagamento antecipado</legend>
-                            <div class="row">
-                                <div class="col-12 col-md-6">
-                                    {% include "components/form_field.html" with field=form.valor_bonificacao %}
+                            <div class="row" data-bonificacao>
+                                <div class="col-12">
+                                    {% include "components/form_field.html" with field=form.modo_bonificacao %}
                                 </div>
-                                <div class="col-12 col-md-6">
-                                    {% include "components/form_field.html" with field=form.dia_limite_bonificacao %}
+                                <div class="col-12 col-md-6" data-bonificacao-especifica>
+                                    {% include "components/form_field.html" with field=form.tipo_bonificacao %}
                                 </div>
+                                <div class="col-12 col-md-6" data-bonificacao-especifica>
+                                    {% include "components/form_field.html" with field=form.bonificacao_especifica %}
+                                </div>
+                            </div>
+                            <div class="alert alert-light border small mb-0" data-bonificacao-previa
+                                 data-percentual-padrao="{{ configuracao_financeira.percentual_bonificacao_padrao }}"
+                                 data-dias-antecedencia="{{ configuracao_financeira.dias_antecedencia_bonificacao }}">
+                                O cálculo definitivo será realizado pelo sistema ao registrar o pagamento.
                             </div>
                         </fieldset>
 

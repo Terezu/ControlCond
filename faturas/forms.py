@@ -24,6 +24,38 @@ def _aplicar_estilo_bootstrap(fields):
         field.widget.attrs.update({"class": classe})
 
 
+def _validar_bonificacao(cleaned_data, adicionar_erro):
+    modo = (
+        cleaned_data.get("modo_bonificacao")
+        or Fatura.OrigemBonificacao.CONDOMINIO
+    )
+    cleaned_data["modo_bonificacao"] = modo
+    tipo = cleaned_data.get("tipo_bonificacao")
+    valor = cleaned_data.get("bonificacao_especifica")
+    if modo == Fatura.OrigemBonificacao.ESPECIFICA:
+        if not tipo:
+            adicionar_erro(
+                "tipo_bonificacao",
+                "Informe o tipo da bonificação específica.",
+            )
+        if valor is None or valor <= 0:
+            adicionar_erro(
+                "bonificacao_especifica",
+                "Informe uma bonificação específica maior que zero.",
+            )
+        elif (
+            tipo == Fatura.TipoBonificacao.PERCENTUAL
+            and valor > Decimal("100")
+        ):
+            adicionar_erro(
+                "bonificacao_especifica",
+                "O percentual deve estar entre 0 e 100.",
+            )
+    else:
+        cleaned_data["tipo_bonificacao"] = None
+        cleaned_data["bonificacao_especifica"] = None
+
+
 class GerarFaturaForm(forms.Form):
     leitura = forms.ModelChoiceField(
         queryset=Leitura.objects.none(),
@@ -75,17 +107,32 @@ class GerarFaturaForm(forms.Form):
         label="Motivo de Outros",
         max_length=255,
     )
-    valor_bonificacao = forms.DecimalField(
-        required=False, label="Bonificação", min_value=0,
-        max_value=LIMITE_VALOR_FINANCEIRO, max_digits=10, decimal_places=2,
-        widget=forms.NumberInput(attrs={"min": "0", "step": "0.01"}),
-    )
-    dia_limite_bonificacao = forms.IntegerField(
+    modo_bonificacao = forms.ChoiceField(
         required=False,
-        label="Dia limite",
-        min_value=1,
-        max_value=31,
-        widget=forms.NumberInput(attrs={"min": "1", "max": "31", "step": "1"}),
+        label="Bonificação",
+        choices=Fatura.OrigemBonificacao.choices,
+        initial=Fatura.OrigemBonificacao.CONDOMINIO,
+    )
+    tipo_bonificacao = forms.ChoiceField(
+        required=False,
+        label="Tipo da bonificação específica",
+        choices=(
+            ("", "Selecione o tipo"),
+            *[
+                escolha
+                for escolha in Fatura.TipoBonificacao.choices
+                if escolha[0] != Fatura.TipoBonificacao.NENHUMA
+            ],
+        ),
+    )
+    bonificacao_especifica = forms.DecimalField(
+        required=False,
+        label="Percentual ou valor específico",
+        min_value=0,
+        max_value=LIMITE_VALOR_FINANCEIRO,
+        max_digits=11,
+        decimal_places=3,
+        widget=forms.NumberInput(attrs={"min": "0", "step": "0.001"}),
     )
 
     def __init__(self, *args, **kwargs):
@@ -125,7 +172,6 @@ class GerarFaturaForm(forms.Form):
             "valor_condominio",
             "valor_iptu",
             "valor_outros",
-            "valor_bonificacao",
         ):
             if campo in cleaned_data:
                 cleaned_data[campo] = cleaned_data[campo] or Decimal("0.00")
@@ -137,17 +183,7 @@ class GerarFaturaForm(forms.Form):
                 "observacao_outros",
                 "Informe o motivo quando Outros for diferente de zero.",
             )
-        if (
-            (
-                cleaned_data.get("valor_bonificacao")
-                or Decimal("0.00")
-            ) > 0
-            and not cleaned_data.get("dia_limite_bonificacao")
-        ):
-            self.add_error(
-                "dia_limite_bonificacao",
-                "Informe o dia limite quando houver bonificação.",
-            )
+        _validar_bonificacao(cleaned_data, self.add_error)
         return cleaned_data
 
     @staticmethod
@@ -292,14 +328,31 @@ class EditarValoresFaturaForm(forms.Form):
     observacao_outros = forms.CharField(
         required=False, label="Motivo de Outros", max_length=255,
     )
-    valor_bonificacao = forms.DecimalField(
-        required=False, label="Bonificação", min_value=0,
-        max_value=LIMITE_VALOR_FINANCEIRO, max_digits=10, decimal_places=2,
-        widget=forms.NumberInput(attrs={"min": "0", "step": "0.01"}),
+    modo_bonificacao = forms.ChoiceField(
+        required=False,
+        label="Bonificação",
+        choices=Fatura.OrigemBonificacao.choices,
     )
-    dia_limite_bonificacao = forms.IntegerField(
-        required=False, label="Dia limite", min_value=1, max_value=31,
-        widget=forms.NumberInput(attrs={"min": "1", "max": "31", "step": "1"}),
+    tipo_bonificacao = forms.ChoiceField(
+        required=False,
+        label="Tipo da bonificação específica",
+        choices=(
+            ("", "Selecione o tipo"),
+            *[
+                escolha
+                for escolha in Fatura.TipoBonificacao.choices
+                if escolha[0] != Fatura.TipoBonificacao.NENHUMA
+            ],
+        ),
+    )
+    bonificacao_especifica = forms.DecimalField(
+        required=False,
+        label="Percentual ou valor específico",
+        min_value=0,
+        max_value=LIMITE_VALOR_FINANCEIRO,
+        max_digits=11,
+        decimal_places=3,
+        widget=forms.NumberInput(attrs={"min": "0", "step": "0.001"}),
     )
 
     def __init__(self, *args, fatura=None, **kwargs):
@@ -311,14 +364,40 @@ class EditarValoresFaturaForm(forms.Form):
             self.fields["desconto"].initial = fatura.desconto
             for campo in (
                 "valor_condominio", "valor_iptu", "valor_outros",
-                "observacao_outros", "valor_bonificacao",
-                "dia_limite_bonificacao",
+                "observacao_outros",
             ):
                 self.fields[campo].initial = getattr(
                     fatura,
                     campo,
                     None,
                 )
+            self.fields["modo_bonificacao"].initial = (
+                getattr(
+                    fatura,
+                    "origem_bonificacao_emissao",
+                    Fatura.OrigemBonificacao.CONDOMINIO,
+                )
+            )
+            tipo_emissao = getattr(
+                fatura,
+                "tipo_bonificacao_emissao",
+                Fatura.TipoBonificacao.NENHUMA,
+            )
+            self.fields["tipo_bonificacao"].initial = (
+                tipo_emissao
+                if tipo_emissao != Fatura.TipoBonificacao.NENHUMA
+                else ""
+            )
+            self.fields["bonificacao_especifica"].initial = (
+                getattr(fatura, "percentual_bonificacao_emissao", None)
+                if tipo_emissao
+                == Fatura.TipoBonificacao.PERCENTUAL
+                else getattr(
+                    fatura,
+                    "valor_bonificacao_fixa_emissao",
+                    None,
+                )
+            )
 
     def clean_desconto(self):
         return self.cleaned_data["desconto"] or Decimal("0.00")
@@ -334,17 +413,7 @@ class EditarValoresFaturaForm(forms.Form):
                 "observacao_outros",
                 "Informe o motivo quando Outros for diferente de zero.",
             )
-        if (
-            (
-                cleaned_data.get("valor_bonificacao")
-                or Decimal("0.00")
-            ) > 0
-            and not cleaned_data.get("dia_limite_bonificacao")
-        ):
-            self.add_error(
-                "dia_limite_bonificacao",
-                "Informe o dia limite quando houver bonificação.",
-            )
+        _validar_bonificacao(cleaned_data, self.add_error)
         if self.fatura is not None:
             try:
                 validar_edicao_financeira(self.fatura)

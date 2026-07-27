@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Tarifas de gás | ControlCond{% endblock %}
+{% block content %}
+{% url "configuracoes:tarifa_gas_nova" as nova_url %}
+{% include "components/page_header.html" with titulo="Tarifas de gás" subtitulo="Histórico do valor por metro cúbico." url_acao=nova_url texto_acao="Nova tarifa" icone_acao="bi-plus-lg" %}
+<div class="card shadow-sm"><div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead><tr><th>Nome</th><th>Valor por m³</th><th>Vigência</th><th>Situação</th><th></th></tr></thead><tbody>
+{% for tarifa in tarifas %}<tr><td class="fw-semibold">{{ tarifa.nome }}</td><td>R$ {{ tarifa.valor_por_m3|floatformat:2 }}</td><td>{{ tarifa.data_inicio_vigencia|date:"d/m/Y" }} — {{ tarifa.data_fim_vigencia|date:"d/m/Y"|default:"sem término" }}</td><td><span class="badge text-bg-{% if tarifa.ativa %}success{% else %}secondary{% endif %}">{{ tarifa.ativa|yesno:"Disponível,Inativa" }}</span></td><td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{% url 'configuracoes:tarifa_gas_editar' tarifa.id %}">Editar</a> <a class="btn btn-sm btn-outline-secondary" href="{% url 'configuracoes:tarifa_gas_duplicar' tarifa.id %}">Duplicar</a>{% if not tarifa.data_fim_vigencia %}<form class="d-inline-flex gap-1 mt-1" method="post" action="{% url 'configuracoes:tarifa_gas_encerrar' tarifa.id %}">{% csrf_token %}<label class="visually-hidden" for="fim-gas-{{ tarifa.id }}">Último dia</label><input class="form-control form-control-sm" id="fim-gas-{{ tarifa.id }}" name="data_fim_vigencia" type="date" required><button class="btn btn-sm btn-outline-danger" type="submit">Encerrar</button></form>{% endif %}</td></tr>
+{% empty %}<tr><td colspan="5" class="text-center text-secondary py-5">Nenhuma tarifa cadastrada.</td></tr>{% endfor %}
+</tbody></table></div></div>
+{% endblock %}

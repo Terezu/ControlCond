@@ -1,5 +1,6 @@
 from decimal import Decimal
-from datetime import date
+from datetime import date, timedelta
+from base64 import b64decode
 from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -11,7 +12,8 @@ from django.contrib.auth import get_user_model
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
+from django.test.utils import CaptureQueriesContext
 from django.db.models.deletion import ProtectedError
 from django.test import TestCase
 from django.urls import reverse
@@ -35,7 +37,7 @@ from .forms import (
     MotivoAlteracaoStatusForm,
     RegistrarPagamentoForm,
 )
-from .models import Fatura, HistoricoStatusFatura
+from .models import Fatura, HistoricoFinanceiroFatura
 from .pdf import (
     gerar_pdf_fatura,
     gerar_pdf_fatura_bytes,
@@ -49,6 +51,7 @@ from .services import (
     editar_fatura,
     estornar_pagamento,
     executar_fechamento_mensal,
+    executar_fechamento_mensal_por_condominio,
     excluir_fatura,
     gerar_fatura_mensal,
     marcar_fatura_como_paga,
@@ -97,7 +100,8 @@ class ComponentesFinanceirosFaturaTests(TestCase):
             observacao_outros="Controle adicional do portão",
         )
         self.assertEqual(fatura.valor_total, Decimal("1430.00"))
-        self.assertEqual(fatura.valor_com_bonificacao, Decimal("1350.00"))
+        self.assertFalse(fatura.possui_bonificacao)
+        self.assertEqual(fatura.valor_com_bonificacao, Decimal("1430.00"))
 
     def test_outros_negativo_reduz_total(self):
         fatura = self.criar_fatura(
@@ -155,7 +159,11 @@ class ComponentesFinanceirosFaturaTests(TestCase):
             (11, False, Decimal("1400.00")),
         ):
             with self.subTest(dia=dia):
-                fatura = self.criar_fatura()
+                fatura = self.criar_fatura(
+                    modo_bonificacao=Fatura.OrigemBonificacao.ESPECIFICA,
+                    tipo_bonificacao=Fatura.TipoBonificacao.VALOR_FIXO,
+                    bonificacao_especifica=Decimal("80.00"),
+                )
                 marcar_fatura_como_paga(
                     fatura.id,
                     data_pagamento=date(2028, 2, dia),
@@ -207,7 +215,7 @@ class ComponentesFinanceirosFaturaTests(TestCase):
         fatura.refresh_from_db()
         self.assertEqual(fatura.valor_condominio, Decimal("275.00"))
 
-    def test_geracao_mensal_copia_padroes_do_apartamento(self):
+    def test_geracao_mensal_usa_padrao_do_condominio_e_nao_do_apartamento(self):
         self.apartamento.leitura_base_agua = Decimal("0.00")
         self.apartamento.leitura_base_gas = Decimal("0.00")
         self.apartamento.save(
@@ -223,8 +231,11 @@ class ComponentesFinanceirosFaturaTests(TestCase):
         fatura = gerar_fatura_mensal(leitura.id)
         self.assertEqual(fatura.valor_condominio, Decimal("300.00"))
         self.assertEqual(fatura.valor_iptu, Decimal("100.00"))
-        self.assertEqual(fatura.valor_bonificacao, Decimal("80.00"))
-        self.assertEqual(fatura.dia_limite_bonificacao, 10)
+        self.assertEqual(fatura.valor_bonificacao, Decimal("0.00"))
+        self.assertEqual(
+            fatura.origem_bonificacao_emissao,
+            Fatura.OrigemBonificacao.NENHUMA,
+        )
 
     def test_tarifa_de_agua_nova_nao_invalida_fatura_emitida(self):
         self.apartamento.leitura_base_agua = Decimal("0.00")
@@ -260,11 +271,20 @@ class ComponentesFinanceirosFaturaTests(TestCase):
         self.assertEqual(fatura.valor_agua, valor_agua_emitido)
 
     def test_data_limite_usa_ultimo_dia_valido(self):
-        fatura = self.criar_fatura(dia_limite_bonificacao=31)
+        fatura = self.criar_fatura(
+            valor_bonificacao=Decimal("80.00"),
+            dia_limite_bonificacao=31,
+        )
         self.assertEqual(fatura.data_limite_bonificacao, date(2028, 2, 29))
 
     def test_emissao_congela_vencimento_e_valor_original(self):
-        atualizar_configuracao({"dia_vencimento_padrao": 31})
+        atualizar_configuracao(
+            {
+                "dia_vencimento_padrao": 31,
+                "percentual_bonificacao_padrao": Decimal("5.000"),
+                "dias_antecedencia_bonificacao": 19,
+            }
+        )
 
         fatura = self.criar_fatura()
 
@@ -276,7 +296,11 @@ class ComponentesFinanceirosFaturaTests(TestCase):
         self.assertEqual(fatura.data_vencimento, date(2028, 2, 29))
 
     def test_snapshots_de_pagamento_nao_podem_ser_alterados(self):
-        fatura = self.criar_fatura()
+        fatura = self.criar_fatura(
+            modo_bonificacao=Fatura.OrigemBonificacao.ESPECIFICA,
+            tipo_bonificacao=Fatura.TipoBonificacao.VALOR_FIXO,
+            bonificacao_especifica=Decimal("80.00"),
+        )
         marcar_fatura_como_paga(
             fatura.id,
             data_pagamento=date(2028, 2, 9),
@@ -374,6 +398,180 @@ class ComponentesFinanceirosFaturaTests(TestCase):
             Decimal("70.00"),
         )
         self.assertEqual(fatura.valor_final, Decimal("1330.00"))
+
+    def test_bonificacao_especifica_percentual_substitui_padrao(self):
+        atualizar_configuracao(
+            {
+                "percentual_bonificacao_padrao": Decimal("10.000"),
+                "dias_antecedencia_bonificacao": 0,
+            }
+        )
+        fatura = self.criar_fatura(
+            modo_bonificacao=Fatura.OrigemBonificacao.ESPECIFICA,
+            tipo_bonificacao=Fatura.TipoBonificacao.PERCENTUAL,
+            bonificacao_especifica=Decimal("5.000"),
+        )
+
+        marcar_fatura_como_paga(
+            fatura.id,
+            data_pagamento=fatura.data_limite_bonificacao,
+        )
+        fatura.refresh_from_db()
+
+        self.assertEqual(
+            fatura.origem_bonificacao_emissao,
+            Fatura.OrigemBonificacao.ESPECIFICA,
+        )
+        self.assertEqual(
+            fatura.tipo_bonificacao_emissao,
+            Fatura.TipoBonificacao.PERCENTUAL,
+        )
+        self.assertEqual(
+            fatura.percentual_bonificacao_emissao,
+            Decimal("5.000"),
+        )
+        self.assertEqual(
+            fatura.valor_bonificacao_aplicada,
+            Decimal("70.00"),
+        )
+
+    def test_bonificacao_especifica_fixa_e_opcao_sem_bonificacao(self):
+        atualizar_configuracao(
+            {"percentual_bonificacao_padrao": Decimal("10.000")}
+        )
+        fixa = self.criar_fatura(
+            modo_bonificacao=Fatura.OrigemBonificacao.ESPECIFICA,
+            tipo_bonificacao=Fatura.TipoBonificacao.VALOR_FIXO,
+            bonificacao_especifica=Decimal("75.00"),
+        )
+        marcar_fatura_como_paga(
+            fixa.id,
+            data_pagamento=fixa.data_limite_bonificacao,
+        )
+        fixa.refresh_from_db()
+        self.assertEqual(
+            fixa.valor_bonificacao_aplicada,
+            Decimal("75.00"),
+        )
+        fixa.delete()
+
+        sem_bonificacao = self.criar_fatura(
+            modo_bonificacao=Fatura.OrigemBonificacao.NENHUMA,
+        )
+        marcar_fatura_como_paga(
+            sem_bonificacao.id,
+            data_pagamento=date(2028, 2, 1),
+        )
+        sem_bonificacao.refresh_from_db()
+        self.assertEqual(
+            sem_bonificacao.origem_bonificacao_emissao,
+            Fatura.OrigemBonificacao.NENHUMA,
+        )
+        self.assertEqual(
+            sem_bonificacao.valor_bonificacao_aplicada,
+            Decimal("0.00"),
+        )
+
+    def test_bonificacao_fora_do_prazo_nao_e_concedida(self):
+        atualizar_configuracao(
+            {
+                "percentual_bonificacao_padrao": Decimal("5.000"),
+                "dias_antecedencia_bonificacao": 2,
+            }
+        )
+        fatura = self.criar_fatura()
+
+        marcar_fatura_como_paga(
+            fatura.id,
+            data_pagamento=(
+                fatura.data_limite_bonificacao + timedelta(days=1)
+            ),
+        )
+        fatura.refresh_from_db()
+
+        self.assertEqual(
+            fatura.valor_bonificacao_aplicada,
+            Decimal("0.00"),
+        )
+
+    def test_bonificacao_especifica_nao_pode_superar_valor_elegivel(self):
+        with self.assertRaisesRegex(ValueError, "valor elegível"):
+            self.criar_fatura(
+                modo_bonificacao=Fatura.OrigemBonificacao.ESPECIFICA,
+                tipo_bonificacao=Fatura.TipoBonificacao.VALOR_FIXO,
+                bonificacao_especifica=Decimal("1400.01"),
+            )
+
+    def test_configuracao_da_bonificacao_fica_congelada_apos_pagamento(self):
+        fatura = self.criar_fatura(
+            modo_bonificacao=Fatura.OrigemBonificacao.ESPECIFICA,
+            tipo_bonificacao=Fatura.TipoBonificacao.PERCENTUAL,
+            bonificacao_especifica=Decimal("5.000"),
+        )
+        marcar_fatura_como_paga(
+            fatura.id,
+            data_pagamento=fatura.data_limite_bonificacao,
+        )
+        fatura.refresh_from_db()
+        fatura.percentual_bonificacao_emissao = Decimal("50.000")
+
+        with self.assertRaisesRegex(
+            ValidationError,
+            "não podem ser alterados",
+        ):
+            fatura.save(update_fields=["percentual_bonificacao_emissao"])
+
+    def test_formato_legado_fixo_permanece_compativel(self):
+        fatura = self.criar_fatura(
+            valor_bonificacao=Decimal("80.00"),
+            dia_limite_bonificacao=10,
+        )
+
+        self.assertEqual(
+            fatura.origem_bonificacao_emissao,
+            Fatura.OrigemBonificacao.ESPECIFICA,
+        )
+        self.assertEqual(
+            fatura.tipo_bonificacao_emissao,
+            Fatura.TipoBonificacao.VALOR_FIXO,
+        )
+        self.assertEqual(
+            fatura.valor_bonificacao_fixa_emissao,
+            Decimal("80.00"),
+        )
+
+    def test_bonificacao_padrao_e_isolada_entre_condominios(self):
+        condominio_b = Condominio.objects.create(nome="Condomínio Bônus B")
+        atualizar_configuracao_por_condominio(
+            self.apartamento.condominio,
+            {"percentual_bonificacao_padrao": Decimal("5.000")},
+        )
+        atualizar_configuracao_por_condominio(
+            condominio_b,
+            {"percentual_bonificacao_padrao": Decimal("12.000")},
+        )
+        apartamento_b = Apartamento.objects.create(
+            condominio=condominio_b,
+            numero="FIN-B",
+        )
+
+        fatura_a = self.criar_fatura()
+        fatura_b = cadastrar_fatura(
+            apartamento_id=apartamento_b.id,
+            mes=2,
+            ano=2028,
+            consumo_agua=0,
+            consumo_gas=0,
+        )
+
+        self.assertEqual(
+            fatura_a.percentual_bonificacao_emissao,
+            Decimal("5.000"),
+        )
+        self.assertEqual(
+            fatura_b.percentual_bonificacao_emissao,
+            Decimal("12.000"),
+        )
 
     def test_alterar_configuracao_nao_recalcula_regras_da_fatura(self):
         atualizar_configuracao(
@@ -661,6 +859,28 @@ class FechamentoMensalServiceTests(TestCase):
             executar_fechamento_mensal(7, 2026)
 
         gerar.assert_called_once()
+
+    def test_fechamento_por_condominio_nao_faz_consultas_por_apartamento(self):
+        for numero in range(1, 7):
+            self.criar_apartamento(str(numero), com_leitura=False)
+
+        with CaptureQueriesContext(connection) as consultas:
+            resultado = executar_fechamento_mensal_por_condominio(
+                Condominio.objects.get(),
+                7,
+                2026,
+            )
+
+        sql = [consulta["sql"].lower() for consulta in consultas]
+        self.assertEqual(
+            sum('from "leituras"' in consulta for consulta in sql),
+            1,
+        )
+        self.assertEqual(
+            sum('from "faturas"' in consulta for consulta in sql),
+            1,
+        )
+        self.assertEqual(resultado.total_sem_leitura, 6)
 
     def test_mes_e_ano_invalidos_sao_rejeitados(self):
         for mes, ano in ((0, 2026), (13, 2026), (7, 0), (7, 10000)):
@@ -1440,6 +1660,47 @@ class GerarFaturaMensalTests(TestCase):
             with self.subTest(esperado=esperado):
                 self.assertIn(esperado, conteudo)
 
+    def test_pdf_informa_origem_e_valor_da_bonificacao(self):
+        fatura = Fatura.objects.create(
+            apartamento=self.apartamento,
+            mes=1,
+            ano=2026,
+            consumo_agua=0,
+            consumo_gas=0,
+            valor_aluguel=Decimal("100.00"),
+            valor_total=Decimal("100.00"),
+            origem_bonificacao_emissao=(
+                Fatura.OrigemBonificacao.ESPECIFICA
+            ),
+            tipo_bonificacao_emissao=(
+                Fatura.TipoBonificacao.VALOR_FIXO
+            ),
+            valor_bonificacao_fixa_emissao=Decimal("10.00"),
+            apartamento_numero_emissao=self.apartamento.numero,
+        )
+
+        with patch("faturas.pdf.canvas.Canvas") as canvas_mock:
+            pdf_mock = canvas_mock.return_value
+            pdf_mock.stringWidth.return_value = 0
+            gerar_pdf_fatura(
+                fatura,
+                BytesIO(),
+                configuracao=obter_configuracao(),
+            )
+
+        textos = " ".join(
+            chamada.args[2]
+            for chamada in (
+                pdf_mock.drawString.call_args_list
+                + pdf_mock.drawRightString.call_args_list
+            )
+        )
+        self.assertIn(
+            "Bonificação Específica da fatura: R$ 10,00",
+            textos,
+        )
+        self.assertIn("R$ 90,00", textos)
+
     def test_pdf_usa_dados_configurados(self):
         configuracao = atualizar_configuracao(
             {
@@ -1555,6 +1816,10 @@ class GerarFaturaMensalTests(TestCase):
     def test_pdf_usa_logo_padrao_e_logo_personalizada(self):
         configuracao = obter_configuracao()
         configuracao.logo = None
+        logo_bytes = b64decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwC"
+            "AAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+        )
         fatura = Fatura.objects.create(
             apartamento=self.apartamento,
             mes=1,
@@ -1563,15 +1828,24 @@ class GerarFaturaMensalTests(TestCase):
             consumo_gas=0,
             apartamento_numero_emissao=self.apartamento.numero,
         )
-        with patch("faturas.pdf.canvas.Canvas") as canvas_mock:
-            canvas_mock.return_value.stringWidth.return_value = 0
-            gerar_pdf_fatura(fatura, BytesIO(), configuracao=configuracao)
-        self.assertTrue(canvas_mock.return_value.drawImage.called)
+        with TemporaryDirectory() as pasta_base:
+            Path(pasta_base, "Logo.png").write_bytes(logo_bytes)
+            with (
+                self.settings(BASE_DIR=Path(pasta_base)),
+                patch("faturas.pdf.canvas.Canvas") as canvas_mock,
+            ):
+                canvas_mock.return_value.stringWidth.return_value = 0
+                gerar_pdf_fatura(
+                    fatura,
+                    BytesIO(),
+                    configuracao=configuracao,
+                )
+            self.assertTrue(canvas_mock.return_value.drawImage.called)
 
         with TemporaryDirectory() as pasta, self.settings(MEDIA_ROOT=pasta):
             configuracao.logo.save(
                 "personalizada.png",
-                ContentFile((Path(settings.BASE_DIR) / "Logo.png").read_bytes()),
+                ContentFile(logo_bytes),
                 save=True,
             )
             with patch("faturas.pdf.canvas.Canvas") as canvas_custom:
@@ -2028,13 +2302,13 @@ class RegrasStatusFaturaTests(TestCase):
             (
                 marcar_fatura_como_paga,
                 Fatura.Status.PAGA,
-                HistoricoStatusFatura.Acao.PAGAMENTO_CONFIRMADO,
+                HistoricoFinanceiroFatura.Acao.PAGAMENTO_CONFIRMADO,
                 "data_pagamento",
             ),
             (
                 cancelar_fatura,
                 Fatura.Status.CANCELADA,
-                HistoricoStatusFatura.Acao.FATURA_CANCELADA,
+                HistoricoFinanceiroFatura.Acao.FATURA_CANCELADA,
                 "data_cancelamento",
             ),
         )
@@ -2055,7 +2329,7 @@ class RegrasStatusFaturaTests(TestCase):
                 self.assertEqual(atualizada.status, novo_status)
                 self.assertIsNotNone(getattr(atualizada, campo_data))
                 self.assertEqual(Fatura.objects.count(), quantidade_antes)
-                evento = atualizada.historico_status.get()
+                evento = atualizada.historico_financeiro.get()
                 self.assertEqual(
                     evento.status_anterior,
                     Fatura.Status.PENDENTE,
@@ -2086,10 +2360,10 @@ class RegrasStatusFaturaTests(TestCase):
             usuario=self.usuario,
         )
 
-        evento = fatura.historico_status.get()
+        evento = fatura.historico_financeiro.get()
         self.assertEqual(
             evento.acao,
-            HistoricoStatusFatura.Acao.FATURA_CRIADA,
+            HistoricoFinanceiroFatura.Acao.FATURA_CRIADA,
         )
         self.assertEqual(evento.usuario, self.usuario)
         self.assertEqual(evento.valores_anteriores, {})
@@ -2107,10 +2381,10 @@ class RegrasStatusFaturaTests(TestCase):
             usuario=self.usuario,
         )
 
-        evento = fatura.historico_status.get()
+        evento = fatura.historico_financeiro.get()
         self.assertEqual(
             evento.acao,
-            HistoricoStatusFatura.Acao.VALORES_FINANCEIROS_ALTERADOS,
+            HistoricoFinanceiroFatura.Acao.VALORES_FINANCEIROS_ALTERADOS,
         )
         self.assertEqual(evento.usuario, self.usuario)
         self.assertEqual(evento.valores_anteriores["desconto"], "0.00")
@@ -2124,6 +2398,44 @@ class RegrasStatusFaturaTests(TestCase):
             "5.00",
         )
 
+    def test_historico_registra_criacao_alteracao_e_remocao_do_bonus(self):
+        fatura = self.criar_fatura()
+
+        editar_fatura(
+            fatura.id,
+            modo_bonificacao=Fatura.OrigemBonificacao.ESPECIFICA,
+            tipo_bonificacao=Fatura.TipoBonificacao.PERCENTUAL,
+            bonificacao_especifica=Decimal("7.500"),
+            usuario=self.usuario,
+        )
+        editar_fatura(
+            fatura.id,
+            modo_bonificacao=Fatura.OrigemBonificacao.NENHUMA,
+            usuario=self.usuario,
+        )
+
+        eventos = list(
+            fatura.historico_financeiro.order_by("id")
+        )
+        self.assertEqual(len(eventos), 2)
+        self.assertEqual(
+            eventos[0].valores_novos["origem_bonificacao_emissao"],
+            Fatura.OrigemBonificacao.ESPECIFICA,
+        )
+        self.assertEqual(
+            eventos[1].valores_anteriores[
+                "origem_bonificacao_emissao"
+            ],
+            Fatura.OrigemBonificacao.ESPECIFICA,
+        )
+        self.assertEqual(
+            eventos[1].valores_novos["origem_bonificacao_emissao"],
+            Fatura.OrigemBonificacao.NENHUMA,
+        )
+        self.assertTrue(
+            all(evento.usuario == self.usuario for evento in eventos)
+        )
+
     def test_estorno_e_reabertura_exigem_motivo_e_limpam_datas(self):
         paga = self.criar_fatura(mes=1)
         marcar_fatura_como_paga(paga.id, usuario=self.usuario)
@@ -2135,14 +2447,14 @@ class RegrasStatusFaturaTests(TestCase):
                 paga,
                 estornar_pagamento,
                 "Pagamento marcado na fatura errada.",
-                HistoricoStatusFatura.Acao.PAGAMENTO_ESTORNADO,
+                HistoricoFinanceiroFatura.Acao.PAGAMENTO_ESTORNADO,
                 "data_pagamento",
             ),
             (
                 cancelada,
                 reabrir_fatura,
                 "Cancelamento lançado por engano.",
-                HistoricoStatusFatura.Acao.FATURA_REABERTA,
+                HistoricoFinanceiroFatura.Acao.FATURA_REABERTA,
                 "data_cancelamento",
             ),
         )
@@ -2160,7 +2472,7 @@ class RegrasStatusFaturaTests(TestCase):
                     Fatura.Status.PENDENTE,
                 )
                 self.assertIsNone(getattr(atualizada, campo_data))
-                if acao == HistoricoStatusFatura.Acao.PAGAMENTO_ESTORNADO:
+                if acao == HistoricoFinanceiroFatura.Acao.PAGAMENTO_ESTORNADO:
                     self.assertIsNone(atualizada.valor_final)
                     self.assertIsNone(atualizada.valor_pago)
                     self.assertEqual(atualizada.dias_em_atraso, 0)
@@ -2169,7 +2481,7 @@ class RegrasStatusFaturaTests(TestCase):
                         atualizada.valor_bonificacao_aplicada,
                         Decimal("0.00"),
                     )
-                evento = atualizada.historico_status.first()
+                evento = atualizada.historico_financeiro.first()
                 self.assertEqual(evento.acao, acao)
                 self.assertEqual(evento.motivo, motivo)
                 self.assertEqual(evento.usuario, self.usuario)
@@ -2195,7 +2507,7 @@ class RegrasStatusFaturaTests(TestCase):
                     estornar_pagamento(fatura.id, motivo)
                 fatura.refresh_from_db()
                 self.assertEqual(fatura.status, Fatura.Status.PAGA)
-                self.assertFalse(fatura.historico_status.exists())
+                self.assertFalse(fatura.historico_financeiro.exists())
 
     def test_transicoes_diretas_entre_encerradas_sao_bloqueadas(self):
         paga = self.criar_fatura(status=Fatura.Status.PAGA, mes=1)
@@ -2209,13 +2521,13 @@ class RegrasStatusFaturaTests(TestCase):
         with self.assertRaises(RegraNegocioFaturaError):
             marcar_fatura_como_paga(cancelada.id)
 
-        self.assertFalse(HistoricoStatusFatura.objects.exists())
+        self.assertFalse(HistoricoFinanceiroFatura.objects.exists())
 
     def test_repeticao_da_mesma_acao_nao_duplica_historico(self):
         pendente = self.criar_fatura(mes=3)
         _, alterada = estornar_pagamento(pendente.id, None)
         self.assertFalse(alterada)
-        self.assertFalse(pendente.historico_status.exists())
+        self.assertFalse(pendente.historico_financeiro.exists())
 
         paga = self.criar_fatura(mes=1)
         marcar_fatura_como_paga(paga.id, usuario=self.usuario)
@@ -2224,7 +2536,7 @@ class RegrasStatusFaturaTests(TestCase):
             usuario=self.usuario,
         )
         self.assertFalse(alterada)
-        self.assertEqual(paga.historico_status.count(), 1)
+        self.assertEqual(paga.historico_financeiro.count(), 1)
 
         cancelada = self.criar_fatura(mes=2)
         cancelar_fatura(cancelada.id, usuario=self.usuario)
@@ -2233,7 +2545,7 @@ class RegrasStatusFaturaTests(TestCase):
             usuario=self.usuario,
         )
         self.assertFalse(alterada)
-        self.assertEqual(cancelada.historico_status.count(), 1)
+        self.assertEqual(cancelada.historico_financeiro.count(), 1)
 
     def test_duas_requisicoes_iguais_criam_um_unico_historico(self):
         fatura = self.criar_fatura()
@@ -2249,7 +2561,7 @@ class RegrasStatusFaturaTests(TestCase):
 
         self.assertEqual(primeira.status_code, 302)
         self.assertEqual(segunda.status_code, 302)
-        self.assertEqual(fatura.historico_status.count(), 1)
+        self.assertEqual(fatura.historico_financeiro.count(), 1)
         self.assertEqual(Fatura.objects.count(), 1)
 
     def test_edicao_financeira_obedece_ao_status(self):
@@ -2312,7 +2624,7 @@ class RegrasStatusFaturaTests(TestCase):
             ),
         )
         self.assertEqual(fatura.status, Fatura.Status.PAGA)
-        self.assertFalse(fatura.historico_status.exists())
+        self.assertFalse(fatura.historico_financeiro.exists())
 
     def test_endpoint_especifico_ignora_status_arbitrario(self):
         fatura = self.criar_fatura()
@@ -2328,7 +2640,7 @@ class RegrasStatusFaturaTests(TestCase):
         fatura.refresh_from_db()
         self.assertEqual(fatura.status, Fatura.Status.PAGA)
         self.assertEqual(
-            fatura.historico_status.get().novo_status,
+            fatura.historico_financeiro.get().novo_status,
             Fatura.Status.PAGA,
         )
 
@@ -2640,6 +2952,12 @@ class FaturaPresentationTests(TestCase):
         self.assertContains(resposta, "Gerar fatura")
         self.assertContains(resposta, "Valor do aluguel")
         self.assertContains(resposta, "Desconto")
+        self.assertContains(
+            resposta,
+            "Usar bonificação padrão do condomínio",
+        )
+        self.assertContains(resposta, "Definir bonificação específica")
+        self.assertContains(resposta, "Não aplicar bonificação")
         self.assertContains(resposta, "faturas/js/gerar_fatura.js")
         self.assertContains(resposta, reverse("faturas:lista"))
 
@@ -2859,7 +3177,7 @@ class FaturaPresentationTests(TestCase):
             leitura_agua_atual=Decimal("20.00"),
             leitura_gas_anterior=Decimal("5.00"),
             leitura_gas_atual=Decimal("9.00"),
-            historico_status=SimpleNamespace(
+            historico_financeiro=SimpleNamespace(
                 select_related=lambda *args: SimpleNamespace(
                     all=lambda: []
                 )

@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Fatura, HistoricoStatusFatura
+from .models import Fatura, HistoricoFinanceiroFatura
 
 
 @admin.register(Fatura)
@@ -32,6 +32,8 @@ class FaturaAdmin(admin.ModelAdmin):
         "valor_pago",
         "bonificacao_aplicada",
         "valor_bonificacao_aplicada",
+        "valor_bonificacao",
+        "dia_limite_bonificacao",
         "valor_multa_aplicada",
         "valor_juros_aplicados",
         "percentual_multa_emissao",
@@ -39,6 +41,9 @@ class FaturaAdmin(admin.ModelAdmin):
         "tipo_juros_emissao",
         "dias_tolerancia_emissao",
         "percentual_bonificacao_emissao",
+        "origem_bonificacao_emissao",
+        "tipo_bonificacao_emissao",
+        "valor_bonificacao_fixa_emissao",
         "dias_antecedencia_bonificacao_emissao",
         "forma_pagamento",
         "observacoes_pagamento",
@@ -69,8 +74,6 @@ class FaturaAdmin(admin.ModelAdmin):
                 "valor_outros",
                 "observacao_outros",
                 "desconto",
-                "valor_bonificacao",
-                "dia_limite_bonificacao",
                 "status",
             )
         return campos
@@ -82,8 +85,8 @@ class FaturaAdmin(admin.ModelAdmin):
         return False
 
 
-@admin.register(HistoricoStatusFatura)
-class HistoricoStatusFaturaAdmin(admin.ModelAdmin):
+@admin.register(HistoricoFinanceiroFatura)
+class HistoricoFinanceiroFaturaAdmin(admin.ModelAdmin):
     list_display = (
         "fatura",
         "acao",

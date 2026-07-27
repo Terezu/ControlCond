@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}Fatura {{ fatura.mes|stringformat:"02d" }}/{{ fatura.ano }} | ControlCond{% endblock %}
 
@@ -118,20 +119,26 @@
                     <p class="detail-value">{{ fatura.data_vencimento|date:"d/m/Y" }}</p>
                 </div>
             </div>
-            {% if fatura.valor_bonificacao %}
+            {% if fatura.possui_bonificacao %}
                 <hr>
                 <div class="row g-4">
                     <div class="col-12 col-sm-4">
-                        <p class="detail-label">Bonificação</p>
-                        <p class="detail-value">R$ {{ fatura.valor_bonificacao|floatformat:2 }}</p>
+                        <p class="detail-label">Origem da bonificação</p>
+                        <p class="detail-value">{{ fatura.descricao_origem_bonificacao }}</p>
+                    </div>
+                    <div class="col-12 col-sm-4">
+                        <p class="detail-label">Bonificação configurada</p>
+                        <p class="detail-value">
+                            {% if fatura.tipo_bonificacao_emissao == "percentual" %}
+                                {{ fatura.percentual_bonificacao_emissao }}%
+                            {% else %}
+                                R$ {{ fatura.valor_bonificacao_fixa_emissao|floatformat:2 }}
+                            {% endif %}
+                        </p>
                     </div>
                     <div class="col-12 col-sm-4">
                         <p class="detail-label">Data limite</p>
                         <p class="detail-value">{{ fatura.data_limite_bonificacao|date:"d/m/Y" }}</p>
-                    </div>
-                    <div class="col-12 col-sm-4">
-                        <p class="detail-label">Valor antecipado</p>
-                        <p class="detail-value">R$ {{ fatura.valor_com_bonificacao|floatformat:2 }}</p>
                     </div>
                 </div>
             {% endif %}
@@ -197,7 +204,7 @@
         </div>
         <div class="card-body">
             {% if fatura.status == "pendente" %}
-                <form method="post" action="{% url 'faturas:alterar_valores' fatura.id %}" novalidate>
+                <form method="post" action="{% url 'faturas:alterar_valores' fatura.id %}" novalidate data-bonificacao>
                     {% csrf_token %}
                     <div class="row align-items-end">
                         <div class="col-12 col-md-4">
@@ -219,10 +226,13 @@
                             {% include "components/form_field.html" with field=form_valores.observacao_outros %}
                         </div>
                         <div class="col-12 col-md-4">
-                            {% include "components/form_field.html" with field=form_valores.valor_bonificacao %}
+                            {% include "components/form_field.html" with field=form_valores.modo_bonificacao %}
                         </div>
-                        <div class="col-12 col-md-4">
-                            {% include "components/form_field.html" with field=form_valores.dia_limite_bonificacao %}
+                        <div class="col-12 col-md-4" data-bonificacao-especifica>
+                            {% include "components/form_field.html" with field=form_valores.tipo_bonificacao %}
+                        </div>
+                        <div class="col-12 col-md-4" data-bonificacao-especifica>
+                            {% include "components/form_field.html" with field=form_valores.bonificacao_especifica %}
                         </div>
                         <div class="col-12 col-md-4 mb-3">
                             <button type="submit" class="btn btn-primary w-100">Salvar</button>
@@ -305,9 +315,9 @@
             <p class="text-secondary small mb-0">Criação, pagamentos e alterações registrados da mais recente para a mais antiga.</p>
         </div>
         <div class="card-body">
-            {% if historico_status %}
+            {% if historico_financeiro %}
                 <div class="list-group list-group-flush">
-                    {% for evento in historico_status %}
+                    {% for evento in historico_financeiro %}
                         <article class="list-group-item px-0">
                             <div class="d-flex flex-column flex-sm-row justify-content-between gap-1">
                                 <strong>{{ evento.get_acao_display }}</strong>
@@ -346,4 +356,8 @@
             {% endif %}
         </div>
     </section>
+{% endblock %}
+
+{% block extra_scripts %}
+    <script src="{% static 'faturas/js/gerar_fatura.js' %}"></script>
 {% endblock %}
