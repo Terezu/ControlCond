@@ -33,6 +33,7 @@ from .forms import (
     FiltrarFaturasForm,
     GerarFaturaForm,
     MotivoAlteracaoStatusForm,
+    RegistrarPagamentoForm,
 )
 from .models import Fatura, HistoricoStatusFatura
 from .pdf import (
@@ -161,6 +162,28 @@ class ComponentesFinanceirosFaturaTests(TestCase):
                 fatura.refresh_from_db()
                 self.assertEqual(fatura.bonificacao_aplicada, aplicada)
                 self.assertEqual(fatura.valor_pago, pago)
+                self.assertEqual(
+                    fatura.valor_bonificacao_aplicada,
+                    Decimal("80.00") if aplicada else Decimal("0.00"),
+                )
+                self.assertEqual(fatura.valor_original, Decimal("1400.00"))
+                self.assertEqual(fatura.valor_final, pago)
+                self.assertEqual(
+                    fatura.dias_antecipados,
+                    max(10 - dia, 0),
+                )
+                self.assertEqual(
+                    fatura.dias_em_atraso,
+                    max(dia - 10, 0),
+                )
+                self.assertEqual(
+                    fatura.valor_multa_aplicada,
+                    Decimal("0.00"),
+                )
+                self.assertEqual(
+                    fatura.valor_juros_aplicados,
+                    Decimal("0.00"),
+                )
                 fatura.delete()
 
     def test_pagamento_sem_bonificacao_usa_total(self):
@@ -238,6 +261,175 @@ class ComponentesFinanceirosFaturaTests(TestCase):
     def test_data_limite_usa_ultimo_dia_valido(self):
         fatura = self.criar_fatura(dia_limite_bonificacao=31)
         self.assertEqual(fatura.data_limite_bonificacao, date(2028, 2, 29))
+
+    def test_emissao_congela_vencimento_e_valor_original(self):
+        atualizar_configuracao({"dia_vencimento_padrao": 31})
+
+        fatura = self.criar_fatura()
+
+        self.assertEqual(fatura.data_vencimento, date(2028, 2, 29))
+        self.assertEqual(fatura.data_limite_bonificacao, date(2028, 2, 10))
+        self.assertEqual(fatura.valor_original, fatura.valor_total)
+        atualizar_configuracao({"dia_vencimento_padrao": 5})
+        fatura.refresh_from_db()
+        self.assertEqual(fatura.data_vencimento, date(2028, 2, 29))
+
+    def test_snapshots_de_pagamento_nao_podem_ser_alterados(self):
+        fatura = self.criar_fatura()
+        marcar_fatura_como_paga(
+            fatura.id,
+            data_pagamento=date(2028, 2, 9),
+        )
+        fatura.refresh_from_db()
+
+        fatura.valor_final = Decimal("1.00")
+        with self.assertRaisesRegex(
+            ValidationError,
+            "não podem ser alterados",
+        ):
+            fatura.save(update_fields=["valor_final"])
+
+        fatura.refresh_from_db()
+        self.assertEqual(fatura.valor_final, Decimal("1320.00"))
+
+    def test_calcula_multa_e_juros_diarios_apos_tolerancia(self):
+        atualizar_configuracao(
+            {
+                "dia_vencimento_padrao": 10,
+                "dias_tolerancia_pagamento": 2,
+                "percentual_multa_padrao": Decimal("2.000"),
+                "percentual_juros_padrao": Decimal("0.100"),
+                "tipo_juros": "diario",
+            }
+        )
+        fatura = self.criar_fatura(
+            valor_bonificacao=Decimal("0.00"),
+            dia_limite_bonificacao=None,
+        )
+
+        marcar_fatura_como_paga(
+            fatura.id,
+            data_pagamento=date(2028, 2, 15),
+            forma_pagamento=Fatura.FormaPagamento.PIX,
+            observacoes_pagamento="Comprovante conferido.",
+        )
+        fatura.refresh_from_db()
+
+        self.assertEqual(fatura.dias_em_atraso, 5)
+        self.assertEqual(fatura.valor_multa_aplicada, Decimal("28.00"))
+        self.assertEqual(fatura.valor_juros_aplicados, Decimal("4.20"))
+        self.assertEqual(fatura.valor_final, Decimal("1432.20"))
+        self.assertEqual(fatura.forma_pagamento, "pix")
+        self.assertEqual(
+            fatura.observacoes_pagamento,
+            "Comprovante conferido.",
+        )
+
+    def test_calcula_juros_mensais_proporcionais_a_trinta_dias(self):
+        atualizar_configuracao(
+            {
+                "dia_vencimento_padrao": 10,
+                "dias_tolerancia_pagamento": 0,
+                "percentual_multa_padrao": Decimal("0.000"),
+                "percentual_juros_padrao": Decimal("3.000"),
+                "tipo_juros": "mensal",
+            }
+        )
+        fatura = self.criar_fatura(
+            valor_bonificacao=Decimal("0.00"),
+            dia_limite_bonificacao=None,
+        )
+
+        marcar_fatura_como_paga(
+            fatura.id,
+            data_pagamento=date(2028, 2, 25),
+        )
+        fatura.refresh_from_db()
+
+        self.assertEqual(fatura.dias_em_atraso, 15)
+        self.assertEqual(fatura.valor_juros_aplicados, Decimal("21.00"))
+        self.assertEqual(fatura.valor_final, Decimal("1421.00"))
+
+    def test_calcula_bonificacao_percentual_automaticamente(self):
+        atualizar_configuracao(
+            {
+                "dia_vencimento_padrao": 10,
+                "percentual_bonificacao_padrao": Decimal("5.000"),
+                "dias_antecedencia_bonificacao": 5,
+            }
+        )
+        fatura = self.criar_fatura()
+
+        self.assertEqual(fatura.data_limite_bonificacao, date(2028, 2, 5))
+        marcar_fatura_como_paga(
+            fatura.id,
+            data_pagamento=date(2028, 2, 5),
+        )
+        fatura.refresh_from_db()
+
+        self.assertTrue(fatura.bonificacao_aplicada)
+        self.assertEqual(
+            fatura.valor_bonificacao_aplicada,
+            Decimal("70.00"),
+        )
+        self.assertEqual(fatura.valor_final, Decimal("1330.00"))
+
+    def test_alterar_configuracao_nao_recalcula_regras_da_fatura(self):
+        atualizar_configuracao(
+            {
+                "percentual_multa_padrao": Decimal("2.000"),
+                "percentual_juros_padrao": Decimal("0.100"),
+                "tipo_juros": "diario",
+            }
+        )
+        fatura = self.criar_fatura(
+            valor_bonificacao=Decimal("0.00"),
+            dia_limite_bonificacao=None,
+        )
+        atualizar_configuracao(
+            {
+                "percentual_multa_padrao": Decimal("50.000"),
+                "percentual_juros_padrao": Decimal("20.000"),
+                "tipo_juros": "mensal",
+            }
+        )
+
+        marcar_fatura_como_paga(
+            fatura.id,
+            data_pagamento=date(2028, 2, 11),
+        )
+        fatura.refresh_from_db()
+
+        self.assertEqual(
+            fatura.percentual_multa_emissao,
+            Decimal("2.000"),
+        )
+        self.assertEqual(
+            fatura.percentual_juros_emissao,
+            Decimal("0.100"),
+        )
+        self.assertEqual(fatura.tipo_juros_emissao, "diario")
+        self.assertEqual(fatura.valor_multa_aplicada, Decimal("28.00"))
+        self.assertEqual(fatura.valor_juros_aplicados, Decimal("1.40"))
+
+    def test_formulario_pagamento_solicita_apenas_dados_operacionais(self):
+        form = RegistrarPagamentoForm(
+            data={
+                "data_pagamento": "2028-02-10",
+                "forma_pagamento": "pix",
+                "observacoes_pagamento": "Pago pelo aplicativo.",
+            }
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(
+            tuple(form.fields),
+            (
+                "data_pagamento",
+                "forma_pagamento",
+                "observacoes_pagamento",
+            ),
+        )
 
 
 class ExclusaoFaturaTests(TestCase):
@@ -1818,6 +2010,15 @@ class RegrasStatusFaturaTests(TestCase):
                     Fatura.Status.PENDENTE,
                 )
                 self.assertIsNone(getattr(atualizada, campo_data))
+                if acao == HistoricoStatusFatura.Acao.PAGAMENTO_ESTORNADO:
+                    self.assertIsNone(atualizada.valor_final)
+                    self.assertIsNone(atualizada.valor_pago)
+                    self.assertEqual(atualizada.dias_em_atraso, 0)
+                    self.assertEqual(atualizada.dias_antecipados, 0)
+                    self.assertEqual(
+                        atualizada.valor_bonificacao_aplicada,
+                        Decimal("0.00"),
+                    )
                 evento = atualizada.historico_status.first()
                 self.assertEqual(evento.acao, acao)
                 self.assertEqual(evento.motivo, motivo)
@@ -1888,8 +2089,13 @@ class RegrasStatusFaturaTests(TestCase):
         fatura = self.criar_fatura()
         url = reverse("faturas:marcar_como_paga", args=[fatura.id])
 
-        primeira = self.client.post(url)
-        segunda = self.client.post(url)
+        dados_pagamento = {
+            "data_pagamento": "2026-01-10",
+            "forma_pagamento": "pix",
+            "observacoes_pagamento": "",
+        }
+        primeira = self.client.post(url, dados_pagamento)
+        segunda = self.client.post(url, dados_pagamento)
 
         self.assertEqual(primeira.status_code, 302)
         self.assertEqual(segunda.status_code, 302)
@@ -1962,7 +2168,11 @@ class RegrasStatusFaturaTests(TestCase):
         fatura = self.criar_fatura()
         self.client.post(
             reverse("faturas:marcar_como_paga", args=[fatura.id]),
-            {"status": Fatura.Status.CANCELADA},
+            {
+                "status": Fatura.Status.CANCELADA,
+                "data_pagamento": "2026-01-10",
+                "forma_pagamento": "pix",
+            },
         )
 
         fatura.refresh_from_db()
@@ -1992,6 +2202,21 @@ class RegrasStatusFaturaTests(TestCase):
             resposta,
             reverse("faturas:estornar_pagamento", args=[paga.id]),
         )
+
+        pendente = self.criar_fatura(mes=2)
+        resposta_pagamento = self.client.get(
+            reverse(
+                "faturas:confirmar_marcar_como_paga",
+                args=[pendente.id],
+            )
+        )
+        self.assertContains(resposta_pagamento, 'name="data_pagamento"')
+        self.assertContains(resposta_pagamento, 'name="forma_pagamento"')
+        self.assertContains(
+            resposta_pagamento,
+            'name="observacoes_pagamento"',
+        )
+        self.assertNotContains(resposta_pagamento, 'name="valor_final"')
 
     def test_endpoints_exigem_autenticacao_de_equipe(self):
         fatura = self.criar_fatura()

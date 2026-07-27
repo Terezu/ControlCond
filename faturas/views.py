@@ -299,6 +299,8 @@ def _executar_acao_status(request, fatura_id, acao):
     configuracao = ACOES_STATUS[acao]
     motivo = None
     data_pagamento = None
+    forma_pagamento = None
+    observacoes_pagamento = ""
     if acao == "marcar_como_paga":
         form = RegistrarPagamentoForm(request.POST)
         if not form.is_valid():
@@ -308,6 +310,10 @@ def _executar_acao_status(request, fatura_id, acao):
                 fatura_id=fatura.id,
             )
         data_pagamento = form.cleaned_data["data_pagamento"]
+        forma_pagamento = form.cleaned_data["forma_pagamento"]
+        observacoes_pagamento = form.cleaned_data[
+            "observacoes_pagamento"
+        ]
     elif configuracao.get("exige_motivo"):
         form = MotivoAlteracaoStatusForm(request.POST, acao=acao)
         if not form.is_valid():
@@ -323,6 +329,8 @@ def _executar_acao_status(request, fatura_id, acao):
             argumentos["motivo"] = motivo
         if acao == "marcar_como_paga":
             argumentos["data_pagamento"] = data_pagamento
+            argumentos["forma_pagamento"] = forma_pagamento
+            argumentos["observacoes_pagamento"] = observacoes_pagamento
         _, alterada = configuracao["service"](
             fatura.id,
             **argumentos,

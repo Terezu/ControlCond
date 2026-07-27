@@ -110,8 +110,12 @@
                     </div>
                 {% endif %}
                 <div class="col-12 col-sm-6 col-lg-4">
-                    <p class="detail-label">Total a pagar</p>
-                    <p class="fs-5 fw-semibold mb-0">R$ {{ fatura.valor_total|floatformat:2 }}</p>
+                    <p class="detail-label">Valor original</p>
+                    <p class="fs-5 fw-semibold mb-0">R$ {{ fatura.valor_original|floatformat:2 }}</p>
+                </div>
+                <div class="col-12 col-sm-6 col-lg-4">
+                    <p class="detail-label">Data de vencimento</p>
+                    <p class="detail-value">{{ fatura.data_vencimento|date:"d/m/Y" }}</p>
                 </div>
             </div>
             {% if fatura.valor_bonificacao %}
@@ -139,13 +143,39 @@
                         <p class="detail-value">{{ fatura.data_pagamento|date:"d/m/Y" }}</p>
                     </div>
                     <div class="col-12 col-sm-4">
-                        <p class="detail-label">Bonificação aplicada</p>
-                        <p class="detail-value">{{ fatura.bonificacao_aplicada|yesno:"Sim,Não" }}</p>
+                        <p class="detail-label">Dias em atraso</p>
+                        <p class="detail-value">{{ fatura.dias_em_atraso }}</p>
                     </div>
                     <div class="col-12 col-sm-4">
-                        <p class="detail-label">Valor pago</p>
-                        <p class="detail-value">R$ {{ fatura.valor_pago|floatformat:2 }}</p>
+                        <p class="detail-label">Dias antecipados</p>
+                        <p class="detail-value">{{ fatura.dias_antecipados }}</p>
                     </div>
+                    <div class="col-12 col-sm-4">
+                        <p class="detail-label">Multa aplicada</p>
+                        <p class="detail-value">R$ {{ fatura.valor_multa_aplicada|floatformat:2 }}</p>
+                    </div>
+                    <div class="col-12 col-sm-4">
+                        <p class="detail-label">Juros aplicados</p>
+                        <p class="detail-value">R$ {{ fatura.valor_juros_aplicados|floatformat:2 }}</p>
+                    </div>
+                    <div class="col-12 col-sm-4">
+                        <p class="detail-label">Bonificação aplicada</p>
+                        <p class="detail-value">R$ {{ fatura.valor_bonificacao_aplicada|floatformat:2 }}</p>
+                    </div>
+                    <div class="col-12 col-sm-4">
+                        <p class="detail-label">Valor final</p>
+                        <p class="detail-value">R$ {{ fatura.valor_final|floatformat:2 }}</p>
+                    </div>
+                    <div class="col-12 col-sm-4">
+                        <p class="detail-label">Forma de pagamento</p>
+                        <p class="detail-value">{{ fatura.get_forma_pagamento_display }}</p>
+                    </div>
+                    {% if fatura.observacoes_pagamento %}
+                        <div class="col-12">
+                            <p class="detail-label">Observações do pagamento</p>
+                            <p class="detail-value">{{ fatura.observacoes_pagamento|linebreaksbr }}</p>
+                        </div>
+                    {% endif %}
                 </div>
             {% endif %}
         </div>

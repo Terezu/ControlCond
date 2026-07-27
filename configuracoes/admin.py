@@ -50,13 +50,19 @@ class ConfiguracaoCondominioAdmin(admin.ModelAdmin):
             "Financeiro",
             {
                 "fields": (
-                    "moeda", "dias_vencimento_padrao",
-                    "mensagem_cobranca_padrao",
-                    "mensagem_pagamento_antecipado",
+                    "moeda",
+                    "dia_vencimento_padrao",
+                    "dias_tolerancia_pagamento",
                     "percentual_multa_padrao",
                     "percentual_juros_padrao",
+                    "tipo_juros",
+                    "percentual_bonificacao_padrao",
+                    "dias_antecedencia_bonificacao",
+                    "dias_vencimento_padrao",
                     "valor_bonificacao_padrao",
                     "dia_bonificacao_padrao",
+                    "mensagem_cobranca_padrao",
+                    "mensagem_pagamento_antecipado",
                 )
             },
         ),

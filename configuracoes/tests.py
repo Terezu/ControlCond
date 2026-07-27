@@ -124,6 +124,10 @@ class TarifasConsumoTests(TestCase):
         self.assertEqual(resposta.status_code, 302)
         usuario.is_staff = True
         usuario.save(update_fields=["is_staff"])
+        VinculoUsuarioCondominio.objects.get_or_create(
+            usuario=usuario,
+            condominio=Condominio.objects.get(),
+        )
         resposta = self.client.get(reverse("configuracoes:detalhes"))
         self.assertContains(resposta, "Configurar tabela de água")
         self.assertContains(resposta, "Configurar tarifa de gás")
@@ -131,6 +135,10 @@ class TarifasConsumoTests(TestCase):
     def test_detalhes_exibe_faixas_da_tabela_vigente(self):
         usuario = get_user_model().objects.create_user(
             username="staff-faixas", password="senha", is_staff=True
+        )
+        VinculoUsuarioCondominio.objects.get_or_create(
+            usuario=usuario,
+            condominio=Condominio.objects.get(),
         )
         self.client.force_login(usuario)
 
@@ -181,6 +189,21 @@ class ConfiguracaoCondominioModelTests(TestCase):
         with self.assertRaises(IntegrityError), transaction.atomic():
             configuracao.save(update_fields=["valor_m3_gas"])
 
+    def test_banco_protege_limites_da_politica_financeira(self):
+        casos = (
+            ("dia_vencimento_padrao", 32),
+            ("dias_tolerancia_pagamento", 366),
+            ("percentual_bonificacao_padrao", Decimal("100.001")),
+            ("dias_antecedencia_bonificacao", 366),
+        )
+        for campo, valor in casos:
+            with self.subTest(campo=campo):
+                configuracao = obter_configuracao()
+                setattr(configuracao, campo, valor)
+                with self.assertRaises(IntegrityError), transaction.atomic():
+                    configuracao.save(update_fields=[campo])
+                configuracao.refresh_from_db()
+
 
 class ConfiguracaoCondominioServiceTests(TestCase):
     def test_alias_plural_retorna_singleton_com_defaults_seguros(self):
@@ -223,6 +246,44 @@ class ConfiguracaoCondominioServiceTests(TestCase):
         self.assertEqual(configuracao.estado, "PR")
         self.assertEqual(configuracao.valor_m3_gas, Decimal("22.50"))
 
+    def test_politica_financeira_e_isolada_por_condominio(self):
+        condominio_inicial = Condominio.objects.get()
+        outro_condominio = Condominio.objects.create(nome="Condomínio B")
+
+        configuracao_inicial = atualizar_configuracao_por_condominio(
+            condominio_inicial,
+            {
+                "dia_vencimento_padrao": 12,
+                "dias_tolerancia_pagamento": 2,
+                "percentual_multa_padrao": Decimal("2.000"),
+                "percentual_juros_padrao": Decimal("0.033"),
+                "tipo_juros": "diario",
+                "percentual_bonificacao_padrao": Decimal("5.000"),
+                "dias_antecedencia_bonificacao": 4,
+            },
+        )
+        configuracao_b = atualizar_configuracao_por_condominio(
+            outro_condominio,
+            {
+                "dia_vencimento_padrao": 20,
+                "dias_tolerancia_pagamento": 7,
+                "percentual_multa_padrao": Decimal("1.500"),
+                "percentual_juros_padrao": Decimal("1.000"),
+                "tipo_juros": "mensal",
+                "percentual_bonificacao_padrao": Decimal("3.000"),
+                "dias_antecedencia_bonificacao": 10,
+            },
+        )
+
+        self.assertEqual(configuracao_inicial.dia_vencimento_padrao, 12)
+        self.assertEqual(configuracao_inicial.tipo_juros, "diario")
+        self.assertEqual(configuracao_b.dia_vencimento_padrao, 20)
+        self.assertEqual(configuracao_b.tipo_juros, "mensal")
+        self.assertNotEqual(
+            configuracao_inicial.percentual_bonificacao_padrao,
+            configuracao_b.percentual_bonificacao_padrao,
+        )
+
     def test_migracao_preserva_tarifa_historica_da_agua(self):
         faixas = obter_faixas_agua_ativas()
         self.assertEqual(len(faixas), 6)
@@ -245,9 +306,14 @@ class ConfiguracaoCondominioFormTests(TestCase):
                 "cor_secundaria": "#64748B",
                 "cor_destaque": "#E8F1F4",
                 "moeda": "BRL",
+                "dia_vencimento_padrao": "10",
+                "dias_tolerancia_pagamento": "0",
                 "dias_vencimento_padrao": "10",
                 "percentual_multa_padrao": "0",
                 "percentual_juros_padrao": "0",
+                "tipo_juros": "mensal",
+                "percentual_bonificacao_padrao": "0",
+                "dias_antecedencia_bonificacao": "0",
                 "valor_bonificacao_padrao": "0",
             }
         )
@@ -271,6 +337,38 @@ class ConfiguracaoCondominioFormTests(TestCase):
         self.assertIn("email", form.errors)
         self.assertIn("valor_m3_gas", form.errors)
 
+    def test_formulario_rejeita_politica_financeira_invalida(self):
+        form = ConfiguracaoCondominioForm(
+            data={
+                "nome": "ControlCond",
+                "valor_m3_gas": "21.02",
+                "cor_primaria": "#1F4E5F",
+                "cor_secundaria": "#64748B",
+                "cor_destaque": "#E8F1F4",
+                "moeda": "BRL",
+                "dia_vencimento_padrao": "32",
+                "dias_tolerancia_pagamento": "366",
+                "dias_vencimento_padrao": "10",
+                "percentual_multa_padrao": "2",
+                "percentual_juros_padrao": "1",
+                "tipo_juros": "semanal",
+                "percentual_bonificacao_padrao": "100.001",
+                "dias_antecedencia_bonificacao": "366",
+                "valor_bonificacao_padrao": "0",
+            }
+        )
+
+        self.assertFalse(form.is_valid())
+        for campo in (
+            "dia_vencimento_padrao",
+            "dias_tolerancia_pagamento",
+            "tipo_juros",
+            "percentual_bonificacao_padrao",
+            "dias_antecedencia_bonificacao",
+        ):
+            with self.subTest(campo=campo):
+                self.assertIn(campo, form.errors)
+
     def test_formulario_rejeita_logo_maior_que_cinco_mb(self):
         logo = SimpleUploadedFile(
             "logo.png",
@@ -285,9 +383,14 @@ class ConfiguracaoCondominioFormTests(TestCase):
                 "cor_secundaria": "#64748B",
                 "cor_destaque": "#E8F1F4",
                 "moeda": "BRL",
+                "dia_vencimento_padrao": "10",
+                "dias_tolerancia_pagamento": "0",
                 "dias_vencimento_padrao": "10",
                 "percentual_multa_padrao": "0",
                 "percentual_juros_padrao": "0",
+                "tipo_juros": "mensal",
+                "percentual_bonificacao_padrao": "0",
+                "dias_antecedencia_bonificacao": "0",
                 "valor_bonificacao_padrao": "0",
             },
             files={"logo": logo},
@@ -304,7 +407,7 @@ class ConfiguracaoCondominioViewTests(TestCase):
             password="senha-de-teste",
             is_staff=True,
         )
-        VinculoUsuarioCondominio.objects.create(
+        VinculoUsuarioCondominio.objects.get_or_create(
             usuario=self.usuario,
             condominio=Condominio.objects.get(),
         )
@@ -349,9 +452,14 @@ class ConfiguracaoCondominioViewTests(TestCase):
                 "cor_secundaria": "#4361EE",
                 "cor_destaque": "#F3E8FF",
                 "moeda": "BRL",
+                "dia_vencimento_padrao": "15",
+                "dias_tolerancia_pagamento": "3",
                 "dias_vencimento_padrao": "10",
-                "percentual_multa_padrao": "0",
-                "percentual_juros_padrao": "0",
+                "percentual_multa_padrao": "2.5",
+                "percentual_juros_padrao": "1.25",
+                "tipo_juros": "diario",
+                "percentual_bonificacao_padrao": "4.5",
+                "dias_antecedencia_bonificacao": "5",
                 "valor_bonificacao_padrao": "0",
             },
         )
@@ -366,6 +474,22 @@ class ConfiguracaoCondominioViewTests(TestCase):
         self.assertEqual(configuracao.cor_primaria, "#7B2CBF")
         self.assertEqual(configuracao.cor_secundaria, "#4361EE")
         self.assertEqual(configuracao.cor_destaque, "#F3E8FF")
+        self.assertEqual(configuracao.dia_vencimento_padrao, 15)
+        self.assertEqual(configuracao.dias_tolerancia_pagamento, 3)
+        self.assertEqual(
+            configuracao.percentual_multa_padrao,
+            Decimal("2.500"),
+        )
+        self.assertEqual(
+            configuracao.percentual_juros_padrao,
+            Decimal("1.250"),
+        )
+        self.assertEqual(configuracao.tipo_juros, "diario")
+        self.assertEqual(
+            configuracao.percentual_bonificacao_padrao,
+            Decimal("4.500"),
+        )
+        self.assertEqual(configuracao.dias_antecedencia_bonificacao, 5)
         self.assertEqual(ConfiguracaoCondominio.objects.count(), 1)
 
     def test_cabecalho_usa_nome_configurado_e_fallback(self):

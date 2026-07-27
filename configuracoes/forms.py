@@ -44,11 +44,16 @@ class ConfiguracaoCondominioForm(forms.ModelForm):
             "cor_secundaria",
             "cor_destaque",
             "moeda",
+            "dia_vencimento_padrao",
+            "dias_tolerancia_pagamento",
             "dias_vencimento_padrao",
             "mensagem_cobranca_padrao",
             "mensagem_pagamento_antecipado",
             "percentual_multa_padrao",
             "percentual_juros_padrao",
+            "tipo_juros",
+            "percentual_bonificacao_padrao",
+            "dias_antecedencia_bonificacao",
             "valor_bonificacao_padrao",
             "dia_bonificacao_padrao",
             "pix",
@@ -85,6 +90,24 @@ class ConfiguracaoCondominioForm(forms.ModelForm):
             "cor_primaria": forms.TextInput(attrs={"type": "color"}),
             "cor_secundaria": forms.TextInput(attrs={"type": "color"}),
             "cor_destaque": forms.TextInput(attrs={"type": "color"}),
+            "dia_vencimento_padrao": forms.NumberInput(
+                attrs={"min": "1", "max": "31"}
+            ),
+            "dias_tolerancia_pagamento": forms.NumberInput(
+                attrs={"min": "0", "max": "365"}
+            ),
+            "percentual_multa_padrao": forms.NumberInput(
+                attrs={"min": "0", "step": "0.001"}
+            ),
+            "percentual_juros_padrao": forms.NumberInput(
+                attrs={"min": "0", "step": "0.001"}
+            ),
+            "percentual_bonificacao_padrao": forms.NumberInput(
+                attrs={"min": "0", "max": "100", "step": "0.001"}
+            ),
+            "dias_antecedencia_bonificacao": forms.NumberInput(
+                attrs={"min": "0", "max": "365"}
+            ),
         }
 
     def __init__(self, *args, **kwargs):

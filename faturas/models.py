@@ -10,7 +10,7 @@ from django.db.models.functions import Round
 
 from apartamentos.models import Apartamento
 from calculos.services import calcular_agua, calcular_gas
-from configuracoes.models import LIMITE_VALOR_GAS
+from configuracoes.models import ConfiguracaoCondominio, LIMITE_VALOR_GAS
 from leituras.models import Leitura
 
 
@@ -19,10 +19,21 @@ LIMITE_VALOR_FINANCEIRO = Decimal("99999999.99")
 
 
 class Fatura(models.Model):
+    TipoJuros = ConfiguracaoCondominio.TipoJuros
+
     class Status(models.TextChoices):
         PENDENTE = "pendente", "Pendente"
         PAGA = "paga", "Paga"
         CANCELADA = "cancelada", "Cancelada"
+
+    class FormaPagamento(models.TextChoices):
+        PIX = "pix", "PIX"
+        BOLETO = "boleto", "Boleto"
+        TRANSFERENCIA = "transferencia", "Transferência bancária"
+        DINHEIRO = "dinheiro", "Dinheiro"
+        CARTAO = "cartao", "Cartão"
+        OUTRO = "outro", "Outro"
+        NAO_INFORMADA = "nao_informada", "Não informada"
 
     apartamento = models.ForeignKey(
         Apartamento,
@@ -160,6 +171,73 @@ class Fatura(models.Model):
         ],
     )
     bonificacao_aplicada = models.BooleanField(default=False)
+    valor_multa_aplicada = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        validators=[MinValueValidator(Decimal("0"))],
+    )
+    valor_juros_aplicados = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        validators=[MinValueValidator(Decimal("0"))],
+    )
+    valor_bonificacao_aplicada = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        validators=[MinValueValidator(Decimal("0"))],
+    )
+    valor_original = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        validators=[MinValueValidator(Decimal("0"))],
+    )
+    valor_final = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        blank=True,
+        null=True,
+        validators=[MinValueValidator(Decimal("0"))],
+    )
+    percentual_multa_emissao = models.DecimalField(
+        max_digits=6,
+        decimal_places=3,
+        default=Decimal("0.000"),
+        validators=[MinValueValidator(Decimal("0"))],
+    )
+    percentual_juros_emissao = models.DecimalField(
+        max_digits=6,
+        decimal_places=3,
+        default=Decimal("0.000"),
+        validators=[MinValueValidator(Decimal("0"))],
+    )
+    tipo_juros_emissao = models.CharField(
+        max_length=7,
+        choices=TipoJuros.choices,
+        default=TipoJuros.MENSAL,
+    )
+    dias_tolerancia_emissao = models.PositiveSmallIntegerField(default=0)
+    percentual_bonificacao_emissao = models.DecimalField(
+        max_digits=6,
+        decimal_places=3,
+        default=Decimal("0.000"),
+        validators=[
+            MinValueValidator(Decimal("0")),
+            MaxValueValidator(Decimal("100")),
+        ],
+    )
+    dias_antecedencia_bonificacao_emissao = (
+        models.PositiveSmallIntegerField(default=0)
+    )
+    forma_pagamento = models.CharField(
+        max_length=20,
+        choices=FormaPagamento.choices,
+        blank=True,
+    )
+    observacoes_pagamento = models.TextField(blank=True, max_length=500)
 
     valor_m3_gas_emissao = models.DecimalField(
         max_digits=8,
@@ -179,7 +257,11 @@ class Fatura(models.Model):
 
     data_geracao = models.DateTimeField(auto_now_add=True)
     data_emissao = models.DateTimeField(auto_now_add=True)
+    data_vencimento = models.DateField()
+    data_limite_bonificacao = models.DateField(blank=True, null=True)
     data_pagamento = models.DateField(blank=True, null=True)
+    dias_em_atraso = models.PositiveIntegerField(default=0)
+    dias_antecipados = models.PositiveIntegerField(default=0)
     data_cancelamento = models.DateTimeField(blank=True, null=True)
 
     # Retrato imutável dos dados usados na emissão. A leitura e o apartamento
@@ -243,6 +325,29 @@ class Fatura(models.Model):
             models.CheckConstraint(
                 condition=models.Q(valor_total__gte=0),
                 name="fatura_valor_total_nao_negativo",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(valor_original__gte=0),
+                name="fatura_valor_original_nao_negativo",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(valor_final__isnull=True)
+                    | models.Q(valor_final__gte=0)
+                ),
+                name="fatura_valor_final_nao_negativo",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(valor_multa_aplicada__gte=0),
+                name="fatura_multa_aplicada_nao_negativa",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(valor_juros_aplicados__gte=0),
+                name="fatura_juros_aplicados_nao_negativos",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(valor_bonificacao_aplicada__gte=0),
+                name="fatura_bonus_aplicado_nao_negativo",
             ),
             models.CheckConstraint(
                 condition=models.Q(valor_aluguel__gte=0),
@@ -469,8 +574,7 @@ class Fatura(models.Model):
             rounding=ROUND_HALF_UP,
         )
 
-    @property
-    def data_limite_bonificacao(self):
+    def calcular_data_limite_bonificacao_legada(self):
         if not self.dia_limite_bonificacao:
             return None
         ultimo_dia = calendar.monthrange(self.ano, self.mes)[1]
@@ -479,6 +583,100 @@ class Fatura(models.Model):
             self.mes,
             min(self.dia_limite_bonificacao, ultimo_dia),
         )
+
+    def _preencher_snapshots_emissao(self):
+        configuracao = (
+            ConfiguracaoCondominio.objects
+            .filter(condominio_id=self.apartamento.condominio_id)
+            .first()
+        )
+        if configuracao is not None:
+            self.percentual_multa_emissao = (
+                configuracao.percentual_multa_padrao
+            )
+            self.percentual_juros_emissao = (
+                configuracao.percentual_juros_padrao
+            )
+            self.tipo_juros_emissao = configuracao.tipo_juros
+            self.dias_tolerancia_emissao = (
+                configuracao.dias_tolerancia_pagamento
+            )
+            self.percentual_bonificacao_emissao = (
+                configuracao.percentual_bonificacao_padrao
+            )
+            self.dias_antecedencia_bonificacao_emissao = (
+                configuracao.dias_antecedencia_bonificacao
+            )
+        if self.data_vencimento is None:
+            dia_vencimento = (
+                configuracao.dia_vencimento_padrao
+                if configuracao is not None
+                else ConfiguracaoCondominio._meta.get_field(
+                    "dia_vencimento_padrao"
+                ).default
+            )
+            ultimo_dia = calendar.monthrange(self.ano, self.mes)[1]
+            self.data_vencimento = date(
+                self.ano,
+                self.mes,
+                min(dia_vencimento, ultimo_dia),
+            )
+        if self.data_limite_bonificacao is None:
+            if self.percentual_bonificacao_emissao > 0:
+                from datetime import timedelta
+                self.data_limite_bonificacao = (
+                    self.data_vencimento
+                    - timedelta(
+                        days=self.dias_antecedencia_bonificacao_emissao
+                    )
+                )
+            elif self.valor_bonificacao > 0:
+                self.data_limite_bonificacao = (
+                    self.calcular_data_limite_bonificacao_legada()
+                )
+        self.valor_original = self.valor_total
+
+    def save(self, *args, **kwargs):
+        if self._state.adding:
+            self._preencher_snapshots_emissao()
+        elif self.pk:
+            campos_congelados = (
+                "data_vencimento",
+                "data_limite_bonificacao",
+                "data_pagamento",
+                "dias_em_atraso",
+                "dias_antecipados",
+                "valor_multa_aplicada",
+                "valor_juros_aplicados",
+                "bonificacao_aplicada",
+                "valor_bonificacao_aplicada",
+                "valor_original",
+                "valor_final",
+                "valor_pago",
+                "forma_pagamento",
+                "observacoes_pagamento",
+            )
+            anterior = (
+                type(self).objects
+                .filter(pk=self.pk)
+                .values("status", *campos_congelados)
+                .first()
+            )
+            if (
+                anterior
+                and anterior["status"] == self.Status.PAGA
+                and anterior["valor_final"] is not None
+                and self.status == self.Status.PAGA
+                and any(
+                    getattr(self, campo) != anterior[campo]
+                    for campo in campos_congelados
+                )
+            ):
+                raise ValidationError(
+                    "Os dados financeiros de uma fatura paga "
+                    "não podem ser alterados."
+                )
+        super().save(*args, **kwargs)
 
     def clean(self):
         super().clean()

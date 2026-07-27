@@ -77,9 +77,15 @@
                 <h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#financeiro" aria-expanded="false" aria-controls="financeiro"><i class="bi bi-cash-coin me-2" aria-hidden="true"></i>Financeiro</button></h2>
                 <div id="financeiro" class="accordion-collapse collapse" data-bs-parent="#configuracoesAccordion"><div class="accordion-body"><div class="row">
                     <div class="col-12 col-md-4">{% include "components/form_field.html" with field=form.moeda %}</div>
-                    <div class="col-12 col-md-4">{% include "components/form_field.html" with field=form.dias_vencimento_padrao %}</div>
+                    <div class="col-12 col-md-4">{% include "components/form_field.html" with field=form.dia_vencimento_padrao %}</div>
+                    <div class="col-12 col-md-4">{% include "components/form_field.html" with field=form.dias_tolerancia_pagamento %}</div>
                     <div class="col-12 col-md-6">{% include "components/form_field.html" with field=form.percentual_multa_padrao %}</div>
                     <div class="col-12 col-md-6">{% include "components/form_field.html" with field=form.percentual_juros_padrao %}</div>
+                    <div class="col-12 col-md-4">{% include "components/form_field.html" with field=form.tipo_juros %}</div>
+                    <div class="col-12 col-md-4">{% include "components/form_field.html" with field=form.percentual_bonificacao_padrao %}</div>
+                    <div class="col-12 col-md-4">{% include "components/form_field.html" with field=form.dias_antecedencia_bonificacao %}</div>
+                    <div class="col-12"><hr><p class="text-secondary small mb-3">Parâmetros mantidos para compatibilidade com as cobranças atuais.</p></div>
+                    <div class="col-12 col-md-4">{% include "components/form_field.html" with field=form.dias_vencimento_padrao %}</div>
                     <div class="col-12 col-md-6">{% include "components/form_field.html" with field=form.valor_bonificacao_padrao %}</div>
                     <div class="col-12 col-md-6">{% include "components/form_field.html" with field=form.dia_bonificacao_padrao %}</div>
                     <div class="col-12 col-md-6">{% include "components/form_field.html" with field=form.mensagem_cobranca_padrao %}</div>

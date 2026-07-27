@@ -223,6 +223,21 @@ class RegistrarPagamentoForm(forms.Form):
         label="Data do pagamento",
         widget=forms.DateInput(attrs={"type": "date"}),
     )
+    forma_pagamento = forms.ChoiceField(
+        label="Forma de pagamento",
+        choices=tuple(
+            escolha
+            for escolha in Fatura.FormaPagamento.choices
+            if escolha[0] != Fatura.FormaPagamento.NAO_INFORMADA
+        ),
+    )
+    observacoes_pagamento = forms.CharField(
+        required=False,
+        label="Observações",
+        max_length=500,
+        strip=True,
+        widget=forms.Textarea(attrs={"rows": 3}),
+    )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

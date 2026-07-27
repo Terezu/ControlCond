@@ -52,6 +52,10 @@ ESTADOS_BRASILEIROS = (
 
 
 class ConfiguracaoCondominio(models.Model):
+    class TipoJuros(models.TextChoices):
+        DIARIO = "diario", "Diário"
+        MENSAL = "mensal", "Mensal"
+
     condominio = models.OneToOneField(
         "condominios.Condominio",
         on_delete=models.CASCADE,
@@ -197,6 +201,18 @@ class ConfiguracaoCondominio(models.Model):
         ],
     )
     moeda = models.CharField("Moeda", max_length=3, default="BRL")
+    dia_vencimento_padrao = models.PositiveSmallIntegerField(
+        "Dia padrão de vencimento",
+        default=10,
+        validators=[MinValueValidator(1), MaxValueValidator(31)],
+        help_text="Dia do mês utilizado como vencimento padrão.",
+    )
+    dias_tolerancia_pagamento = models.PositiveSmallIntegerField(
+        "Dias de tolerância",
+        default=0,
+        validators=[MaxValueValidator(365)],
+        help_text="Quantidade de dias após o vencimento sem encargos.",
+    )
     dias_vencimento_padrao = models.PositiveSmallIntegerField(
         "Dias padrão para vencimento",
         default=10,
@@ -223,6 +239,31 @@ class ConfiguracaoCondominio(models.Model):
         decimal_places=3,
         default=Decimal("0.000"),
         validators=[MinValueValidator(Decimal("0"))],
+    )
+    tipo_juros = models.CharField(
+        "Tipo de juros",
+        max_length=7,
+        choices=TipoJuros.choices,
+        default=TipoJuros.MENSAL,
+    )
+    percentual_bonificacao_padrao = models.DecimalField(
+        "Percentual padrão de bonificação",
+        max_digits=6,
+        decimal_places=3,
+        default=Decimal("0.000"),
+        validators=[
+            MinValueValidator(Decimal("0")),
+            MaxValueValidator(Decimal("100")),
+        ],
+    )
+    dias_antecedencia_bonificacao = models.PositiveSmallIntegerField(
+        "Dias de antecedência para bonificação",
+        default=0,
+        validators=[MaxValueValidator(365)],
+        help_text=(
+            "Quantidade de dias antes do vencimento para aplicar "
+            "a bonificação."
+        ),
     )
     valor_bonificacao_padrao = models.DecimalField(
         "Valor padrão da bonificação",
@@ -317,6 +358,28 @@ class ConfiguracaoCondominio(models.Model):
             models.CheckConstraint(
                 condition=models.Q(valor_m3_gas__lte=LIMITE_VALOR_GAS),
                 name="configuracao_valor_gas_no_limite",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(
+                    dia_vencimento_padrao__gte=1,
+                    dia_vencimento_padrao__lte=31,
+                ),
+                name="configuracao_dia_vencimento_valido",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(dias_tolerancia_pagamento__lte=365),
+                name="configuracao_tolerancia_no_limite",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(
+                    percentual_bonificacao_padrao__gte=0,
+                    percentual_bonificacao_padrao__lte=100,
+                ),
+                name="configuracao_percentual_bonus_valido",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(dias_antecedencia_bonificacao__lte=365),
+                name="configuracao_antecedencia_bonus_no_limite",
             ),
         ]
 

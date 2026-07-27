@@ -122,8 +122,32 @@
                 <div class="card-body">
                     <p class="detail-label">Moeda</p>
                     <p class="detail-value">{{ configuracao.moeda }}</p>
-                    <p class="detail-label">Prazo padrão</p>
-                    <p class="detail-value">{{ configuracao.dias_vencimento_padrao }} dias</p>
+                    <div class="row g-3 mt-1">
+                        <div class="col-6">
+                            <p class="detail-label">Vencimento padrão</p>
+                            <p class="detail-value">Dia {{ configuracao.dia_vencimento_padrao }}</p>
+                        </div>
+                        <div class="col-6">
+                            <p class="detail-label">Tolerância</p>
+                            <p class="detail-value">{{ configuracao.dias_tolerancia_pagamento }} dias</p>
+                        </div>
+                        <div class="col-6">
+                            <p class="detail-label">Multa</p>
+                            <p class="detail-value">{{ configuracao.percentual_multa_padrao }}%</p>
+                        </div>
+                        <div class="col-6">
+                            <p class="detail-label">Juros</p>
+                            <p class="detail-value">{{ configuracao.percentual_juros_padrao }}% {{ configuracao.get_tipo_juros_display|lower }}</p>
+                        </div>
+                        <div class="col-6">
+                            <p class="detail-label">Bonificação</p>
+                            <p class="detail-value">{{ configuracao.percentual_bonificacao_padrao }}%</p>
+                        </div>
+                        <div class="col-6">
+                            <p class="detail-label">Antecedência</p>
+                            <p class="detail-value">{{ configuracao.dias_antecedencia_bonificacao }} dias</p>
+                        </div>
+                    </div>
                 </div>
             </section>
         </div>
