@@ -2,7 +2,7 @@
 {% block title %}Tabelas de água | ControlCond{% endblock %}
 {% block content %}
 {% url "configuracoes:tabela_agua_nova" as nova_url %}
-{% include "components/page_header.html" with titulo="Tabelas de água" subtitulo="Histórico e vigências das faixas de cobrança." url_acao=nova_url texto_acao="Nova tabela" icone_acao="bi-plus-lg" permitir_acao=pode_alterar_configuracoes %}
+{% include "components/page_header.html" with titulo="Tabelas de água" subtitulo="Histórico e vigências das faixas de cobrança." url_acao=nova_url texto_acao="Nova tabela" icone_acao="bi-plus-lg" permitir_acao=pode_alterar_configuracoes_operacionais %}
 <div class="card shadow-sm">
   <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">
@@ -16,7 +16,7 @@
           <td><span class="badge text-bg-{% if tabela.ativa %}success{% else %}secondary{% endif %}">{{ tabela.ativa|yesno:"Disponível,Inativa" }}</span></td>
           <td class="text-end">
             <a class="btn btn-sm btn-outline-primary" href="{% url 'configuracoes:tabela_agua_detalhe' tabela.id %}">Visualizar</a>
-            <a class="btn btn-sm btn-outline-secondary" href="{% url 'configuracoes:tabela_agua_duplicar' tabela.id %}">Duplicar</a>
+            {% if pode_alterar_configuracoes_operacionais %}<a class="btn btn-sm btn-outline-secondary" href="{% url 'configuracoes:tabela_agua_duplicar' tabela.id %}">Duplicar</a>{% endif %}
           </td>
         </tr>
       {% empty %}<tr><td colspan="5" class="text-center text-secondary py-5">Nenhuma tabela cadastrada.</td></tr>{% endfor %}

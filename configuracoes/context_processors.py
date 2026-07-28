@@ -63,6 +63,11 @@ def configuracao_global(request):
             "nome_sistema": "ControlCond",
             **_contexto_tema(),
         }
+    if getattr(request.user, "is_superuser", False):
+        return {
+            "nome_sistema": "ControlCond",
+            **_contexto_tema(),
+        }
     condominio = obter_condominio_ativo(request)
     if condominio is None:
         return {

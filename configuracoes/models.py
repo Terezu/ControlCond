@@ -8,6 +8,7 @@ from django.core.validators import (
     RegexValidator,
 )
 from django.core.exceptions import ValidationError
+from django.conf import settings
 from django.db import models
 from django.db.models import Q
 
@@ -441,6 +442,71 @@ class ConfiguracaoCondominio(models.Model):
             self.estado = self.estado.strip().upper()
         if isinstance(self.moeda, str):
             self.moeda = self.moeda.strip().upper()
+
+
+class ConfiguracaoGlobal(models.Model):
+    """Parâmetros técnicos não secretos da plataforma."""
+
+    chave = models.PositiveSmallIntegerField(default=1, unique=True, editable=False)
+    dias_retencao_padrao = models.PositiveIntegerField(
+        "Retenção padrão (dias)",
+        default=365,
+        validators=[MinValueValidator(1), MaxValueValidator(3650)],
+    )
+    mensagem_manutencao = models.TextField(
+        "Mensagem de manutenção",
+        blank=True,
+    )
+    modo_manutencao = models.BooleanField(
+        "Modo de manutenção",
+        default=False,
+    )
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "configuracao_global"
+        verbose_name = "Configuração global"
+        verbose_name_plural = "Configurações globais"
+
+    def __str__(self):
+        return "Configurações globais do ControlCond"
+
+    def clean(self):
+        super().clean()
+        self.chave = 1
+        self.mensagem_manutencao = self.mensagem_manutencao.strip()
+
+
+class AuditoriaConfiguracao(models.Model):
+    class Tipo(models.TextChoices):
+        INSTITUCIONAL = "institucional", "Institucional"
+        OPERACIONAL = "operacional", "Operacional"
+        GLOBAL = "global", "Global"
+
+    executor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="auditorias_configuracao",
+    )
+    condominio = models.ForeignKey(
+        "condominios.Condominio",
+        on_delete=models.PROTECT,
+        related_name="auditorias_configuracao",
+        blank=True,
+        null=True,
+    )
+    cargo = models.CharField(max_length=30)
+    tipo = models.CharField(max_length=20, choices=Tipo.choices)
+    valores_anteriores = models.JSONField(default=dict)
+    valores_novos = models.JSONField(default=dict)
+    origem = models.CharField(max_length=50, default="painel")
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "auditoria_configuracoes"
+        ordering = ["-criado_em", "-id"]
+        verbose_name = "Auditoria de configuração"
+        verbose_name_plural = "Auditorias de configurações"
 
 
 class RegraVigenciaMixin(models.Model):

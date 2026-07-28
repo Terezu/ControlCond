@@ -181,15 +181,15 @@
                     </a>
                 </li>
 
-                {% if pode_alterar_configuracoes %}
-                <li class="nav-item">
-                    <a
-                        class="nav-link{% if request.resolver_match.namespace == 'configuracoes' %} active{% endif %}"
-                        href="{% url 'configuracoes:detalhes' %}"
-                        {% if request.resolver_match.namespace == 'configuracoes' %}aria-current="page"{% endif %}
-                    >
-                        Configurações
-                    </a>
+                {% if request.user.is_superuser %}
+                <li class="nav-item"><a class="nav-link{% if request.resolver_match.url_name == 'globais' or request.resolver_match.url_name == 'globais_editar' %} active{% endif %}" href="{% url 'configuracoes:globais' %}">Administração Global</a></li>
+                {% elif pode_visualizar_configuracoes_institucionais or pode_visualizar_configuracoes_operacionais %}
+                <li class="nav-item dropdown">
+                    <button class="nav-link dropdown-toggle{% if request.resolver_match.namespace == 'configuracoes' %} active{% endif %}" data-bs-toggle="dropdown" aria-expanded="false">Configurações</button>
+                    <ul class="dropdown-menu">
+                        {% if pode_visualizar_configuracoes_institucionais %}<li><a class="dropdown-item" href="{% url 'configuracoes:institucionais' %}">Institucionais</a></li>{% endif %}
+                        {% if pode_visualizar_configuracoes_operacionais %}<li><a class="dropdown-item" href="{% url 'configuracoes:operacionais' %}">Operacionais</a></li>{% endif %}
+                    </ul>
                 </li>
                 {% endif %}
                 {% if pode_gerenciar_usuarios %}

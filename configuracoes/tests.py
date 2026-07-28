@@ -124,29 +124,36 @@ class TarifasConsumoTests(TestCase):
         self.assertEqual(resposta.status_code, 302)
         usuario.is_staff = True
         usuario.save(update_fields=["is_staff"])
-        VinculoUsuarioCondominio.objects.get_or_create(
+        VinculoUsuarioCondominio.objects.update_or_create(
             usuario=usuario,
             condominio=Condominio.objects.get(),
+            defaults={
+                "papel": VinculoUsuarioCondominio.Papel.ADMINISTRADOR,
+                "ativo": True,
+            },
         )
-        resposta = self.client.get(reverse("configuracoes:detalhes"))
-        self.assertContains(resposta, "Configurar tabela de água")
-        self.assertContains(resposta, "Configurar tarifa de gás")
+        resposta = self.client.get(reverse("configuracoes:operacionais"))
+        self.assertContains(resposta, "Tabelas de água")
+        self.assertContains(resposta, "Tarifas de gás")
 
     def test_detalhes_exibe_faixas_da_tabela_vigente(self):
         usuario = get_user_model().objects.create_user(
             username="staff-faixas", password="senha", is_staff=True
         )
-        VinculoUsuarioCondominio.objects.get_or_create(
+        VinculoUsuarioCondominio.objects.update_or_create(
             usuario=usuario,
             condominio=Condominio.objects.get(),
+            defaults={
+                "papel": VinculoUsuarioCondominio.Papel.ADMINISTRADOR,
+                "ativo": True,
+            },
         )
         self.client.force_login(usuario)
 
-        resposta = self.client.get(reverse("configuracoes:detalhes"))
+        resposta = self.client.get(reverse("configuracoes:operacionais"))
 
         self.assertEqual(resposta.status_code, 200)
         self.assertContains(resposta, self.tabela_inicial.nome)
-        self.assertContains(resposta, "R$ 101,91")
         self.assertNotContains(resposta, "Nenhuma tabela de água vigente")
 
     def test_nova_vigencia_de_agua_altera_so_competencias_futuras(self):
@@ -407,9 +414,13 @@ class ConfiguracaoCondominioViewTests(TestCase):
             password="senha-de-teste",
             is_staff=True,
         )
-        VinculoUsuarioCondominio.objects.get_or_create(
+        VinculoUsuarioCondominio.objects.update_or_create(
             usuario=self.usuario,
             condominio=Condominio.objects.get(),
+            defaults={
+                "papel": VinculoUsuarioCondominio.Papel.PROPRIETARIO_ADMINISTRATIVO,
+                "ativo": True,
+            },
         )
 
     def test_telas_exigem_usuario_staff(self):
@@ -427,14 +438,18 @@ class ConfiguracaoCondominioViewTests(TestCase):
     def test_detalhes_e_formulario_seguem_layout_padrao(self):
         self.client.force_login(self.usuario)
 
-        detalhes = self.client.get(reverse("configuracoes:detalhes"))
-        formulario = self.client.get(reverse("configuracoes:editar"))
+        detalhes = self.client.get(reverse("configuracoes:institucionais"))
+        formulario = self.client.get(
+            reverse("configuracoes:institucionais_editar")
+        )
 
         self.assertEqual(detalhes.status_code, 200)
-        self.assertTemplateUsed(detalhes, "configuracoes/detalhes.html")
-        self.assertContains(detalhes, "Editar configurações")
+        self.assertTemplateUsed(
+            detalhes, "configuracoes/institucionais.html"
+        )
+        self.assertContains(detalhes, "Editar identidade")
         self.assertTemplateUsed(formulario, "components/form_field.html")
-        self.assertContains(formulario, "Salvar configurações")
+        self.assertContains(formulario, "Salvar identidade")
         self.assertContains(
             formulario,
             'enctype="multipart/form-data"',
@@ -444,13 +459,22 @@ class ConfiguracaoCondominioViewTests(TestCase):
         self.client.force_login(self.usuario)
 
         resposta = self.client.post(
-            reverse("configuracoes:editar"),
+            reverse("configuracoes:institucionais_editar"),
             {
                 "nome": "Residencial Teste",
-                "valor_m3_gas": "23.40",
                 "cor_primaria": "#7B2CBF",
                 "cor_secundaria": "#4361EE",
                 "cor_destaque": "#F3E8FF",
+                "pais": "Brasil",
+            },
+        )
+        self.assertRedirects(
+            resposta,
+            reverse("configuracoes:institucionais"),
+        )
+        resposta = self.client.post(
+            reverse("configuracoes:operacionais_editar"),
+            {
                 "moeda": "BRL",
                 "dia_vencimento_padrao": "15",
                 "dias_tolerancia_pagamento": "3",
@@ -466,11 +490,10 @@ class ConfiguracaoCondominioViewTests(TestCase):
 
         self.assertRedirects(
             resposta,
-            reverse("configuracoes:detalhes"),
+            reverse("configuracoes:operacionais"),
         )
         configuracao = ConfiguracaoCondominio.objects.get()
         self.assertEqual(configuracao.nome, "Residencial Teste")
-        self.assertEqual(configuracao.valor_m3_gas, Decimal("23.40"))
         self.assertEqual(configuracao.cor_primaria, "#7B2CBF")
         self.assertEqual(configuracao.cor_secundaria, "#4361EE")
         self.assertEqual(configuracao.cor_destaque, "#F3E8FF")
@@ -496,7 +519,7 @@ class ConfiguracaoCondominioViewTests(TestCase):
         self.client.force_login(self.usuario)
 
         resposta_padrao = self.client.get(
-            reverse("configuracoes:detalhes")
+            reverse("configuracoes:institucionais")
         )
         self.assertContains(resposta_padrao, "ControlCond")
 
@@ -507,7 +530,7 @@ class ConfiguracaoCondominioViewTests(TestCase):
             }
         )
         resposta_configurada = self.client.get(
-            reverse("configuracoes:detalhes")
+            reverse("configuracoes:institucionais")
         )
 
         self.assertContains(
@@ -534,8 +557,8 @@ class ConfiguracaoCondominioViewTests(TestCase):
             reverse("apartamentos:lista"),
             reverse("leituras:lista"),
             reverse("faturas:lista"),
-            reverse("configuracoes:detalhes"),
-            reverse("configuracoes:editar"),
+            reverse("configuracoes:institucionais"),
+            reverse("configuracoes:institucionais_editar"),
         ):
             with self.subTest(url=url):
                 resposta = self.client.get(url)
@@ -613,7 +636,9 @@ class ConfiguracaoCondominioViewTests(TestCase):
     def test_formulario_oferece_restauracao_das_tres_cores_padrao(self):
         self.client.force_login(self.usuario)
 
-        resposta = self.client.get(reverse("configuracoes:editar"))
+        resposta = self.client.get(
+            reverse("configuracoes:institucionais_editar")
+        )
 
         self.assertContains(resposta, "Restaurar cores padrão")
         self.assertContains(
@@ -644,9 +669,13 @@ class ConfiguracaoCondominioViewTests(TestCase):
     def test_views_rejeitam_metodos_inesperados_e_nao_usam_cache(self):
         self.client.force_login(self.usuario)
 
-        detalhes = self.client.get(reverse("configuracoes:detalhes"))
-        resposta_post = self.client.post(reverse("configuracoes:detalhes"))
-        resposta_put = self.client.put(reverse("configuracoes:editar"))
+        detalhes = self.client.get(reverse("configuracoes:institucionais"))
+        resposta_post = self.client.post(
+            reverse("configuracoes:institucionais")
+        )
+        resposta_put = self.client.put(
+            reverse("configuracoes:institucionais_editar")
+        )
 
         self.assertIn("no-store", detalhes["Cache-Control"])
         self.assertEqual(resposta_post.status_code, 405)

@@ -2,6 +2,7 @@ from django import forms
 
 from .models import (
     ConfiguracaoCondominio,
+    ConfiguracaoGlobal,
     FaixaTarifaAgua,
     TabelaTarifariaAgua,
     TarifaGas,
@@ -134,6 +135,64 @@ class ConfiguracaoCondominioForm(forms.ModelForm):
 
     def clean_cep(self):
         return formatar_cep(self.cleaned_data["cep"])
+
+
+CAMPOS_INSTITUCIONAIS = (
+    "nome", "razao_social", "cnpj", "endereco", "numero", "complemento",
+    "bairro", "cep", "cidade", "estado", "pais", "telefone", "celular",
+    "email", "website", "nome_sindico", "administrador",
+    "mensagem_institucional_rodape", "administradora_nome",
+    "administradora_responsavel", "administradora_telefone",
+    "administradora_email", "logo", "favicon", "cor_primaria",
+    "cor_secundaria", "cor_destaque",
+)
+
+CAMPOS_OPERACIONAIS = (
+    "moeda", "dia_vencimento_padrao", "dias_tolerancia_pagamento",
+    "dias_vencimento_padrao", "mensagem_cobranca_padrao",
+    "mensagem_pagamento_antecipado", "percentual_multa_padrao",
+    "percentual_juros_padrao", "tipo_juros",
+    "percentual_bonificacao_padrao", "dias_antecedencia_bonificacao",
+    "valor_bonificacao_padrao", "dia_bonificacao_padrao", "pix",
+    "favorecido_nome", "favorecido_documento", "banco", "agencia", "conta",
+    "tipo_conta", "codigo_barras_padrao", "instrucoes_pagamento",
+    "mensagem_cabecalho", "observacoes_padrao", "texto_rodape",
+    "texto_juridico", "cidade_assinatura", "responsavel_emissao",
+    "cargo_responsavel", "mostrar_grafico_financeiro",
+    "mostrar_ultimos_pagamentos", "mostrar_ultimos_cadastros",
+    "mostrar_resumo_financeiro",
+)
+
+
+class ConfiguracaoInstitucionalForm(ConfiguracaoCondominioForm):
+    class Meta(ConfiguracaoCondominioForm.Meta):
+        fields = CAMPOS_INSTITUCIONAIS
+
+
+class ConfiguracaoOperacionalForm(ConfiguracaoCondominioForm):
+    class Meta(ConfiguracaoCondominioForm.Meta):
+        fields = CAMPOS_OPERACIONAIS
+
+
+class ConfiguracaoGlobalForm(forms.ModelForm):
+    class Meta:
+        model = ConfiguracaoGlobal
+        fields = (
+            "dias_retencao_padrao",
+            "modo_manutencao",
+            "mensagem_manutencao",
+        )
+        widgets = {
+            "dias_retencao_padrao": forms.NumberInput(
+                attrs={"min": "1", "max": "3650", "class": "form-control"}
+            ),
+            "modo_manutencao": forms.CheckboxInput(
+                attrs={"class": "form-check-input"}
+            ),
+            "mensagem_manutencao": forms.Textarea(
+                attrs={"rows": 4, "class": "form-control"}
+            ),
+        }
 
 
 class FaixaTarifaAguaForm(forms.ModelForm):

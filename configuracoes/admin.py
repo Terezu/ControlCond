@@ -1,11 +1,54 @@
 from django.contrib import admin
 
 from .models import (
+    AuditoriaConfiguracao,
     ConfiguracaoCondominio,
+    ConfiguracaoGlobal,
     FaixaTarifaAgua,
     TabelaTarifariaAgua,
     TarifaGas,
 )
+
+
+@admin.register(ConfiguracaoGlobal)
+class ConfiguracaoGlobalAdmin(admin.ModelAdmin):
+    list_display = (
+        "dias_retencao_padrao", "modo_manutencao", "atualizado_em",
+    )
+
+    def has_add_permission(self, request):
+        return (
+            request.user.is_superuser
+            and not ConfiguracaoGlobal.objects.exists()
+        )
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(AuditoriaConfiguracao)
+class AuditoriaConfiguracaoAdmin(admin.ModelAdmin):
+    list_display = ("tipo", "executor", "cargo", "condominio", "criado_em")
+    list_filter = ("tipo", "cargo")
+    readonly_fields = (
+        "executor", "condominio", "cargo", "tipo", "valores_anteriores",
+        "valores_novos", "origem", "criado_em",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(ConfiguracaoCondominio)
@@ -105,6 +148,10 @@ class ConfiguracaoCondominioAdmin(admin.ModelAdmin):
         return Condominio.objects.filter(configuracao__isnull=True).exists()
 
     def has_delete_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        # Alterações passam pelos services condominiais auditados.
         return False
 
 

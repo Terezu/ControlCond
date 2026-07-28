@@ -7,6 +7,36 @@ app_name = "configuracoes"
 urlpatterns = [
     path("", views.detalhes_configuracao, name="detalhes"),
     path("editar/", views.editar_configuracao, name="editar"),
+    path(
+        "institucionais/",
+        views.detalhes_configuracao_institucional,
+        name="institucionais",
+    ),
+    path(
+        "institucionais/editar/",
+        views.editar_configuracao_institucional,
+        name="institucionais_editar",
+    ),
+    path(
+        "operacionais/",
+        views.detalhes_configuracao_operacional,
+        name="operacionais",
+    ),
+    path(
+        "operacionais/editar/",
+        views.editar_configuracao_operacional,
+        name="operacionais_editar",
+    ),
+    path(
+        "globais/",
+        views.detalhes_configuracao_global,
+        name="globais",
+    ),
+    path(
+        "globais/editar/",
+        views.editar_configuracao_global,
+        name="globais_editar",
+    ),
     path("tarifas/agua/", views.listar_tabelas_agua, name="tabelas_agua"),
     path("tarifas/agua/nova/", views.editar_tabela_agua, name="tabela_agua_nova"),
     path("tarifas/agua/<int:tabela_id>/", views.detalhe_tabela_agua, name="tabela_agua_detalhe"),

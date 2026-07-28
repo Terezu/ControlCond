@@ -33,6 +33,16 @@ def contexto_condominio(request):
                 Permissao.VISUALIZAR_DADOS_PESSOAIS_SENSIVEIS,
             "pode_gerenciar_usuarios": Permissao.GERENCIAR_USUARIOS,
             "pode_alterar_configuracoes": Permissao.ALTERAR_CONFIGURACOES,
+            "pode_visualizar_configuracoes_institucionais":
+                Permissao.VISUALIZAR_CONFIGURACOES_INSTITUCIONAIS,
+            "pode_alterar_configuracoes_institucionais":
+                Permissao.ALTERAR_CONFIGURACOES_INSTITUCIONAIS,
+            "pode_visualizar_configuracoes_operacionais":
+                Permissao.VISUALIZAR_CONFIGURACOES_OPERACIONAIS,
+            "pode_alterar_configuracoes_operacionais":
+                Permissao.ALTERAR_CONFIGURACOES_OPERACIONAIS,
+            "pode_visualizar_configuracoes_globais":
+                Permissao.VISUALIZAR_CONFIGURACOES_GLOBAIS,
             "pode_gerenciar_financeiro": Permissao.GERENCIAR_FINANCEIRO,
             "pode_executar_acao_critica": Permissao.ACAO_CRITICA,
         }.items()

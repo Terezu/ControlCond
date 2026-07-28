@@ -18,6 +18,20 @@ class CondominioAtivoMiddleware:
 
     @staticmethod
     def _permissao_da_rota(caminho):
+        if caminho.startswith("/configuracoes/globais/"):
+            return Permissao.VISUALIZAR_CONFIGURACOES_GLOBAIS
+        if caminho.startswith("/configuracoes/institucionais/"):
+            return (
+                Permissao.ALTERAR_CONFIGURACOES_INSTITUCIONAIS
+                if "/editar/" in caminho
+                else Permissao.VISUALIZAR_CONFIGURACOES_INSTITUCIONAIS
+            )
+        if caminho.startswith("/configuracoes/operacionais/"):
+            return (
+                Permissao.ALTERAR_CONFIGURACOES_OPERACIONAIS
+                if "/editar/" in caminho
+                else Permissao.VISUALIZAR_CONFIGURACOES_OPERACIONAIS
+            )
         if caminho.startswith("/usuarios/perfil/"):
             return None
         if (
@@ -27,7 +41,6 @@ class CondominioAtivoMiddleware:
             return Permissao.CANCELAR_FATURA
         regras = (
             ("/usuarios/", Permissao.GERENCIAR_USUARIOS),
-            ("/configuracoes/", Permissao.ALTERAR_CONFIGURACOES),
             ("/rescindir/", Permissao.RESCINDIR_CONTRATO),
             ("/marcar-como-paga/", Permissao.MARCAR_FATURA_PAGA),
             ("/cancelar/", Permissao.CANCELAR_FATURA),
@@ -65,6 +78,12 @@ class CondominioAtivoMiddleware:
             not getattr(request.user, "is_authenticated", False)
             or request.path.startswith(self.CAMINHOS_LIVRES)
         ):
+            return self.get_response(request)
+        if request.path.lower().startswith("/configuracoes/globais/"):
+            if not getattr(request.user, "is_superuser", False):
+                raise PermissionDenied(
+                    "Somente Administradores Globais acessam esta área."
+                )
             return self.get_response(request)
         condominio = obter_condominio_ativo(request)
         if condominio is None:

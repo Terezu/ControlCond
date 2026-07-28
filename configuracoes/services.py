@@ -1,17 +1,22 @@
 from django.core.exceptions import ValidationError
 from datetime import date
+from decimal import Decimal
 
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 
 from .models import (
+    AuditoriaConfiguracao,
     CHAVE_CONFIGURACAO,
     ConfiguracaoCondominio,
+    ConfiguracaoGlobal,
     FaixaTarifaAgua,
     TabelaTarifariaAgua,
     TarifaGas,
 )
+from .forms import CAMPOS_INSTITUCIONAIS, CAMPOS_OPERACIONAIS
 from .validators import formatar_cep, formatar_cnpj
+from condominios.permissions import Permissao, exigir_permissao, papel_atual
 
 
 @transaction.atomic
@@ -136,10 +141,34 @@ def obter_faixas_agua_ativas(condominio, mes=None, ano=None):
 
 
 @transaction.atomic
-def salvar_regra_vigencia(instancia):
+def salvar_regra_vigencia(instancia, *, usuario=None):
+    if usuario is not None:
+        exigir_permissao(
+            usuario,
+            instancia.condominio,
+            Permissao.ALTERAR_CONFIGURACOES_OPERACIONAIS,
+        )
+    campos_auditoria = tuple(
+        campo.name for campo in instancia._meta.fields
+        if campo.name not in {"id", "condominio"}
+    )
+    anteriores = {}
+    if usuario is not None and instancia.pk:
+        anterior = type(instancia).objects.filter(pk=instancia.pk).first()
+        if anterior:
+            anteriores = _snapshot(anterior, campos_auditoria)
     type(instancia).objects.select_for_update().all()
     instancia.full_clean()
     instancia.save()
+    if usuario is not None:
+        _registrar_auditoria(
+            usuario=usuario,
+            condominio=instancia.condominio,
+            tipo=AuditoriaConfiguracao.Tipo.OPERACIONAL,
+            anteriores=anteriores,
+            novos=_snapshot(instancia, campos_auditoria),
+            origem="painel_tarifas",
+        )
     return instancia
 
 
@@ -191,6 +220,129 @@ def atualizar_configuracao(condominio, dados):
         _sincronizar_tarifa_gas_legada(
             condominio, configuracao.valor_m3_gas
         )
+    return configuracao
+
+
+def _valor_auditavel(valor):
+    if hasattr(valor, "name"):
+        return valor.name
+    if hasattr(valor, "isoformat"):
+        return valor.isoformat()
+    if isinstance(valor, Decimal):
+        return str(valor)
+    return valor
+
+
+def _snapshot(instancia, campos):
+    return {
+        campo: _valor_auditavel(getattr(instancia, campo))
+        for campo in campos
+    }
+
+
+def _registrar_auditoria(
+    *, usuario, condominio, tipo, anteriores, novos, origem
+):
+    cargo = (
+        "global"
+        if usuario.is_superuser
+        else (papel_atual(usuario, condominio) or "")
+    )
+    AuditoriaConfiguracao.objects.create(
+        executor=usuario,
+        condominio=condominio,
+        cargo=cargo,
+        tipo=tipo,
+        valores_anteriores=anteriores,
+        valores_novos=novos,
+        origem=origem,
+    )
+
+
+@transaction.atomic
+def atualizar_configuracao_institucional(
+    condominio, dados, *, usuario, origem="painel"
+):
+    exigir_permissao(
+        usuario, condominio, Permissao.ALTERAR_CONFIGURACOES_INSTITUCIONAIS
+    )
+    configuracao = obter_configuracao(condominio)
+    anteriores = _snapshot(configuracao, CAMPOS_INSTITUCIONAIS)
+    configuracao = atualizar_configuracao(
+        condominio,
+        {campo: valor for campo, valor in dados.items()
+         if campo in CAMPOS_INSTITUCIONAIS},
+    )
+    novos = _snapshot(configuracao, CAMPOS_INSTITUCIONAIS)
+    _registrar_auditoria(
+        usuario=usuario,
+        condominio=condominio,
+        tipo=AuditoriaConfiguracao.Tipo.INSTITUCIONAL,
+        anteriores=anteriores,
+        novos=novos,
+        origem=origem,
+    )
+    return configuracao
+
+
+@transaction.atomic
+def atualizar_configuracao_operacional(
+    condominio, dados, *, usuario, origem="painel"
+):
+    exigir_permissao(
+        usuario, condominio, Permissao.ALTERAR_CONFIGURACOES_OPERACIONAIS
+    )
+    configuracao = obter_configuracao(condominio)
+    anteriores = _snapshot(configuracao, CAMPOS_OPERACIONAIS)
+    configuracao = atualizar_configuracao(
+        condominio,
+        {campo: valor for campo, valor in dados.items()
+         if campo in CAMPOS_OPERACIONAIS},
+    )
+    novos = _snapshot(configuracao, CAMPOS_OPERACIONAIS)
+    _registrar_auditoria(
+        usuario=usuario,
+        condominio=condominio,
+        tipo=AuditoriaConfiguracao.Tipo.OPERACIONAL,
+        anteriores=anteriores,
+        novos=novos,
+        origem=origem,
+    )
+    return configuracao
+
+
+def obter_configuracao_global():
+    configuracao, _ = ConfiguracaoGlobal.objects.get_or_create(chave=1)
+    return configuracao
+
+
+@transaction.atomic
+def atualizar_configuracao_global(dados, *, usuario, origem="painel"):
+    if not usuario.is_superuser:
+        from django.core.exceptions import PermissionDenied
+        raise PermissionDenied(
+            "Somente Administradores Globais alteram a plataforma."
+        )
+    configuracao = (
+        ConfiguracaoGlobal.objects.select_for_update().filter(chave=1).first()
+        or ConfiguracaoGlobal(chave=1)
+    )
+    campos = ("dias_retencao_padrao", "modo_manutencao", "mensagem_manutencao")
+    anteriores = _snapshot(configuracao, campos)
+    for campo in campos:
+        if campo in dados:
+            setattr(configuracao, campo, dados[campo])
+    configuracao.full_clean()
+    configuracao.save()
+    novos = _snapshot(configuracao, campos)
+    _registrar_auditoria(
+        usuario=usuario,
+        condominio=None,
+        tipo=AuditoriaConfiguracao.Tipo.GLOBAL,
+        anteriores=anteriores,
+        novos=novos,
+        origem=origem,
+    )
     return configuracao
 
 

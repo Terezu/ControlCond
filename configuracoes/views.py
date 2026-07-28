@@ -1,7 +1,6 @@
 from django.contrib import messages
-from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.cache import never_cache
@@ -9,6 +8,9 @@ from django.views.decorators.http import require_http_methods, require_safe
 
 from .forms import (
     ConfiguracaoCondominioForm,
+    ConfiguracaoGlobalForm,
+    ConfiguracaoInstitucionalForm,
+    ConfiguracaoOperacionalForm,
     DuplicarRegraForm,
     EncerrarVigenciaForm,
     FaixaTarifaAguaFormSet,
@@ -18,25 +20,105 @@ from .forms import (
 from .models import TabelaTarifariaAgua, TarifaGas
 from .services import (
     atualizar_configuracao,
+    atualizar_configuracao_global,
+    atualizar_configuracao_institucional,
+    atualizar_configuracao_operacional,
     obter_configuracao,
+    obter_configuracao_global,
     obter_tabela_agua_vigente,
     obter_tarifa_gas_vigente,
     salvar_regra_vigencia,
 )
 from condominios.services import obter_condominio_ativo
+from condominios.permissions import (
+    Permissao,
+    permissao_condominio_required,
+    usuario_possui_permissao,
+)
 
-staff_member_required = login_required
 
-
-@staff_member_required
+@login_required
 @never_cache
 @require_safe
 def detalhes_configuracao(request):
+    condominio = obter_condominio_ativo(request)
+    if request.user.is_superuser:
+        return redirect("configuracoes:globais")
+    if usuario_possui_permissao(
+        request.user, condominio,
+        Permissao.VISUALIZAR_CONFIGURACOES_INSTITUCIONAIS,
+    ):
+        return redirect("configuracoes:institucionais")
+    if usuario_possui_permissao(
+        request.user, condominio,
+        Permissao.VISUALIZAR_CONFIGURACOES_OPERACIONAIS,
+    ):
+        return redirect("configuracoes:operacionais")
+    raise PermissionDenied("Seu cargo não permite acessar configurações.")
+
+
+@permissao_condominio_required(
+    Permissao.ALTERAR_CONFIGURACOES_INSTITUCIONAIS
+)
+@never_cache
+@require_http_methods(["GET", "POST"])
+def editar_configuracao(request):
+    return editar_configuracao_institucional(request)
+
+
+@permissao_condominio_required(
+    Permissao.VISUALIZAR_CONFIGURACOES_INSTITUCIONAIS
+)
+@never_cache
+@require_safe
+def detalhes_configuracao_institucional(request):
+    condominio = obter_condominio_ativo(request)
+    return render(request, "configuracoes/institucionais.html", {
+        "configuracao": obter_configuracao(condominio),
+    })
+
+
+@permissao_condominio_required(
+    Permissao.ALTERAR_CONFIGURACOES_INSTITUCIONAIS
+)
+@never_cache
+@require_http_methods(["GET", "POST"])
+def editar_configuracao_institucional(request):
+    condominio = obter_condominio_ativo(request)
+    configuracao = obter_configuracao(condominio)
+    form = ConfiguracaoInstitucionalForm(
+        request.POST or None,
+        request.FILES or None,
+        instance=configuracao,
+    )
+    if request.method == "POST" and form.is_valid():
+        try:
+            with transaction.atomic():
+                atualizar_configuracao_institucional(
+                    condominio, form.cleaned_data, usuario=request.user
+                )
+        except ValueError as exc:
+            form.add_error(None, str(exc))
+        else:
+            messages.success(
+                request,
+                "Configurações institucionais atualizadas com sucesso.",
+            )
+            return redirect("configuracoes:institucionais")
+
+    return render(
+        request,
+        "configuracoes/institucionais_form.html",
+        {
+            "configuracao": configuracao,
+            "form": form,
+        },
+    )
+
+
+def _contexto_operacional(condominio):
     from django.utils import timezone
     hoje = timezone.localdate()
-    condominio = obter_condominio_ativo(request)
-    if condominio is None:
-        raise PermissionError("Nenhum condomínio ativo.")
     try:
         tabela_agua = obter_tabela_agua_vigente(
             condominio, hoje.month, hoje.year
@@ -49,52 +131,95 @@ def detalhes_configuracao(request):
         )
     except ValueError:
         tarifa_gas = None
+    return {
+        "configuracao": obter_configuracao(condominio),
+        "tabela_agua_vigente": tabela_agua,
+        "tarifa_gas_vigente": tarifa_gas,
+    }
+
+
+@permissao_condominio_required(
+    Permissao.VISUALIZAR_CONFIGURACOES_OPERACIONAIS
+)
+@never_cache
+@require_safe
+def detalhes_configuracao_operacional(request):
     return render(
         request,
-        "configuracoes/detalhes.html",
-        {
-            "configuracao": obter_configuracao(condominio),
-            "tabela_agua_vigente": tabela_agua,
-            "tarifa_gas_vigente": tarifa_gas,
-        },
+        "configuracoes/operacionais.html",
+        _contexto_operacional(obter_condominio_ativo(request)),
     )
 
 
-@staff_member_required
+@permissao_condominio_required(
+    Permissao.ALTERAR_CONFIGURACOES_OPERACIONAIS
+)
 @never_cache
 @require_http_methods(["GET", "POST"])
-def editar_configuracao(request):
+def editar_configuracao_operacional(request):
     condominio = obter_condominio_ativo(request)
     configuracao = obter_configuracao(condominio)
-    form = ConfiguracaoCondominioForm(
-        request.POST or None,
-        request.FILES or None,
-        instance=configuracao,
+    form = ConfiguracaoOperacionalForm(
+        request.POST or None, instance=configuracao
     )
     if request.method == "POST" and form.is_valid():
         try:
-            with transaction.atomic():
-                atualizar_configuracao(condominio, form.cleaned_data)
+            atualizar_configuracao_operacional(
+                condominio, form.cleaned_data, usuario=request.user
+            )
         except ValueError as exc:
             form.add_error(None, str(exc))
         else:
             messages.success(
-                request,
-                "Configurações atualizadas com sucesso.",
+                request, "Configurações operacionais atualizadas com sucesso."
             )
-            return redirect("configuracoes:detalhes")
-
-    return render(
-        request,
-        "configuracoes/formulario.html",
-        {
-            "configuracao": configuracao,
-            "form": form,
-        },
-    )
+            return redirect("configuracoes:operacionais")
+    return render(request, "configuracoes/operacionais_form.html", {
+        "configuracao": configuracao,
+        "form": form,
+    })
 
 
-@staff_member_required
+@login_required
+@never_cache
+@require_safe
+def detalhes_configuracao_global(request):
+    if not request.user.is_superuser:
+        raise PermissionDenied(
+            "Somente Administradores Globais acessam esta área."
+        )
+    return render(request, "configuracoes/globais.html", {
+        "configuracao_global": obter_configuracao_global(),
+    })
+
+
+@login_required
+@never_cache
+@require_http_methods(["GET", "POST"])
+def editar_configuracao_global(request):
+    if not request.user.is_superuser:
+        raise PermissionDenied(
+            "Somente Administradores Globais alteram a plataforma."
+        )
+    configuracao = obter_configuracao_global()
+    form = ConfiguracaoGlobalForm(request.POST or None, instance=configuracao)
+    if request.method == "POST" and form.is_valid():
+        atualizar_configuracao_global(
+            form.cleaned_data, usuario=request.user
+        )
+        messages.success(
+            request, "Configurações globais atualizadas com sucesso."
+        )
+        return redirect("configuracoes:globais")
+    return render(request, "configuracoes/globais_form.html", {
+        "form": form,
+        "configuracao_global": configuracao,
+    })
+
+
+@permissao_condominio_required(
+    Permissao.VISUALIZAR_CONFIGURACOES_OPERACIONAIS
+)
 @never_cache
 @require_safe
 def listar_tabelas_agua(request):
@@ -106,7 +231,9 @@ def listar_tabelas_agua(request):
     })
 
 
-@staff_member_required
+@permissao_condominio_required(
+    Permissao.ALTERAR_CONFIGURACOES_OPERACIONAIS
+)
 @never_cache
 @require_http_methods(["GET", "POST"])
 def editar_tabela_agua(request, tabela_id=None):
@@ -128,7 +255,9 @@ def editar_tabela_agua(request, tabela_id=None):
     if request.method == "POST" and form.is_valid() and formset.is_valid():
         try:
             with transaction.atomic():
-                tabela = salvar_regra_vigencia(form.save(commit=False))
+                tabela = salvar_regra_vigencia(
+                    form.save(commit=False), usuario=request.user
+                )
                 formset.instance = tabela
                 formset.save()
                 from .services import validar_tabela_agua
@@ -143,7 +272,9 @@ def editar_tabela_agua(request, tabela_id=None):
     })
 
 
-@staff_member_required
+@permissao_condominio_required(
+    Permissao.VISUALIZAR_CONFIGURACOES_OPERACIONAIS
+)
 @never_cache
 @require_safe
 def detalhe_tabela_agua(request, tabela_id):
@@ -158,7 +289,9 @@ def detalhe_tabela_agua(request, tabela_id):
     })
 
 
-@staff_member_required
+@permissao_condominio_required(
+    Permissao.ALTERAR_CONFIGURACOES_OPERACIONAIS
+)
 @never_cache
 @require_http_methods(["GET", "POST"])
 def duplicar_tabela_agua(request, tabela_id):
@@ -178,7 +311,7 @@ def duplicar_tabela_agua(request, tabela_id):
                     data_inicio_vigencia=form.cleaned_data["data_inicio_vigencia"],
                     ativa=False,
                 )
-                salvar_regra_vigencia(nova)
+                salvar_regra_vigencia(nova, usuario=request.user)
                 for faixa in origem.faixas.order_by("ordem"):
                     faixa.pk = None
                     faixa.tabela = nova
@@ -193,7 +326,9 @@ def duplicar_tabela_agua(request, tabela_id):
     })
 
 
-@staff_member_required
+@permissao_condominio_required(
+    Permissao.VISUALIZAR_CONFIGURACOES_OPERACIONAIS
+)
 @never_cache
 @require_safe
 def listar_tarifas_gas(request):
@@ -203,7 +338,9 @@ def listar_tarifas_gas(request):
     })
 
 
-@staff_member_required
+@permissao_condominio_required(
+    Permissao.ALTERAR_CONFIGURACOES_OPERACIONAIS
+)
 @never_cache
 @require_http_methods(["GET", "POST"])
 def editar_tarifa_gas(request, tarifa_id=None):
@@ -219,7 +356,9 @@ def editar_tarifa_gas(request, tarifa_id=None):
     form = TarifaGasForm(request.POST or None, instance=tarifa)
     if request.method == "POST" and form.is_valid():
         try:
-            salvar_regra_vigencia(form.save(commit=False))
+            salvar_regra_vigencia(
+                form.save(commit=False), usuario=request.user
+            )
         except (ValidationError, ValueError) as exc:
             form.add_error(None, str(exc))
         else:
@@ -230,7 +369,9 @@ def editar_tarifa_gas(request, tarifa_id=None):
     })
 
 
-@staff_member_required
+@permissao_condominio_required(
+    Permissao.ALTERAR_CONFIGURACOES_OPERACIONAIS
+)
 @never_cache
 @require_http_methods(["GET", "POST"])
 def duplicar_tarifa_gas(request, tarifa_id):
@@ -251,7 +392,7 @@ def duplicar_tarifa_gas(request, tarifa_id):
                 ativa=False,
                 observacoes=origem.observacoes,
             )
-            salvar_regra_vigencia(nova)
+            salvar_regra_vigencia(nova, usuario=request.user)
         except (ValidationError, ValueError) as exc:
             form.add_error(None, str(exc))
         else:
@@ -262,7 +403,9 @@ def duplicar_tarifa_gas(request, tarifa_id):
     })
 
 
-@staff_member_required
+@permissao_condominio_required(
+    Permissao.ALTERAR_CONFIGURACOES_OPERACIONAIS
+)
 @never_cache
 @require_http_methods(["POST"])
 def encerrar_vigencia(request, tipo, regra_id):
@@ -277,7 +420,7 @@ def encerrar_vigencia(request, tipo, regra_id):
     if form.is_valid():
         regra.data_fim_vigencia = form.cleaned_data["data_fim_vigencia"]
         try:
-            salvar_regra_vigencia(regra)
+            salvar_regra_vigencia(regra, usuario=request.user)
         except (ValidationError, ValueError) as exc:
             messages.error(request, str(exc))
         else:
