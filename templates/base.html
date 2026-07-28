@@ -183,6 +183,7 @@
 
                 {% if request.user.is_superuser %}
                 <li class="nav-item"><a class="nav-link{% if request.resolver_match.url_name == 'globais' or request.resolver_match.url_name == 'globais_editar' %} active{% endif %}" href="{% url 'configuracoes:globais' %}">Administração Global</a></li>
+                <li class="nav-item"><a class="nav-link{% if request.resolver_match.url_name == 'lista_global' %} active{% endif %}" href="{% url 'usuarios:lista_global' %}">Usuários da plataforma</a></li>
                 {% elif pode_visualizar_configuracoes_institucionais or pode_visualizar_configuracoes_operacionais %}
                 <li class="nav-item dropdown">
                     <button class="nav-link dropdown-toggle{% if request.resolver_match.namespace == 'configuracoes' %} active{% endif %}" data-bs-toggle="dropdown" aria-expanded="false">Configurações</button>

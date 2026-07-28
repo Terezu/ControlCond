@@ -85,6 +85,12 @@ class CondominioAtivoMiddleware:
                     "Somente Administradores Globais acessam esta área."
                 )
             return self.get_response(request)
+        if request.path.lower().startswith("/usuarios/globais/"):
+            if not getattr(request.user, "is_superuser", False):
+                raise PermissionDenied(
+                    "Somente Administradores Globais acessam esta área."
+                )
+            return self.get_response(request)
         condominio = obter_condominio_ativo(request)
         if condominio is None:
             destino = reverse("condominios:selecionar")
