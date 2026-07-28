@@ -581,7 +581,7 @@ class SegurancaViewsApartamentoTests(TestCase):
                 resposta = self.client.get(url)
                 self.assertRedirects(
                     resposta,
-                    f"/admin/login/?next={url}",
+                    f"{reverse('login')}?next={url}",
                 )
 
     def test_usuario_sem_perfil_de_equipe_nao_acessa_dados(self):
@@ -595,7 +595,7 @@ class SegurancaViewsApartamentoTests(TestCase):
 
         self.assertRedirects(
             resposta,
-            f"/admin/login/?next={reverse('faturas:lista')}",
+            f"{reverse('condominios:selecionar')}?next=%2Ffaturas%2F",
         )
 
     def test_next_perigoso_nao_e_renderizado(self):

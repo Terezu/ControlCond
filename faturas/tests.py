@@ -2246,7 +2246,7 @@ class DownloadZipFaturasMensaisTests(TestCase):
         resposta_anonima = self.client.get(self.url)
         self.assertRedirects(
             resposta_anonima,
-            f"/admin/login/?next={self.url}",
+            f"{reverse('login')}?next={self.url}",
         )
         usuario_comum = get_user_model().objects.create_user(
             username="morador-download-zip",
@@ -2255,7 +2255,7 @@ class DownloadZipFaturasMensaisTests(TestCase):
         self.client.force_login(usuario_comum)
         resposta_sem_permissao = self.client.get(self.url)
         self.assertEqual(resposta_sem_permissao.status_code, 302)
-        self.assertIn("/admin/login/", resposta_sem_permissao.url)
+        self.assertIn("/condominios/selecionar/", resposta_sem_permissao.url)
 
     @patch(
         "faturas.views.gerar_pdf_fatura_bytes",
@@ -2720,7 +2720,7 @@ class RegrasStatusFaturaTests(TestCase):
 
         self.assertRedirects(
             resposta,
-            f"/admin/login/?next={url}",
+                f"{reverse('login')}?next={url}",
         )
 
     def test_id_inexistente_retorna_404(self):

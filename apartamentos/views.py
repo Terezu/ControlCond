@@ -1,7 +1,7 @@
 import logging
 
 from django.contrib import messages
-from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib.auth.decorators import login_required
 from django.http import Http404
 from django.core.paginator import Paginator
 from django.shortcuts import redirect, render
@@ -82,7 +82,7 @@ def _redirecionar_para_next(request):
     return redirect(proxima_pagina) if proxima_pagina else None
 
 
-@staff_member_required
+@login_required
 @never_cache
 @require_http_methods(["GET", "POST"])
 def novo_apartamento(request):
@@ -125,7 +125,7 @@ def novo_apartamento(request):
     )
 
 
-@staff_member_required
+@login_required
 @never_cache
 @require_http_methods(["GET", "POST"])
 def editar_dados_apartamento(request, apartamento_id):
@@ -179,7 +179,7 @@ def editar_dados_apartamento(request, apartamento_id):
     )
 
 
-@staff_member_required
+@login_required
 @never_cache
 @require_safe
 def lista_apartamentos(request):
@@ -215,7 +215,7 @@ def lista_apartamentos(request):
     )
 
 
-@staff_member_required
+@login_required
 @never_cache
 @require_safe
 def detalhes_apartamento(request, apartamento_id):
@@ -243,7 +243,7 @@ def detalhes_apartamento(request, apartamento_id):
     )
 
 
-@staff_member_required
+@login_required
 @never_cache
 @require_http_methods(["GET", "POST"])
 def confirmar_exclusao_apartamento(request, apartamento_id):

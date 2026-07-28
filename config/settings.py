@@ -106,6 +106,7 @@ INSTALLED_APPS = [
     "condominios.apps.CondominiosConfig",
     "pessoas.apps.PessoasConfig",
     "contratos.apps.ContratosConfig",
+    "usuarios.apps.UsuariosConfig",
     "dashboard",
 ]
 
@@ -211,7 +212,22 @@ MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
 # As telas operacionais usam o login já fornecido pelo painel administrativo.
-LOGIN_URL = "/admin/login/"
+LOGIN_URL = "/conta/entrar/"
+LOGIN_REDIRECT_URL = "/"
+LOGOUT_REDIRECT_URL = "/conta/entrar/"
+EMAIL_BACKEND = os.environ.get(
+    "DJANGO_EMAIL_BACKEND",
+    "django.core.mail.backends.console.EmailBackend"
+    if DEBUG else "django.core.mail.backends.smtp.EmailBackend",
+)
+DEFAULT_FROM_EMAIL = os.environ.get(
+    "DJANGO_DEFAULT_FROM_EMAIL", "nao-responda@controlcond.local"
+)
+EMAIL_HOST = os.environ.get("DJANGO_EMAIL_HOST", "localhost")
+EMAIL_PORT = _env_int("DJANGO_EMAIL_PORT", 25, minimo=1)
+EMAIL_HOST_USER = os.environ.get("DJANGO_EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("DJANGO_EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = _env_bool("DJANGO_EMAIL_USE_TLS", False)
 
 # Em produção, os cookies e todo o tráfego ficam restritos a HTTPS. Os valores
 # podem ser ajustados por ambiente sem manter segredos no repositório.

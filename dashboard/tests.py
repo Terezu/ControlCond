@@ -7,7 +7,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from apartamentos.models import Apartamento
-from condominios.models import Condominio
+from condominios.models import Condominio, VinculoUsuarioCondominio
 from faturas.models import Fatura
 from leituras.models import Leitura
 
@@ -21,6 +21,17 @@ class DashboardAccessTests(TestCase):
             password="senha-de-teste",
             is_staff=True,
         )
+        condominio = Condominio.objects.order_by("id").first()
+        if condominio is None:
+            condominio = Condominio.objects.create(nome="Condomínio Teste")
+        VinculoUsuarioCondominio.objects.update_or_create(
+            usuario=self.usuario,
+            condominio=condominio,
+            defaults={
+                "papel": VinculoUsuarioCondominio.Papel.ADMINISTRADOR,
+                "ativo": True,
+            },
+        )
 
     def test_usuario_anonimo_e_redirecionado_para_login(self):
         url = reverse("dashboard:inicio")
@@ -28,7 +39,7 @@ class DashboardAccessTests(TestCase):
 
         self.assertRedirects(
             resposta,
-            f"/admin/login/?next={url}",
+            f"{reverse('login')}?next={url}",
         )
 
     def test_usuario_staff_pode_acessar_dashboard(self):
@@ -62,7 +73,7 @@ class DashboardAccessTests(TestCase):
 
         self.assertRedirects(
             resposta,
-            f"/admin/login/?next={url}",
+            f"{reverse('condominios:selecionar')}?next=%2F",
         )
 
     @patch("dashboard.forms.timezone.localdate")

@@ -9,6 +9,8 @@ CHAVE_CONDOMINIO_ATIVO = "condominio_ativo_id"
 def listar_condominios_do_usuario(usuario):
     if not getattr(usuario, "is_authenticated", False):
         return Condominio.objects.none()
+    if usuario.is_superuser:
+        return Condominio.objects.filter(ativo=True).order_by("nome", "id")
     return (
         Condominio.objects
         .filter(
@@ -46,6 +48,8 @@ def obter_vinculo_usuario_condominio(usuario, condominio):
 
 
 def usuario_tem_acesso_ao_condominio(usuario, condominio):
+    if getattr(usuario, "is_superuser", False):
+        return bool(condominio and condominio.ativo)
     return obter_vinculo_usuario_condominio(usuario, condominio) is not None
 
 

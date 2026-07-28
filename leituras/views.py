@@ -1,7 +1,7 @@
 import logging
 
 from django.contrib import messages
-from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
@@ -24,7 +24,7 @@ from .services import (
 logger = logging.getLogger(__name__)
 
 
-@staff_member_required
+@login_required
 @never_cache
 @require_safe
 def lista_leituras(request):
@@ -66,7 +66,7 @@ def lista_leituras(request):
     )
 
 
-@staff_member_required
+@login_required
 @never_cache
 @require_http_methods(["GET", "POST"])
 def nova_leitura(request, apartamento_id):
@@ -113,7 +113,7 @@ def nova_leitura(request, apartamento_id):
     )
 
 
-@staff_member_required
+@login_required
 @never_cache
 @require_http_methods(["GET", "POST"])
 def confirmar_exclusao_leitura(request, leitura_id):

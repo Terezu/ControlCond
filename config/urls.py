@@ -17,9 +17,59 @@ Including another URLconf
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
+from django.contrib.auth import views as auth_views
 from django.urls import include, path
 
 urlpatterns = [
+    path(
+        "conta/entrar/",
+        auth_views.LoginView.as_view(template_name="registration/login.html"),
+        name="login",
+    ),
+    path(
+        "conta/sair/",
+        auth_views.LogoutView.as_view(),
+        name="logout",
+    ),
+    path(
+        "conta/senha/alterar/",
+        auth_views.PasswordChangeView.as_view(
+            template_name="registration/password_change_form.html",
+            success_url="/usuarios/perfil/",
+        ),
+        name="password_change",
+    ),
+    path(
+        "conta/senha/recuperar/",
+        auth_views.PasswordResetView.as_view(
+            template_name="registration/password_reset_form.html",
+            email_template_name="registration/password_reset_email.txt",
+            success_url="/conta/senha/recuperar/enviado/",
+        ),
+        name="password_reset",
+    ),
+    path(
+        "conta/senha/recuperar/enviado/",
+        auth_views.PasswordResetDoneView.as_view(
+            template_name="registration/password_reset_done.html"
+        ),
+        name="password_reset_done",
+    ),
+    path(
+        "conta/senha/redefinir/<uidb64>/<token>/",
+        auth_views.PasswordResetConfirmView.as_view(
+            template_name="registration/password_reset_confirm.html",
+            success_url="/conta/senha/redefinir/concluida/",
+        ),
+        name="password_reset_confirm",
+    ),
+    path(
+        "conta/senha/redefinir/concluida/",
+        auth_views.PasswordResetCompleteView.as_view(
+            template_name="registration/password_reset_complete.html"
+        ),
+        name="password_reset_complete",
+    ),
     path("", include("dashboard.urls")),
     path('admin/', admin.site.urls),
     path('apartamentos/', include('apartamentos.urls')),
@@ -27,6 +77,7 @@ urlpatterns = [
     path('faturas/', include('faturas.urls')),
     path('pessoas/', include('pessoas.urls')),
     path('contratos/', include('contratos.urls')),
+    path('usuarios/', include('usuarios.urls')),
     path('configuracoes/', include('configuracoes.urls')),
     path('condominios/', include('condominios.urls')),
 ]

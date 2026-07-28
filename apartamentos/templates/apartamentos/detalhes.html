@@ -15,14 +15,14 @@
         </div>
         <div class="d-flex flex-wrap gap-2">
             <a href="{% url 'apartamentos:lista' %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Voltar</a>
-            <a href="{% url 'apartamentos:excluir' apartamento.id %}" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash me-1" aria-hidden="true"></i>Excluir apartamento</a>
+            {% if pode_excluir %}<a href="{% url 'apartamentos:excluir' apartamento.id %}" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash me-1" aria-hidden="true"></i>Excluir apartamento</a>{% endif %}
         </div>
     </div>
 
     <section class="card shadow-sm" aria-labelledby="titulo-visao-geral">
         <div class="card-header bg-light py-3 d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-2">
             <div><h2 id="titulo-visao-geral" class="h5 mb-1">Visão geral</h2><p class="text-secondary small mb-0">Dados cadastrais e última medição da unidade.</p></div>
-            <a href="{% url 'leituras:nova' apartamento.id %}" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Nova leitura</a>
+            {% if pode_criar %}<a href="{% url 'leituras:nova' apartamento.id %}" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Nova leitura</a>{% endif %}
         </div>
         <div class="card-body">
             <div class="row g-4">
@@ -51,7 +51,7 @@
                 <p class="text-secondary small mb-0">{{ painel.pessoas|length }} pessoa{{ painel.pessoas|length|pluralize }} · {{ painel.total_vinculos_ativos }} vínculo{{ painel.total_vinculos_ativos|pluralize }} ativo{{ painel.total_vinculos_ativos|pluralize }} · {% if painel.responsavel_financeiro %}responsável financeiro definido{% else %}sem responsável financeiro{% endif %}</p>
             </div>
             <div class="d-flex flex-wrap gap-2">
-                <a href="{% url 'pessoas:nova' %}" class="btn btn-sm btn-primary"><i class="bi bi-person-plus me-1" aria-hidden="true"></i>Adicionar pessoa</a>
+                {% if pode_criar %}<a href="{% url 'pessoas:nova' %}" class="btn btn-sm btn-primary"><i class="bi bi-person-plus me-1" aria-hidden="true"></i>Adicionar pessoa</a>{% endif %}
                 <a href="{% url 'pessoas:lista' %}" class="btn btn-sm btn-outline-primary">Adicionar vínculo</a>
                 <a href="{% url 'pessoas:lista' %}" class="btn btn-sm btn-outline-secondary">Gerenciar vínculos</a>
             </div>
@@ -104,13 +104,13 @@
                 <a href="{% url 'contratos:detalhes' painel.contrato_atual.id %}" class="btn btn-sm btn-outline-secondary mt-3">Detalhes do contrato</a>
             {% else %}
                 <p class="text-secondary">Nenhum contrato ativo para este apartamento</p>
-                <a href="{% url 'contratos:novo' %}" class="btn btn-sm btn-primary">Cadastrar contrato</a>
+                {% if pode_criar %}<a href="{% url 'contratos:novo' %}" class="btn btn-sm btn-primary">Cadastrar contrato</a>{% endif %}
             {% endif %}
         </div>
     </section>
 
     <section class="card shadow-sm mt-5" aria-labelledby="titulo-historico-leituras">
-        <div class="card-header bg-light py-3 d-flex align-items-center justify-content-between gap-3"><div><h2 id="titulo-historico-leituras" class="h5 mb-1">Leituras</h2><p class="text-secondary small mb-0">Histórico completo de medições da unidade.</p></div><a href="{% url 'leituras:nova' apartamento.id %}" class="btn btn-sm btn-outline-primary">Nova leitura</a></div>
+        <div class="card-header bg-light py-3 d-flex align-items-center justify-content-between gap-3"><div><h2 id="titulo-historico-leituras" class="h5 mb-1">Leituras</h2><p class="text-secondary small mb-0">Histórico completo de medições da unidade.</p></div>{% if pode_criar %}<a href="{% url 'leituras:nova' apartamento.id %}" class="btn btn-sm btn-outline-primary">Nova leitura</a>{% endif %}</div>
         <div class="card-body p-0">{% include "components/data_table.html" with template_cabecalho="components/table_headers/leitura_apartamento.html" linhas=leituras template_linha="components/table_rows/leitura_apartamento.html" empty_titulo="Nenhuma leitura cadastrada" empty_texto="Registre a primeira medição desta unidade." empty_icone="bi-droplet" %}</div>
     </section>
 

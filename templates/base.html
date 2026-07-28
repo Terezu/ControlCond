@@ -181,6 +181,7 @@
                     </a>
                 </li>
 
+                {% if pode_alterar_configuracoes %}
                 <li class="nav-item">
                     <a
                         class="nav-link{% if request.resolver_match.namespace == 'configuracoes' %} active{% endif %}"
@@ -189,6 +190,19 @@
                     >
                         Configurações
                     </a>
+                </li>
+                {% endif %}
+                {% if pode_gerenciar_usuarios %}
+                <li class="nav-item"><a class="nav-link{% if request.resolver_match.namespace == 'usuarios' %} active{% endif %}" href="{% url 'usuarios:lista' %}">Usuários e acessos</a></li>
+                {% endif %}
+                <li class="nav-item dropdown">
+                    <button class="nav-link dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">{{ request.user.get_full_name|default:request.user.username }}</button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><a class="dropdown-item" href="{% url 'usuarios:perfil' %}">Perfil</a></li>
+                        <li><a class="dropdown-item" href="{% url 'password_change' %}">Alterar senha</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="dropdown-item" type="submit">Sair</button></form></li>
+                    </ul>
                 </li>
             </ul>
         </div>

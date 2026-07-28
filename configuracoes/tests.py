@@ -421,7 +421,7 @@ class ConfiguracaoCondominioViewTests(TestCase):
                 resposta = self.client.get(url)
                 self.assertRedirects(
                     resposta,
-                    f"/admin/login/?next={url}",
+                    f"{reverse('login')}?next={url}",
                 )
 
     def test_detalhes_e_formulario_seguem_layout_padrao(self):

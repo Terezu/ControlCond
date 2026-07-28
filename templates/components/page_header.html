@@ -11,7 +11,7 @@
         {% endif %}
     </div>
 
-    {% if url_acao and texto_acao %}
+    {% if url_acao and texto_acao and pode_criar %}
         {% include "components/action_button.html" with url=url_acao texto=texto_acao icone=icone_acao %}
     {% endif %}
 </div>

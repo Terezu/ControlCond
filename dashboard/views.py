@@ -1,6 +1,6 @@
 from urllib.parse import urlencode
 
-from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib.auth.decorators import login_required
 from django.shortcuts import render
 from django.urls import reverse
 from django.views.decorators.cache import never_cache
@@ -14,7 +14,7 @@ from condominios.services import obter_condominio_ativo
 CHAVE_SESSAO_COMPETENCIA = "dashboard_competencia"
 
 
-@staff_member_required
+@login_required
 @never_cache
 @require_safe
 def dashboard(request):
