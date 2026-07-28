@@ -222,6 +222,12 @@ def detalhes_apartamento(request, apartamento_id):
 
     leituras = list(apartamento.leituras.all())
     faturas = list(apartamento.faturas.all())
+    gerenciador_vinculos = getattr(apartamento, "vinculos_pessoas", None)
+    vinculos_pessoas = (
+        list(gerenciador_vinculos.all())
+        if gerenciador_vinculos is not None
+        else []
+    )
 
     return render(
         request,
@@ -231,6 +237,7 @@ def detalhes_apartamento(request, apartamento_id):
             "ultima_leitura": leituras[0] if leituras else None,
             "leituras": leituras,
             "faturas": faturas,
+            "vinculos_pessoas": vinculos_pessoas,
         },
     )
 

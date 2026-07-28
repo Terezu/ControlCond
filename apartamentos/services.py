@@ -7,6 +7,7 @@ from django.db.models.deletion import ProtectedError
 
 from faturas.models import Fatura
 from leituras.models import Leitura
+from pessoas.models import VinculoPessoaApartamento
 
 from .models import LIMITE_LEITURA, Apartamento
 
@@ -321,6 +322,14 @@ def consultar_detalhes_apartamento_no_condominio(
                 Prefetch(
                     "faturas",
                     queryset=Fatura.objects.order_by("-ano", "-mes", "-id"),
+                ),
+                Prefetch(
+                    "vinculos_pessoas",
+                    queryset=(
+                        VinculoPessoaApartamento.objects
+                        .select_related("pessoa")
+                        .order_by("tipo", "-ativo", "-data_inicio", "-id")
+                    ),
                 ),
             )
             .get(pk=apartamento_id)

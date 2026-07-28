@@ -100,6 +100,49 @@
         </section>
     {% endif %}
 
+    <section class="card shadow-sm mt-5" aria-labelledby="titulo-pessoas-vinculadas">
+        <div class="card-header bg-light py-3 d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-2">
+            <div>
+                <h2 id="titulo-pessoas-vinculadas" class="h5 mb-1">Pessoas vinculadas</h2>
+                <p class="text-secondary small mb-0">Vínculos atuais e históricos agrupados por tipo.</p>
+            </div>
+            <a href="{% url 'pessoas:lista' %}" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-people me-1" aria-hidden="true"></i>Gerenciar pessoas
+            </a>
+        </div>
+        <div class="card-body">
+            {% if vinculos_pessoas %}
+                {% regroup vinculos_pessoas by get_tipo_display as grupos_vinculos %}
+                <div class="row g-4">
+                    {% for grupo in grupos_vinculos %}
+                        <div class="col-12 col-lg-6">
+                            <h3 class="h6">{{ grupo.grouper }}</h3>
+                            <ul class="list-group">
+                                {% for vinculo in grupo.list %}
+                                    <li class="list-group-item d-flex justify-content-between align-items-start gap-3">
+                                        <div>
+                                            <a href="{% url 'pessoas:detalhes' vinculo.pessoa_id %}" class="fw-semibold">{{ vinculo.pessoa.nome_completo }}</a>
+                                            <span class="d-block text-secondary small">
+                                                {{ vinculo.data_inicio|date:"d/m/Y" }} a {{ vinculo.data_fim|date:"d/m/Y"|default:"atual" }}
+                                            </span>
+                                        </div>
+                                        {% if vinculo.ativo %}
+                                            <span class="badge text-bg-success">Ativo</span>
+                                        {% else %}
+                                            <span class="badge text-bg-secondary">Encerrado</span>
+                                        {% endif %}
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                {% include "components/empty_state.html" with titulo="Nenhuma pessoa vinculada" texto="Os proprietários, moradores, inquilinos e responsáveis financeiros aparecerão aqui." icone="bi-people" embutido=True %}
+            {% endif %}
+        </div>
+    </section>
+
     <section class="card shadow-sm mt-5" aria-labelledby="titulo-historico-leituras">
         <div class="card-header bg-light py-3">
             <h2 id="titulo-historico-leituras" class="h5 mb-1">Histórico de leituras</h2>

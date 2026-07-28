@@ -143,6 +143,16 @@
 
                 <li class="nav-item">
                     <a
+                        class="nav-link{% if request.resolver_match.namespace == 'pessoas' %} active{% endif %}"
+                        href="{% url 'pessoas:lista' %}"
+                        {% if request.resolver_match.namespace == 'pessoas' %}aria-current="page"{% endif %}
+                    >
+                        Pessoas
+                    </a>
+                </li>
+
+                <li class="nav-item">
+                    <a
                         class="nav-link{% if request.resolver_match.namespace == 'leituras' %} active{% endif %}"
                         href="{% url 'leituras:lista' %}"
                         {% if request.resolver_match.namespace == 'leituras' %}aria-current="page"{% endif %}
