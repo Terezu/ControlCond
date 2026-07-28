@@ -324,10 +324,11 @@ def _desenhar_linha_valor(
     *,
     fonte_rotulo=FONTE_ROTULO_FINANCEIRO,
     tamanho_rotulo=TAMANHO_ROTULO_FINANCEIRO,
+    fonte_valor=FONTE_VALOR_FINANCEIRO,
 ):
     largura_valor = pdf.stringWidth(
         valor,
-        FONTE_VALOR_FINANCEIRO,
+        fonte_valor,
         TAMANHO_VALOR_FINANCEIRO,
     )
     largura_rotulo = max(
@@ -346,7 +347,7 @@ def _desenhar_linha_valor(
     pdf.setFont(fonte_rotulo, tamanho_rotulo)
     pdf.drawString(x, y, rotulo)
     pdf.setFillColor(COR_TEXTO)
-    pdf.setFont(FONTE_VALOR_FINANCEIRO, TAMANHO_VALOR_FINANCEIRO)
+    pdf.setFont(fonte_valor, TAMANHO_VALOR_FINANCEIRO)
     pdf.drawRightString(x + largura, y, valor)
 
 
@@ -514,6 +515,8 @@ def desenhar_composicao_financeira(pdf, fatura, largura, y):
             x_esquerda,
             y - 22 - (indice * ENTRELINHA_FINANCEIRA),
             largura_coluna,
+            fonte_rotulo=FONTE_DESTAQUE,
+            fonte_valor=FONTE_REGULAR,
         )
     for indice, (rotulo, valor) in enumerate(coluna_direita):
         _desenhar_linha_valor(
@@ -523,12 +526,11 @@ def desenhar_composicao_financeira(pdf, fatura, largura, y):
             x_direita,
             y - 22 - (indice * ENTRELINHA_FINANCEIRA),
             largura_coluna,
-            fonte_rotulo=(
-                FONTE_DESTAQUE if indice == 0 else FONTE_ROTULO_FINANCEIRO
-            ),
+            fonte_rotulo=FONTE_DESTAQUE,
             tamanho_rotulo=(
                 10 if indice == 0 else TAMANHO_ROTULO_FINANCEIRO
             ),
+            fonte_valor=FONTE_REGULAR,
         )
     return base - ESPACO_SECAO
 
@@ -581,10 +583,10 @@ def _desenhar_detalhes_pagamento(pdf, fatura, largura, y):
     for indice, (rotulo, valor) in enumerate(itens):
         x = x_inicial + (indice * largura_coluna)
         pdf.setFillColor(COR_SECUNDARIA)
-        pdf.setFont(FONTE_REGULAR, 7.5)
+        pdf.setFont(FONTE_DESTAQUE, 7.5)
         pdf.drawString(x, y - 22, rotulo.upper())
         pdf.setFillColor(COR_TEXTO)
-        pdf.setFont(FONTE_DESTAQUE, 9.5)
+        pdf.setFont(FONTE_REGULAR, 9.5)
         pdf.drawString(x, y - 36, valor)
 
     valor_efetivo = (
@@ -602,12 +604,32 @@ def _desenhar_detalhes_pagamento(pdf, fatura, largura, y):
     pdf.setFillColor(COR_PRIMARIA)
     pdf.setFont(FONTE_DESTAQUE, 9)
     pdf.drawString(x_inicial, y - 65, "VALOR EFETIVAMENTE PAGO")
-    pdf.setFont(FONTE_DESTAQUE, 12)
+    pdf.setFont(FONTE_REGULAR, 12)
     pdf.drawRightString(
         x_final,
         y - 65,
         f"R$ {formatar_valor_monetario(valor_efetivo)}",
     )
+
+
+def _desenhar_texto_com_rotulo(
+    pdf,
+    rotulo,
+    valor,
+    x,
+    y,
+    *,
+    tamanho,
+    alinhado_a_direita=False,
+):
+    largura_rotulo = pdf.stringWidth(rotulo, FONTE_DESTAQUE, tamanho)
+    largura_valor = pdf.stringWidth(valor, FONTE_REGULAR, tamanho)
+    inicio = x - largura_rotulo - largura_valor if alinhado_a_direita else x
+
+    pdf.setFont(FONTE_DESTAQUE, tamanho)
+    pdf.drawString(inicio, y, rotulo)
+    pdf.setFont(FONTE_REGULAR, tamanho)
+    pdf.drawString(inicio + largura_rotulo, y, valor)
 
 
 def desenhar_total(pdf, fatura, largura, y):
@@ -641,7 +663,7 @@ def desenhar_total(pdf, fatura, largura, y):
         y - 28,
         "TOTAL NORMAL",
     )
-    pdf.setFont(FONTE_DESTAQUE, 20)
+    pdf.setFont(FONTE_REGULAR, 20)
     pdf.drawRightString(
         largura - MARGEM_HORIZONTAL - 16,
         y - 34,
@@ -664,23 +686,22 @@ def desenhar_total(pdf, fatura, largura, y):
                     fatura.valor_bonificacao_fixa_emissao
                 )}"
             )
-        pdf.setFont(FONTE_REGULAR, 8)
-        pdf.drawString(
+        _desenhar_texto_com_rotulo(
+            pdf,
+            f"Bonificação {fatura.descricao_origem_bonificacao}: ",
+            f"{bonus_configurado} até {data_limite}",
             MARGEM_HORIZONTAL + 16,
             linha_y,
-            (
-                f"Bonificação {fatura.descricao_origem_bonificacao}: "
-                f"{bonus_configurado} até {data_limite}"
-            ),
+            tamanho=8,
         )
-        pdf.setFont(FONTE_DESTAQUE, 10)
-        pdf.drawRightString(
+        _desenhar_texto_com_rotulo(
+            pdf,
+            f"Valor até {data_limite}: ",
+            f"R$ {formatar_valor_monetario(fatura.valor_com_bonificacao)}",
             largura - MARGEM_HORIZONTAL - 16,
             linha_y,
-            (
-                f"Valor até {data_limite}: R$ "
-                f"{formatar_valor_monetario(fatura.valor_com_bonificacao)}"
-            ),
+            tamanho=10,
+            alinhado_a_direita=True,
         )
         linha_y -= 18
     if pagamento_confirmado:
@@ -840,8 +861,8 @@ def gerar_pdf_fatura(fatura, destino, configuracao=None):
     )
     y = desenhar_titulo_fatura(pdf, fatura, largura, y)
     y = desenhar_dados_apartamento(pdf, fatura, largura, y)
-    y = desenhar_consumos(pdf, fatura, leituras, largura, y)
     y = desenhar_composicao_financeira(pdf, fatura, largura, y)
+    y = desenhar_consumos(pdf, fatura, leituras, largura, y)
     y = desenhar_total(pdf, fatura, largura, y)
     desenhar_informacoes_complementares(
         pdf,

@@ -1695,10 +1695,8 @@ class GerarFaturaMensalTests(TestCase):
                 + pdf_mock.drawRightString.call_args_list
             )
         )
-        self.assertIn(
-            "Bonificação Específica da fatura: R$ 10,00",
-            textos,
-        )
+        self.assertIn("Bonificação Específica da fatura:", textos)
+        self.assertIn("R$ 10,00 até 10/01/2026", textos)
         self.assertIn("R$ 90,00", textos)
 
     def test_pdf_usa_dados_configurados(self):
