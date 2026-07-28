@@ -4,7 +4,7 @@
 
 {% block content %}
     {% url "apartamentos:novo" as url_novo_apartamento %}
-    {% include "components/page_header.html" with titulo="Apartamentos" subtitulo="Consulte e gerencie as unidades do condomínio." url_acao=url_novo_apartamento texto_acao="Cadastrar apartamento" icone_acao="bi-plus-lg" %}
+    {% include "components/page_header.html" with titulo="Apartamentos" subtitulo="Consulte e gerencie as unidades do condomínio." url_acao=url_novo_apartamento texto_acao="Cadastrar apartamento" icone_acao="bi-plus-lg" permitir_acao=pode_gerenciar_apartamentos %}
 
     <section class="card shadow-sm mb-5" aria-labelledby="titulo-filtros">
         <div class="card-header bg-light py-3">

@@ -7,6 +7,7 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, models, transaction
 from django.db.models import Prefetch
 from django.utils import timezone
+from condominios.permissions import Permissao, exigir_permissao
 
 from apartamentos.models import Apartamento
 from calculos.services import calcular_agua, calcular_gas
@@ -1085,6 +1086,14 @@ def _executar_acao_status(
     return fatura, True
 
 
+def _validar_permissao_financeira(objeto, usuario, permissao):
+    if usuario is not None:
+        apartamento = getattr(objeto, "apartamento", objeto)
+        exigir_permissao(
+            usuario, apartamento.condominio, permissao
+        )
+
+
 @transaction.atomic
 def marcar_fatura_como_paga(
     fatura_id,
@@ -1103,6 +1112,9 @@ def marcar_fatura_como_paga(
             "As observações do pagamento devem ter no máximo 500 caracteres."
         )
     fatura = _consultar_fatura_para_atualizacao(fatura_id)
+    _validar_permissao_financeira(
+        fatura, usuario, Permissao.MARCAR_FATURA_PAGA
+    )
     resultado = calcular_pagamento_fatura(fatura, data_pagamento)
     fatura, alterada = _executar_acao_status(
         fatura_id,
@@ -1147,6 +1159,10 @@ def marcar_fatura_como_paga(
 
 
 def cancelar_fatura(fatura_id, usuario=None):
+    fatura = _consultar_fatura_para_atualizacao(fatura_id)
+    _validar_permissao_financeira(
+        fatura, usuario, Permissao.CANCELAR_FATURA
+    )
     return _executar_acao_status(
         fatura_id,
         status_origem=Fatura.Status.PENDENTE,
@@ -1157,6 +1173,10 @@ def cancelar_fatura(fatura_id, usuario=None):
 
 
 def estornar_pagamento(fatura_id, motivo, usuario=None):
+    fatura = _consultar_fatura_para_atualizacao(fatura_id)
+    _validar_permissao_financeira(
+        fatura, usuario, Permissao.ESTORNAR_FATURA
+    )
     return _executar_acao_status(
         fatura_id,
         status_origem=Fatura.Status.PAGA,
@@ -1169,6 +1189,10 @@ def estornar_pagamento(fatura_id, motivo, usuario=None):
 
 
 def reabrir_fatura(fatura_id, motivo, usuario=None):
+    fatura = _consultar_fatura_para_atualizacao(fatura_id)
+    _validar_permissao_financeira(
+        fatura, usuario, Permissao.REABRIR_FATURA
+    )
     return _executar_acao_status(
         fatura_id,
         status_origem=Fatura.Status.CANCELADA,
@@ -1198,6 +1222,9 @@ def editar_fatura(
     usuario=None,
 ):
     fatura = _consultar_fatura_para_atualizacao(fatura_id)
+    _validar_permissao_financeira(
+        fatura, usuario, Permissao.EDITAR_VALORES_FINANCEIROS
+    )
     valores_anteriores = _snapshot_financeiro(fatura)
     edita_bonificacao = (
         modo_bonificacao is not None
@@ -1422,6 +1449,16 @@ def gerar_fatura_mensal(
     usuario=None,
 ):
     leitura_atual = _consultar_contexto_leitura_para_atualizacao(leitura_id)
+    _validar_permissao_financeira(
+        leitura_atual.apartamento, usuario, Permissao.GERAR_FATURA
+    )
+    if (
+        not leitura_atual.apartamento.ativo
+        or leitura_atual.apartamento.arquivado
+    ):
+        raise ValueError(
+            "Não é possível gerar fatura para apartamento arquivado."
+        )
 
     return cadastrar_fatura(
         apartamento_id=leitura_atual.apartamento_id,

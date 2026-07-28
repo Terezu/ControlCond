@@ -10,6 +10,7 @@ from django.urls import reverse
 
 from faturas.models import Fatura
 from leituras.models import Leitura
+from condominios.models import Condominio, VinculoUsuarioCondominio
 
 from .models import Apartamento
 from .forms import ApartamentoForm, FiltrarApartamentosForm
@@ -29,6 +30,17 @@ class ExclusaoApartamentoTests(TestCase):
             password="senha-de-teste",
             is_staff=True,
         )
+        self.condominio = Condominio.objects.order_by("id").first()
+        if self.condominio is None:
+            self.condominio = Condominio.objects.create(nome="Teste")
+        VinculoUsuarioCondominio.objects.update_or_create(
+            usuario=self.usuario,
+            condominio=self.condominio,
+            defaults={
+                "papel": VinculoUsuarioCondominio.Papel.ADMINISTRADOR,
+                "ativo": True,
+            },
+        )
         self.client.force_login(self.usuario)
 
     def test_confirmacao_nao_exclui_por_get_e_exibe_csrf(self):
@@ -39,8 +51,8 @@ class ExclusaoApartamentoTests(TestCase):
 
         self.assertEqual(resposta.status_code, 200)
         self.assertTrue(Apartamento.objects.filter(pk=apartamento.id).exists())
-        self.assertContains(resposta, "Excluir permanentemente")
-        self.assertContains(resposta, "Esta ação é irreversível")
+        self.assertContains(resposta, "Arquivar apartamento")
+        self.assertContains(resposta, "histórico será preservado")
         self.assertContains(resposta, "csrfmiddlewaretoken")
 
     def test_exclui_apartamento_vazio_por_post(self):
@@ -51,8 +63,11 @@ class ExclusaoApartamentoTests(TestCase):
         )
 
         self.assertRedirects(resposta, reverse("apartamentos:lista"))
-        self.assertFalse(Apartamento.objects.filter(pk=apartamento.id).exists())
-        self.assertContains(resposta, "excluído permanentemente")
+        apartamento.refresh_from_db()
+        self.assertTrue(Apartamento.objects.filter(pk=apartamento.id).exists())
+        self.assertTrue(apartamento.arquivado)
+        self.assertFalse(apartamento.ativo)
+        self.assertContains(resposta, "arquivado com sucesso")
 
     def test_bloqueia_apartamento_com_leitura_e_fatura_e_informa_quantidades(self):
         apartamento = Apartamento.objects.create(numero="903")
@@ -76,8 +91,9 @@ class ExclusaoApartamentoTests(TestCase):
             reverse("apartamentos:excluir", args=[apartamento.id])
         )
 
-        self.assertEqual(resposta.status_code, 200)
-        self.assertContains(resposta, "1 leitura e 1 fatura")
+        self.assertEqual(resposta.status_code, 302)
+        apartamento.refresh_from_db()
+        self.assertTrue(apartamento.arquivado)
         self.assertTrue(Apartamento.objects.filter(pk=apartamento.id).exists())
         self.assertTrue(Leitura.objects.filter(pk=leitura.id).exists())
         self.assertEqual(Fatura.objects.filter(apartamento=apartamento).count(), 1)
@@ -103,7 +119,7 @@ class ExclusaoApartamentoTests(TestCase):
         self.assertEqual(resposta.status_code, 302)
         self.assertTrue(Apartamento.objects.filter(pk=apartamento.id).exists())
 
-    def test_service_bloqueia_diretamente_e_trata_plural(self):
+    def test_service_arquiva_e_preserva_registros_relacionados(self):
         apartamento = Apartamento.objects.create(numero="905")
         for mes in (6, 7):
             Leitura.objects.create(
@@ -113,13 +129,15 @@ class ExclusaoApartamentoTests(TestCase):
                 leitura_agua=Decimal("10"),
             )
 
-        with self.assertRaisesRegex(
-            ExclusaoApartamentoBloqueadaError,
-            "2 leituras e 0 faturas",
-        ):
-            excluir_apartamento(apartamento.id)
+        excluir_apartamento(
+            apartamento.id,
+            condominio=self.condominio,
+            usuario=self.usuario,
+        )
 
-        self.assertTrue(Apartamento.objects.filter(pk=apartamento.id).exists())
+        apartamento.refresh_from_db()
+        self.assertTrue(apartamento.arquivado)
+        self.assertEqual(apartamento.leituras.count(), 2)
 
 
 class ApartamentoFormTests(TestCase):

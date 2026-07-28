@@ -46,9 +46,13 @@ class Condominio(models.Model):
 class VinculoUsuarioCondominio(models.Model):
     class Papel(models.TextChoices):
         PROPRIETARIO = "proprietario", "Proprietário"
+        PROPRIETARIO_ADMINISTRATIVO = (
+            "proprietario_administrativo",
+            "Proprietário Administrativo",
+        )
         ADMINISTRADOR = "administrador", "Administrador"
         OPERADOR = "operador", "Operador"
-        CONSULTA = "consulta", "Somente consulta"
+        CONSULTA = "consulta", "Consulta"
 
     usuario = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -60,7 +64,7 @@ class VinculoUsuarioCondominio(models.Model):
         on_delete=models.CASCADE,
         related_name="vinculos_usuarios",
     )
-    papel = models.CharField(max_length=20, choices=Papel.choices)
+    papel = models.CharField(max_length=30, choices=Papel.choices)
     ativo = models.BooleanField(default=True)
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)

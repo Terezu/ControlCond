@@ -87,6 +87,7 @@ def nova_leitura(request, apartamento_id):
                     ano=form.cleaned_data["ano"],
                     leitura_agua=form.cleaned_data["leitura_agua"],
                     leitura_gas=form.cleaned_data["leitura_gas"],
+                    usuario=request.user,
                 )
             except ValueError as exc:
                 form.add_error(None, str(exc))

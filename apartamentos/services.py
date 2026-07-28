@@ -1,9 +1,10 @@
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from datetime import timedelta
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import Prefetch
-from django.db.models.deletion import ProtectedError
+from django.utils import timezone
 
 from faturas.models import Fatura
 from leituras.models import Leitura
@@ -11,6 +12,7 @@ from pessoas.models import VinculoPessoaApartamento
 from contratos.models import Contrato
 
 from .models import LIMITE_LEITURA, Apartamento
+from condominios.permissions import Permissao, exigir_permissao
 
 
 class ExclusaoApartamentoBloqueadaError(ValueError):
@@ -241,8 +243,10 @@ def _salvar_apartamento(apartamento, **kwargs):
             apartamento.save(**kwargs)
     except IntegrityError as exc:
         if Apartamento.objects.filter(
+            condominio=apartamento.condominio,
             numero__iexact=apartamento.numero,
             bloco__iexact=apartamento.bloco,
+            arquivado=False,
         ).exclude(pk=apartamento.pk).exists():
             raise ValueError(
                 "Já existe um apartamento com este número e bloco."
@@ -281,7 +285,7 @@ def consultar_detalhes_apartamento(apartamento_id):
 
 
 def listar_apartamentos(*, numero=None, bloco=None):
-    apartamentos = Apartamento.objects.all()
+    apartamentos = Apartamento.objects.filter(ativo=True, arquivado=False)
 
     if numero:
         apartamentos = apartamentos.filter(numero__icontains=numero.strip())
@@ -302,7 +306,10 @@ def listar_apartamentos_por_condominio(
 def consultar_apartamento_no_condominio(condominio, apartamento_id):
     try:
         return Apartamento.objects.get(
-            pk=apartamento_id, condominio=condominio
+            pk=apartamento_id,
+            condominio=condominio,
+            ativo=True,
+            arquivado=False,
         )
     except Apartamento.DoesNotExist as exc:
         raise ValueError("Apartamento não encontrado.") from exc
@@ -314,7 +321,11 @@ def consultar_detalhes_apartamento_no_condominio(
     try:
         return (
             Apartamento.objects
-            .filter(condominio=condominio)
+            .filter(
+                condominio=condominio,
+                ativo=True,
+                arquivado=False,
+            )
             .prefetch_related(
                 Prefetch(
                     "leituras",
@@ -353,42 +364,40 @@ def consultar_detalhes_apartamento_no_condominio(
 
 
 @transaction.atomic
-def excluir_apartamento(apartamento_id):
+def excluir_apartamento(
+    apartamento_id, *, condominio, usuario, motivo=""
+):
+    exigir_permissao(
+        usuario, condominio, Permissao.ARQUIVAR_APARTAMENTO
+    )
     try:
         apartamento = (
             Apartamento.objects
             .select_for_update()
-            .get(pk=apartamento_id)
+            .get(
+                pk=apartamento_id,
+                condominio=condominio,
+                arquivado=False,
+            )
         )
     except Apartamento.DoesNotExist as exc:
         raise ValueError("Apartamento não encontrado.") from exc
 
-    quantidade_leituras = apartamento.leituras.count()
-    quantidade_faturas = apartamento.faturas.count()
-    if quantidade_leituras or quantidade_faturas:
-        leitura = (
-            "leitura"
-            if quantidade_leituras == 1
-            else "leituras"
-        )
-        fatura = (
-            "fatura"
-            if quantidade_faturas == 1
-            else "faturas"
-        )
-        raise ExclusaoApartamentoBloqueadaError(
-            f"{apartamento} não pode ser excluído porque possui "
-            f"{quantidade_leituras} {leitura} e "
-            f"{quantidade_faturas} {fatura} cadastradas. "
-            "Exclua primeiro os registros vinculados."
-        )
-
     identificacao = str(apartamento)
-    try:
-        apartamento.delete()
-    except ProtectedError as exc:
-        raise ExclusaoApartamentoBloqueadaError(
-            f"{identificacao} não pode ser excluído porque ainda possui "
-            "registros vinculados."
-        ) from exc
+    agora = timezone.now()
+    apartamento.ativo = False
+    apartamento.arquivado = True
+    apartamento.arquivado_em = agora
+    apartamento.arquivado_por = usuario
+    apartamento.motivo_arquivamento = (motivo or "").strip()
+    apartamento.retencao_ate = agora.date() + timedelta(days=365)
+    apartamento.situacao_retencao = (
+        Apartamento.SituacaoRetencao.RETIDO
+    )
+    apartamento.identificador_backup = ""
+    apartamento.save(update_fields=[
+        "ativo", "arquivado", "arquivado_em", "arquivado_por",
+        "motivo_arquivamento", "retencao_ate", "situacao_retencao",
+        "identificador_backup",
+    ])
     return identificacao

@@ -29,8 +29,40 @@ from .services import (
     listar_apartamentos_por_condominio,
 )
 from condominios.services import obter_condominio_ativo
+from condominios.permissions import Permissao, usuario_possui_permissao
 
 logger = logging.getLogger(__name__)
+
+
+def _restringir_pessoas_do_painel(request, condominio, paineis):
+    if usuario_possui_permissao(
+        request.user,
+        condominio,
+        Permissao.VISUALIZAR_DADOS_PESSOAIS_SENSIVEIS,
+    ):
+        return
+    pessoas = {}
+    for painel in paineis:
+        for item in painel.pessoas:
+            pessoas[item.pessoa.id] = item.pessoa
+        for contrato in (
+            painel.contrato_atual,
+            painel.contrato_futuro,
+            painel.ultimo_contrato,
+        ):
+            if contrato:
+                pessoas[contrato.pessoa_contratante.id] = (
+                    contrato.pessoa_contratante
+                )
+                pessoas[contrato.responsavel_financeiro.id] = (
+                    contrato.responsavel_financeiro
+                )
+    for pessoa in pessoas.values():
+        pessoa.cpf = "Informação restrita"
+        pessoa.rg = "Informação restrita"
+        pessoa.email = "Informação restrita"
+        pessoa.telefone = "Informação restrita"
+        pessoa.observacoes = None
 
 
 def _salvar_formulario(form, apartamento_id=None, condominio=None):
@@ -192,14 +224,20 @@ def lista_apartamentos(request):
             "bloco": form_filtros.cleaned_data["bloco"],
         }
 
+    condominio = obter_condominio_ativo(request)
     paginator = Paginator(
         listar_apartamentos_operacionais(
-            obter_condominio_ativo(request), **filtros
+            condominio, **filtros
         ),
         10,
     )
     pagina_apartamentos = paginator.get_page(request.GET.get("page"))
     enriquecer_apartamentos(pagina_apartamentos.object_list)
+    _restringir_pessoas_do_painel(
+        request,
+        condominio,
+        [item.painel for item in pagina_apartamentos.object_list],
+    )
     parametros_filtros = request.GET.copy()
     parametros_filtros.pop("page", None)
 
@@ -219,9 +257,10 @@ def lista_apartamentos(request):
 @never_cache
 @require_safe
 def detalhes_apartamento(request, apartamento_id):
+    condominio = obter_condominio_ativo(request)
     try:
         apartamento = consultar_detalhes_apartamento_no_condominio(
-            obter_condominio_ativo(request), apartamento_id
+            condominio, apartamento_id
         )
     except ValueError as exc:
         raise Http404(str(exc)) from exc
@@ -229,6 +268,7 @@ def detalhes_apartamento(request, apartamento_id):
     leituras = list(apartamento.leituras.all())
     faturas = list(apartamento.faturas.all())
     painel = montar_painel_apartamento(apartamento)
+    _restringir_pessoas_do_painel(request, condominio, [painel])
 
     return render(
         request,
@@ -256,11 +296,15 @@ def confirmar_exclusao_apartamento(request, apartamento_id):
 
     quantidade_leituras = apartamento.leituras.count()
     quantidade_faturas = apartamento.faturas.count()
-    bloqueada = bool(quantidade_leituras or quantidade_faturas)
+    bloqueada = False
 
     if request.method == "POST":
         try:
-            identificacao = excluir_apartamento(apartamento_id)
+            identificacao = excluir_apartamento(
+                apartamento_id,
+                condominio=obter_condominio_ativo(request),
+                usuario=request.user,
+            )
         except ExclusaoApartamentoBloqueadaError as exc:
             bloqueada = True
             messages.error(request, str(exc))
@@ -276,10 +320,10 @@ def confirmar_exclusao_apartamento(request, apartamento_id):
         else:
             messages.success(
                 request,
-                f"{identificacao} excluído permanentemente.",
+                f"{identificacao} arquivado com sucesso.",
             )
             logger.info(
-                "Apartamento excluído permanentemente",
+                "Apartamento arquivado",
                 extra={
                     "apartamento_id": apartamento_id,
                     "usuario_id": request.user.id,
@@ -291,7 +335,7 @@ def confirmar_exclusao_apartamento(request, apartamento_id):
         request,
         "components/confirmar_exclusao.html",
         {
-            "titulo": "Excluir apartamento",
+            "titulo": "Arquivar apartamento",
             "identificacao": str(apartamento),
             "registros": (
                 ("Número", apartamento.numero),
@@ -301,12 +345,15 @@ def confirmar_exclusao_apartamento(request, apartamento_id):
             ),
             "bloqueada": bloqueada,
             "mensagem_bloqueio": (
-                "Este apartamento não pode ser excluído enquanto possuir "
-                "leituras ou faturas cadastradas. Exclua primeiro os "
-                "registros vinculados."
+                ""
             ),
-            "aviso": "Tem certeza de que deseja excluir permanentemente este apartamento?",
-            "consequencia": "Esta ação é irreversível.",
+            "aviso": "Tem certeza de que deseja arquivar este apartamento?",
+            "consequencia": (
+                "O histórico será preservado por pelo menos um ano e novas "
+                "operações serão bloqueadas."
+            ),
+            "texto_acao": "Arquivar apartamento",
+            "icone_acao": "bi-archive",
             "url_cancelar": reverse(
                 "apartamentos:detalhes",
                 args=[apartamento.id],

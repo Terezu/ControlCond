@@ -2,7 +2,7 @@
 {% block title %}Tabelas de água | ControlCond{% endblock %}
 {% block content %}
 {% url "configuracoes:tabela_agua_nova" as nova_url %}
-{% include "components/page_header.html" with titulo="Tabelas de água" subtitulo="Histórico e vigências das faixas de cobrança." url_acao=nova_url texto_acao="Nova tabela" icone_acao="bi-plus-lg" %}
+{% include "components/page_header.html" with titulo="Tabelas de água" subtitulo="Histórico e vigências das faixas de cobrança." url_acao=nova_url texto_acao="Nova tabela" icone_acao="bi-plus-lg" permitir_acao=pode_alterar_configuracoes %}
 <div class="card shadow-sm">
   <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">

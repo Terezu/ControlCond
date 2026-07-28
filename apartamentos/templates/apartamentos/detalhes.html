@@ -5,7 +5,7 @@
 {% block content %}
     {% url "apartamentos:editar" apartamento.id as url_editar_apartamento %}
     {% url "pessoas:nova" as url_nova_pessoa %}
-    {% include "components/page_header.html" with titulo=apartamento subtitulo="Visão operacional completa da unidade." url_acao=url_editar_apartamento texto_acao="Editar apartamento" icone_acao="bi-pencil" %}
+    {% include "components/page_header.html" with titulo=apartamento subtitulo="Visão operacional completa da unidade." url_acao=url_editar_apartamento texto_acao="Editar apartamento" icone_acao="bi-pencil" permitir_acao=pode_gerenciar_apartamentos %}
 
     <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
         <div class="d-flex flex-wrap gap-2" aria-label="Situação do apartamento">
@@ -15,7 +15,7 @@
         </div>
         <div class="d-flex flex-wrap gap-2">
             <a href="{% url 'apartamentos:lista' %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Voltar</a>
-            {% if pode_excluir %}<a href="{% url 'apartamentos:excluir' apartamento.id %}" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash me-1" aria-hidden="true"></i>Excluir apartamento</a>{% endif %}
+            {% if pode_arquivar_apartamento %}<a href="{% url 'apartamentos:excluir' apartamento.id %}" class="btn btn-sm btn-outline-danger"><i class="bi bi-archive me-1" aria-hidden="true"></i>Arquivar apartamento</a>{% endif %}
         </div>
     </div>
 

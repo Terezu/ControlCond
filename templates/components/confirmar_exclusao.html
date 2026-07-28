@@ -38,8 +38,8 @@
                     <div class="d-flex flex-column-reverse flex-sm-row justify-content-end gap-2">
                         <a class="btn btn-outline-secondary" href="{{ url_cancelar }}">Cancelar</a>
                         <button type="submit" class="btn btn-danger">
-                            <i class="bi bi-trash me-1" aria-hidden="true"></i>
-                            Excluir permanentemente
+                            <i class="bi {{ icone_acao|default:'bi-trash' }} me-1" aria-hidden="true"></i>
+                            {{ texto_acao|default:"Excluir permanentemente" }}
                         </button>
                     </div>
                 </form>

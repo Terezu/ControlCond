@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
@@ -12,6 +13,11 @@ LIMITE_VALOR_MONETARIO = Decimal("99999999.99")
 
 
 class Apartamento(models.Model):
+    class SituacaoRetencao(models.TextChoices):
+        RETIDO = "retido", "Em retenção"
+        BACKUP_PENDENTE = "backup_pendente", "Backup pendente"
+        BACKUP_CONFIRMADO = "backup_confirmado", "Backup confirmado"
+
     condominio = models.ForeignKey(
         "condominios.Condominio",
         on_delete=models.PROTECT,
@@ -21,6 +27,26 @@ class Apartamento(models.Model):
     numero = models.CharField(max_length=20)
     bloco = models.CharField(max_length=50, blank=True, null=True)
     observacoes = models.TextField(blank=True, null=True)
+    ativo = models.BooleanField(default=True)
+    arquivado = models.BooleanField(default=False)
+    arquivado_em = models.DateTimeField(blank=True, null=True)
+    arquivado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="apartamentos_arquivados",
+        blank=True,
+        null=True,
+    )
+    motivo_arquivamento = models.TextField(blank=True)
+    retencao_ate = models.DateField(blank=True, null=True)
+    situacao_retencao = models.CharField(
+        max_length=20,
+        choices=SituacaoRetencao.choices,
+        default=SituacaoRetencao.RETIDO,
+    )
+    identificador_backup = models.CharField(
+        max_length=255, blank=True
+    )
     valor_aluguel = models.DecimalField(
         "Valor padrão do aluguel",
         max_digits=10,
@@ -100,7 +126,8 @@ class Apartamento(models.Model):
                 models.F("condominio"),
                 Lower("numero"),
                 Coalesce(Lower("bloco"), models.Value("")),
-                name="apartamento_unico_por_condominio_numero_bloco",
+                condition=models.Q(arquivado=False),
+                name="apartamento_ativo_unico_por_condominio",
                 violation_error_message=(
                     "Já existe um apartamento com este número e bloco."
                 ),
@@ -219,6 +246,10 @@ class Apartamento(models.Model):
             self.bloco = self.bloco.strip() or None
         if isinstance(self.observacoes, str):
             self.observacoes = self.observacoes.strip() or None
+        if self.arquivado and self.ativo:
+            raise ValidationError(
+                {"ativo": "Um apartamento arquivado não pode permanecer ativo."}
+            )
 
         if (
             isinstance(self.valor_bonificacao, Decimal)

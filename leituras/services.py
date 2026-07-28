@@ -5,6 +5,7 @@ from django.db.models.deletion import ProtectedError
 
 from apartamentos.models import Apartamento
 from apartamentos.services import consultar_apartamento
+from condominios.permissions import Permissao, exigir_permissao
 
 from .models import ANO_MAXIMO, Leitura
 
@@ -20,6 +21,7 @@ def cadastrar_leitura(
     ano,
     leitura_agua=None,
     leitura_gas=None,
+    usuario=None,
 ):
     if not isinstance(apartamento, Apartamento) or apartamento.pk is None:
         raise ValueError("Apartamento inválido.")
@@ -28,10 +30,16 @@ def cadastrar_leitura(
         apartamento = (
             Apartamento.objects
             .select_for_update()
-            .get(pk=apartamento.pk)
+            .get(pk=apartamento.pk, ativo=True, arquivado=False)
         )
     except Apartamento.DoesNotExist as exc:
         raise ValueError("Apartamento inválido.") from exc
+    if usuario is not None:
+        exigir_permissao(
+            usuario,
+            apartamento.condominio,
+            Permissao.GERENCIAR_LEITURAS,
+        )
 
     _validar_periodo(mes, ano)
 

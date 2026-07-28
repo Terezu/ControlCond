@@ -4,7 +4,7 @@
 
 {% block content %}
     {% url "configuracoes:editar" as url_editar_configuracao %}
-    {% include "components/page_header.html" with titulo="Configurações" subtitulo="Dados globais do condomínio, cobranças e apresentação dos documentos." url_acao=url_editar_configuracao texto_acao="Editar configurações" icone_acao="bi-pencil" %}
+    {% include "components/page_header.html" with titulo="Configurações" subtitulo="Dados globais do condomínio, cobranças e apresentação dos documentos." url_acao=url_editar_configuracao texto_acao="Editar configurações" icone_acao="bi-pencil" permitir_acao=pode_alterar_configuracoes %}
 
     <div class="row g-4">
         <div class="col-12 col-xl-8">

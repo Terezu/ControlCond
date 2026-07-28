@@ -4,7 +4,7 @@
 
 {% block content %}
     {% url "faturas:gerar" as url_gerar_fatura %}
-    {% include "components/page_header.html" with titulo="Faturas" subtitulo="Consulte, filtre e acompanhe as faturas do condomínio." url_acao=url_gerar_fatura texto_acao="Gerar nova fatura" icone_acao="bi-plus-lg" %}
+    {% include "components/page_header.html" with titulo="Faturas" subtitulo="Consulte, filtre e acompanhe as faturas do condomínio." url_acao=url_gerar_fatura texto_acao="Gerar nova fatura" icone_acao="bi-plus-lg" permitir_acao=pode_gerar_fatura %}
 
     <section class="card shadow-sm mb-5" aria-labelledby="titulo-filtros">
         <div class="card-header bg-light py-3">
