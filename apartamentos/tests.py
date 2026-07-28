@@ -462,8 +462,10 @@ class ApresentacaoApartamentoTests(TestCase):
 
         self.assertEqual(resposta.status_code, 200)
         self.assertTemplateUsed(resposta, "apartamentos/detalhes.html")
-        self.assertContains(resposta, "Histórico de leituras")
-        self.assertContains(resposta, "Histórico de faturas")
+        self.assertContains(resposta, "Visão geral")
+        self.assertContains(resposta, "Pessoas vinculadas")
+        self.assertContains(resposta, "Leituras")
+        self.assertContains(resposta, "Faturas")
         self.assertContains(resposta, "Nenhuma leitura cadastrada")
         self.assertContains(resposta, "Nenhuma fatura cadastrada")
         self.assertContains(resposta, reverse("leituras:nova", args=[1]))

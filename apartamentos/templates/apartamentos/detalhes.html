@@ -4,141 +4,84 @@
 
 {% block content %}
     {% url "apartamentos:editar" apartamento.id as url_editar_apartamento %}
-    {% include "components/page_header.html" with titulo=apartamento subtitulo="Dados da unidade, leituras e histórico de faturamento." url_acao=url_editar_apartamento texto_acao="Editar apartamento" icone_acao="bi-pencil" %}
+    {% url "pessoas:nova" as url_nova_pessoa %}
+    {% include "components/page_header.html" with titulo=apartamento subtitulo="Visão operacional completa da unidade." url_acao=url_editar_apartamento texto_acao="Editar apartamento" icone_acao="bi-pencil" %}
 
-    <div class="d-flex flex-column flex-sm-row justify-content-between gap-2 mb-4">
-        <a href="{% url 'apartamentos:lista' %}" class="btn btn-sm btn-outline-secondary">
-            <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Voltar para apartamentos
-        </a>
-        <a href="{% url 'apartamentos:excluir' apartamento.id %}" class="btn btn-sm btn-outline-danger">
-            <i class="bi bi-trash me-1" aria-hidden="true"></i>Excluir apartamento
-        </a>
-    </div>
-
-    <div class="row g-4">
-        <div class="col-12 col-lg-6">
-            <section class="card shadow-sm h-100" aria-labelledby="titulo-leituras-base">
-                <div class="card-header bg-light py-3">
-                    <h2 id="titulo-leituras-base" class="h5 mb-0">Leituras-base</h2>
-                </div>
-                <div class="card-body">
-                    <div class="row g-4">
-                        <div class="col-12 col-sm-6">
-                            <p class="detail-label">Água</p>
-                            <p class="detail-value">{{ apartamento.leitura_base_agua|default_if_none:"Não informada" }}</p>
-                        </div>
-                        <div class="col-12 col-sm-6">
-                            <p class="detail-label">Gás</p>
-                            <p class="detail-value">{{ apartamento.leitura_base_gas|default_if_none:"Não informada" }}</p>
-                        </div>
-                        <div class="col-12 col-sm-6">
-                            <p class="detail-label">Aluguel padrão</p>
-                            <p class="detail-value">R$ {{ apartamento.valor_aluguel|floatformat:2 }}</p>
-                        </div>
-                        <div class="col-12 col-sm-6">
-                            <p class="detail-label">Condomínio padrão</p>
-                            <p class="detail-value">R$ {{ apartamento.valor_condominio|floatformat:2 }}</p>
-                        </div>
-                        <div class="col-12 col-sm-6">
-                            <p class="detail-label">IPTU padrão</p>
-                            <p class="detail-value">R$ {{ apartamento.valor_iptu|floatformat:2 }}</p>
-                        </div>
-                        {% if apartamento.valor_bonificacao %}
-                            <div class="col-12 col-sm-6">
-                                <p class="detail-label">Bonificação padrão</p>
-                                <p class="detail-value">
-                                    R$ {{ apartamento.valor_bonificacao|floatformat:2 }}
-                                    até o dia {{ apartamento.dia_limite_bonificacao }}
-                                </p>
-                            </div>
-                        {% endif %}
-                    </div>
-                </div>
-            </section>
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
+        <div class="d-flex flex-wrap gap-2" aria-label="Situação do apartamento">
+            {% if painel.ocupado %}<span class="badge text-bg-success">Ocupado</span>{% else %}<span class="badge text-bg-secondary">Desocupado</span>{% endif %}
+            {% if painel.possui_contrato %}<span class="badge text-bg-success">Com contrato</span>{% else %}<span class="badge text-bg-secondary">Sem contrato</span>{% endif %}
+            {% if painel.responsavel_financeiro %}<span class="badge text-bg-success">Com responsável financeiro</span>{% else %}<span class="badge text-bg-danger">Sem responsável financeiro</span>{% endif %}
         </div>
-
-        <div class="col-12 col-lg-6">
-            <section class="card shadow-sm h-100" aria-labelledby="titulo-ultima-leitura">
-                <div class="card-header bg-light py-3 d-flex align-items-center justify-content-between gap-3">
-                    <h2 id="titulo-ultima-leitura" class="h5 mb-0">Última leitura</h2>
-                    <a href="{% url 'leituras:nova' apartamento.id %}" class="btn btn-primary btn-sm">
-                        <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Nova leitura
-                    </a>
-                </div>
-                <div class="card-body">
-                    {% if ultima_leitura %}
-                        <div class="row g-4">
-                            <div class="col-12 col-sm-4">
-                                <p class="detail-label">Período</p>
-                                <p class="detail-value">{{ ultima_leitura.mes|stringformat:"02d" }}/{{ ultima_leitura.ano }}</p>
-                            </div>
-                            <div class="col-12 col-sm-4">
-                                <p class="detail-label">Água</p>
-                                <p class="detail-value">{{ ultima_leitura.leitura_agua|default_if_none:"Não informada" }}</p>
-                            </div>
-                            <div class="col-12 col-sm-4">
-                                <p class="detail-label">Gás</p>
-                                <p class="detail-value">{{ ultima_leitura.leitura_gas|default_if_none:"Não informada" }}</p>
-                            </div>
-                        </div>
-                    {% else %}
-                        <p class="text-secondary mb-0">Nenhuma leitura cadastrada para este apartamento.</p>
-                    {% endif %}
-                </div>
-            </section>
+        <div class="d-flex flex-wrap gap-2">
+            <a href="{% url 'apartamentos:lista' %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Voltar</a>
+            <a href="{% url 'apartamentos:excluir' apartamento.id %}" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash me-1" aria-hidden="true"></i>Excluir apartamento</a>
         </div>
     </div>
 
-    {% if apartamento.observacoes %}
-        <section class="card shadow-sm mt-4" aria-labelledby="titulo-observacoes">
-            <div class="card-header bg-light py-3">
-                <h2 id="titulo-observacoes" class="h5 mb-0">Observações</h2>
-            </div>
-            <div class="card-body">
-                <p class="mb-0">{{ apartamento.observacoes|linebreaksbr }}</p>
-            </div>
-        </section>
-    {% endif %}
-
-    <section class="card shadow-sm mt-5" aria-labelledby="titulo-pessoas-vinculadas">
+    <section class="card shadow-sm" aria-labelledby="titulo-visao-geral">
         <div class="card-header bg-light py-3 d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-2">
-            <div>
-                <h2 id="titulo-pessoas-vinculadas" class="h5 mb-1">Pessoas vinculadas</h2>
-                <p class="text-secondary small mb-0">Vínculos atuais e históricos agrupados por tipo.</p>
-            </div>
-            <a href="{% url 'pessoas:lista' %}" class="btn btn-sm btn-outline-primary">
-                <i class="bi bi-people me-1" aria-hidden="true"></i>Gerenciar pessoas
-            </a>
+            <div><h2 id="titulo-visao-geral" class="h5 mb-1">Visão geral</h2><p class="text-secondary small mb-0">Dados cadastrais e última medição da unidade.</p></div>
+            <a href="{% url 'leituras:nova' apartamento.id %}" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Nova leitura</a>
         </div>
         <div class="card-body">
-            {% if vinculos_pessoas %}
-                {% regroup vinculos_pessoas by get_tipo_display as grupos_vinculos %}
-                <div class="row g-4">
-                    {% for grupo in grupos_vinculos %}
+            <div class="row g-4">
+                <div class="col-6 col-md-3"><p class="detail-label">Leitura-base de água</p><p class="detail-value">{{ apartamento.leitura_base_agua|default_if_none:"Não informada" }}</p></div>
+                <div class="col-6 col-md-3"><p class="detail-label">Leitura-base de gás</p><p class="detail-value">{{ apartamento.leitura_base_gas|default_if_none:"Não informada" }}</p></div>
+                <div class="col-6 col-md-2"><p class="detail-label">Aluguel padrão</p><p class="detail-value">R$ {{ apartamento.valor_aluguel|floatformat:2 }}</p></div>
+                <div class="col-6 col-md-2"><p class="detail-label">Condomínio padrão</p><p class="detail-value">R$ {{ apartamento.valor_condominio|floatformat:2 }}</p></div>
+                <div class="col-6 col-md-2"><p class="detail-label">IPTU padrão</p><p class="detail-value">R$ {{ apartamento.valor_iptu|floatformat:2 }}</p></div>
+                {% if ultima_leitura %}
+                    <div class="col-6 col-md-3"><p class="detail-label">Período da última leitura</p><p class="detail-value">{{ ultima_leitura.mes|stringformat:"02d" }}/{{ ultima_leitura.ano }}</p></div>
+                    <div class="col-6 col-md-3"><p class="detail-label">Última leitura de água</p><p class="detail-value">{{ ultima_leitura.leitura_agua|default_if_none:"Não informada" }}</p></div>
+                    <div class="col-6 col-md-3"><p class="detail-label">Última leitura de gás</p><p class="detail-value">{{ ultima_leitura.leitura_gas|default_if_none:"Não informada" }}</p></div>
+                {% else %}
+                    <div class="col-12 col-md-6"><p class="detail-label">Última leitura</p><p class="text-secondary mb-0">Nenhuma leitura cadastrada.</p></div>
+                {% endif %}
+                {% if apartamento.valor_bonificacao %}<div class="col-6 col-md-3"><p class="detail-label">Bonificação padrão</p><p class="detail-value">R$ {{ apartamento.valor_bonificacao|floatformat:2 }} até o dia {{ apartamento.dia_limite_bonificacao }}</p></div>{% endif %}
+            </div>
+            {% if apartamento.observacoes %}<hr><p class="detail-label">Observações</p><p class="mb-0">{{ apartamento.observacoes|linebreaksbr }}</p>{% endif %}
+        </div>
+    </section>
+
+    <section class="card shadow-sm mt-5" aria-labelledby="titulo-pessoas-vinculadas">
+        <div class="card-header bg-light py-3 d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3">
+            <div>
+                <h2 id="titulo-pessoas-vinculadas" class="h5 mb-1">Pessoas vinculadas</h2>
+                <p class="text-secondary small mb-0">{{ painel.pessoas|length }} pessoa{{ painel.pessoas|length|pluralize }} · {{ painel.total_vinculos_ativos }} vínculo{{ painel.total_vinculos_ativos|pluralize }} ativo{{ painel.total_vinculos_ativos|pluralize }} · {% if painel.responsavel_financeiro %}responsável financeiro definido{% else %}sem responsável financeiro{% endif %}</p>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <a href="{% url 'pessoas:nova' %}" class="btn btn-sm btn-primary"><i class="bi bi-person-plus me-1" aria-hidden="true"></i>Adicionar pessoa</a>
+                <a href="{% url 'pessoas:lista' %}" class="btn btn-sm btn-outline-primary">Adicionar vínculo</a>
+                <a href="{% url 'pessoas:lista' %}" class="btn btn-sm btn-outline-secondary">Gerenciar vínculos</a>
+            </div>
+        </div>
+        <div class="card-body">
+            {% if painel.pessoas %}
+                <div class="row g-3">
+                    {% for item in painel.pessoas %}
                         <div class="col-12 col-lg-6">
-                            <h3 class="h6">{{ grupo.grouper }}</h3>
-                            <ul class="list-group">
-                                {% for vinculo in grupo.list %}
-                                    <li class="list-group-item d-flex justify-content-between align-items-start gap-3">
-                                        <div>
-                                            <a href="{% url 'pessoas:detalhes' vinculo.pessoa_id %}" class="fw-semibold">{{ vinculo.pessoa.nome_completo }}</a>
-                                            <span class="d-block text-secondary small">
-                                                {{ vinculo.data_inicio|date:"d/m/Y" }} a {{ vinculo.data_fim|date:"d/m/Y"|default:"atual" }}
-                                            </span>
-                                        </div>
-                                        {% if vinculo.ativo %}
-                                            <span class="badge text-bg-success">Ativo</span>
-                                        {% else %}
-                                            <span class="badge text-bg-secondary">Encerrado</span>
-                                        {% endif %}
-                                    </li>
-                                {% endfor %}
-                            </ul>
+                            <article class="border rounded p-3 h-100">
+                                <div class="d-flex justify-content-between align-items-start gap-3">
+                                    <div><h3 class="h6 mb-1">{{ item.pessoa.nome_completo }}</h3><p class="text-secondary small mb-1">{{ item.cpf_mascarado }} · {{ item.contato_principal }}</p><p class="small mb-2">Vínculo desde {{ item.data_inicio|date:"d/m/Y" }}</p></div>
+                                    {% if item.ativo %}<span class="badge text-bg-success">Ativo</span>{% else %}<span class="badge text-bg-secondary">Encerrado</span>{% endif %}
+                                </div>
+                                <div class="d-flex flex-wrap gap-1 mb-3">
+                                    {% for tipo in item.tipos_ativos %}<span class="badge text-bg-light border text-dark">{{ tipo }}</span>{% endfor %}
+                                    {% for tipo in item.tipos_historicos %}<span class="badge text-bg-secondary">{{ tipo }} · histórico</span>{% endfor %}
+                                    {% if item.responsavel_financeiro %}<span class="badge text-bg-primary">Responsável financeiro</span>{% endif %}
+                                    {% if item.contratante %}<span class="badge text-bg-info">Contratante</span>{% endif %}
+                                </div>
+                                <div class="d-flex flex-wrap gap-2">
+                                    <a href="{% url 'pessoas:detalhes' item.pessoa.id %}" class="btn btn-sm btn-outline-primary">Ver pessoa</a>
+                                    {% for vinculo in item.vinculos %}{% if vinculo.ativo %}<a href="{% url 'pessoas:encerrar_vinculo' item.pessoa.id vinculo.id %}" class="btn btn-sm btn-outline-danger" aria-label="Encerrar vínculo {{ vinculo.get_tipo_display }} de {{ item.pessoa.nome_completo }}">Encerrar {{ vinculo.get_tipo_display }}</a>{% endif %}{% endfor %}
+                                </div>
+                            </article>
                         </div>
                     {% endfor %}
                 </div>
             {% else %}
-                {% include "components/empty_state.html" with titulo="Nenhuma pessoa vinculada" texto="Os proprietários, moradores, inquilinos e responsáveis financeiros aparecerão aqui." icone="bi-people" embutido=True %}
+                {% include "components/empty_state.html" with titulo="Nenhuma pessoa vinculada a este apartamento" texto="Cadastre uma pessoa e adicione os vínculos necessários." icone="bi-people" url_acao=url_nova_pessoa texto_acao="Adicionar pessoa" icone_acao="bi-person-plus" embutido=True %}
             {% endif %}
         </div>
     </section>
@@ -146,39 +89,33 @@
     <section class="card shadow-sm mt-5" aria-labelledby="titulo-contrato-apartamento">
         <div class="card-header bg-light py-3 d-flex align-items-center justify-content-between gap-3">
             <div><h2 id="titulo-contrato-apartamento" class="h5 mb-1">Contrato</h2><p class="text-secondary small mb-0">Contrato vigente e histórico da unidade.</p></div>
-            <a href="{% url 'contratos:historico_apartamento' apartamento.id %}" class="btn btn-sm btn-outline-primary">Ver histórico</a>
+            <a href="{% url 'contratos:historico_apartamento' apartamento.id %}" class="btn btn-sm btn-outline-primary">Histórico de contratos</a>
         </div>
         <div class="card-body">
-            {% if contrato_atual %}
-                <div class="row g-3">
-                    <div class="col-12 col-md-4"><p class="detail-label">Contratante</p><p class="detail-value">{{ contrato_atual.pessoa_contratante }}</p></div>
-                    <div class="col-12 col-md-4"><p class="detail-label">Responsável financeiro</p><p class="detail-value">{{ contrato_atual.responsavel_financeiro }}</p></div>
-                    <div class="col-12 col-md-4"><p class="detail-label">Vigência</p><p class="detail-value">{{ contrato_atual.data_inicio|date:"d/m/Y" }} a {{ contrato_atual.data_termino|date:"d/m/Y" }}</p></div>
+            {% if painel.contrato_atual %}
+                <div class="row g-4">
+                    <div class="col-12 col-md-4"><p class="detail-label">Responsável pelo contrato</p><p class="detail-value">{{ painel.contrato_atual.pessoa_contratante }}</p></div>
+                    <div class="col-12 col-md-4"><p class="detail-label">Responsável financeiro</p><p class="detail-value">{{ painel.contrato_atual.responsavel_financeiro }}</p></div>
+                    <div class="col-6 col-md-2"><p class="detail-label">Início</p><p class="detail-value">{{ painel.contrato_atual.data_inicio|date:"d/m/Y" }}</p></div>
+                    <div class="col-6 col-md-2"><p class="detail-label">Término</p><p class="detail-value">{{ painel.contrato_atual.data_termino|date:"d/m/Y" }}</p></div>
+                    <div class="col-6 col-md-3"><p class="detail-label">Dias restantes</p><p class="detail-value">{{ painel.contrato_atual.dias_restantes }} dias</p></div>
+                    <div class="col-6 col-md-3"><p class="detail-label">Situação</p><p class="detail-value"><span class="badge text-bg-success">Ativo</span> {% if painel.contrato_atual.proximo_vencimento %}<span class="badge text-bg-warning">Vence em até 45 dias</span>{% endif %}</p></div>
                 </div>
-                <a href="{% url 'contratos:detalhes' contrato_atual.id %}" class="btn btn-sm btn-outline-secondary mt-3">Abrir contrato</a>
+                <a href="{% url 'contratos:detalhes' painel.contrato_atual.id %}" class="btn btn-sm btn-outline-secondary mt-3">Detalhes do contrato</a>
             {% else %}
-                <p class="text-secondary mb-0">Nenhum contrato ativo para este apartamento.</p>
+                <p class="text-secondary">Nenhum contrato ativo para este apartamento</p>
+                <a href="{% url 'contratos:novo' %}" class="btn btn-sm btn-primary">Cadastrar contrato</a>
             {% endif %}
         </div>
     </section>
 
     <section class="card shadow-sm mt-5" aria-labelledby="titulo-historico-leituras">
-        <div class="card-header bg-light py-3">
-            <h2 id="titulo-historico-leituras" class="h5 mb-1">Histórico de leituras</h2>
-            <p class="text-secondary small mb-0">Medições registradas para esta unidade.</p>
-        </div>
-        <div class="card-body p-0">
-            {% include "components/data_table.html" with template_cabecalho="components/table_headers/leitura_apartamento.html" linhas=leituras template_linha="components/table_rows/leitura_apartamento.html" empty_titulo="Nenhuma leitura cadastrada" empty_texto="Registre a primeira medição desta unidade." empty_icone="bi-droplet" %}
-        </div>
+        <div class="card-header bg-light py-3 d-flex align-items-center justify-content-between gap-3"><div><h2 id="titulo-historico-leituras" class="h5 mb-1">Leituras</h2><p class="text-secondary small mb-0">Histórico completo de medições da unidade.</p></div><a href="{% url 'leituras:nova' apartamento.id %}" class="btn btn-sm btn-outline-primary">Nova leitura</a></div>
+        <div class="card-body p-0">{% include "components/data_table.html" with template_cabecalho="components/table_headers/leitura_apartamento.html" linhas=leituras template_linha="components/table_rows/leitura_apartamento.html" empty_titulo="Nenhuma leitura cadastrada" empty_texto="Registre a primeira medição desta unidade." empty_icone="bi-droplet" %}</div>
     </section>
 
     <section class="card shadow-sm mt-5" aria-labelledby="titulo-historico-faturas">
-        <div class="card-header bg-light py-3">
-            <h2 id="titulo-historico-faturas" class="h5 mb-1">Histórico de faturas</h2>
-            <p class="text-secondary small mb-0">Faturas emitidas para esta unidade.</p>
-        </div>
-        <div class="card-body p-0">
-            {% include "components/data_table.html" with template_cabecalho="components/table_headers/fatura_apartamento.html" linhas=faturas template_linha="components/table_rows/fatura_apartamento.html" empty_titulo="Nenhuma fatura cadastrada" empty_texto="As faturas desta unidade aparecerão aqui." empty_icone="bi-receipt" %}
-        </div>
+        <div class="card-header bg-light py-3"><h2 id="titulo-historico-faturas" class="h5 mb-1">Faturas</h2><p class="text-secondary small mb-0">Histórico financeiro da unidade.</p></div>
+        <div class="card-body p-0">{% include "components/data_table.html" with template_cabecalho="components/table_headers/fatura_apartamento.html" linhas=faturas template_linha="components/table_rows/fatura_apartamento.html" empty_titulo="Nenhuma fatura cadastrada" empty_texto="As faturas desta unidade aparecerão aqui." empty_icone="bi-receipt" %}</div>
     </section>
 {% endblock %}

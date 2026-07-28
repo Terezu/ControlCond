@@ -331,6 +331,7 @@ def consultar_detalhes_apartamento_no_condominio(
                         .select_related("pessoa")
                         .order_by("tipo", "-ativo", "-data_inicio", "-id")
                     ),
+                    to_attr="vinculos_operacionais",
                 ),
                 Prefetch(
                     "contratos",
@@ -342,6 +343,7 @@ def consultar_detalhes_apartamento_no_condominio(
                         )
                         .order_by("-data_inicio", "-id")
                     ),
+                    to_attr="contratos_operacionais",
                 ),
             )
             .get(pk=apartamento_id)

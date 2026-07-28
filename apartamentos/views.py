@@ -11,6 +11,11 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods, require_safe
 
 from .forms import ApartamentoForm, FiltrarApartamentosForm
+from .selectors import (
+    enriquecer_apartamentos,
+    listar_apartamentos_operacionais,
+    montar_painel_apartamento,
+)
 from .services import (
     cadastrar_apartamento,
     consultar_apartamento,
@@ -188,12 +193,13 @@ def lista_apartamentos(request):
         }
 
     paginator = Paginator(
-        listar_apartamentos_por_condominio(
+        listar_apartamentos_operacionais(
             obter_condominio_ativo(request), **filtros
         ),
         10,
     )
     pagina_apartamentos = paginator.get_page(request.GET.get("page"))
+    enriquecer_apartamentos(pagina_apartamentos.object_list)
     parametros_filtros = request.GET.copy()
     parametros_filtros.pop("page", None)
 
@@ -222,24 +228,7 @@ def detalhes_apartamento(request, apartamento_id):
 
     leituras = list(apartamento.leituras.all())
     faturas = list(apartamento.faturas.all())
-    gerenciador_vinculos = getattr(apartamento, "vinculos_pessoas", None)
-    vinculos_pessoas = (
-        list(gerenciador_vinculos.all())
-        if gerenciador_vinculos is not None
-        else []
-    )
-    gerenciador_contratos = getattr(apartamento, "contratos", None)
-    contratos = (
-        list(gerenciador_contratos.all())
-        if gerenciador_contratos is not None
-        else []
-    )
-    for contrato in contratos:
-        contrato.situacao = contrato.calcular_situacao()
-    contrato_atual = next(
-        (item for item in contratos if item.situacao == "ativo"),
-        None,
-    )
+    painel = montar_painel_apartamento(apartamento)
 
     return render(
         request,
@@ -249,9 +238,7 @@ def detalhes_apartamento(request, apartamento_id):
             "ultima_leitura": leituras[0] if leituras else None,
             "leituras": leituras,
             "faturas": faturas,
-            "vinculos_pessoas": vinculos_pessoas,
-            "contratos": contratos,
-            "contrato_atual": contrato_atual,
+            "painel": painel,
         },
     )
 

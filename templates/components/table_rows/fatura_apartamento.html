@@ -4,8 +4,7 @@
             {{ linha.mes|stringformat:"02d" }}/{{ linha.ano }}
         </a>
     </td>
-    <td>{{ linha.consumo_agua }}</td>
-    <td>{{ linha.consumo_gas }}</td>
+    <td><span class="text-secondary">Não registrado na emissão</span></td>
     <td class="fw-semibold">R$ {{ linha.valor_total|floatformat:2 }}</td>
     <td>{% include "components/status_badge.html" with status=linha.status texto=linha.get_status_display %}</td>
     <td class="text-end">
