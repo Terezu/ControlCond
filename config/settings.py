@@ -105,6 +105,7 @@ INSTALLED_APPS = [
     "configuracoes.apps.ConfiguracoesConfig",
     "condominios.apps.CondominiosConfig",
     "pessoas.apps.PessoasConfig",
+    "contratos.apps.ContratosConfig",
     "dashboard",
 ]
 

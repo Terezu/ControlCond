@@ -143,6 +143,25 @@
         </div>
     </section>
 
+    <section class="card shadow-sm mt-5" aria-labelledby="titulo-contrato-apartamento">
+        <div class="card-header bg-light py-3 d-flex align-items-center justify-content-between gap-3">
+            <div><h2 id="titulo-contrato-apartamento" class="h5 mb-1">Contrato</h2><p class="text-secondary small mb-0">Contrato vigente e histórico da unidade.</p></div>
+            <a href="{% url 'contratos:historico_apartamento' apartamento.id %}" class="btn btn-sm btn-outline-primary">Ver histórico</a>
+        </div>
+        <div class="card-body">
+            {% if contrato_atual %}
+                <div class="row g-3">
+                    <div class="col-12 col-md-4"><p class="detail-label">Contratante</p><p class="detail-value">{{ contrato_atual.pessoa_contratante }}</p></div>
+                    <div class="col-12 col-md-4"><p class="detail-label">Responsável financeiro</p><p class="detail-value">{{ contrato_atual.responsavel_financeiro }}</p></div>
+                    <div class="col-12 col-md-4"><p class="detail-label">Vigência</p><p class="detail-value">{{ contrato_atual.data_inicio|date:"d/m/Y" }} a {{ contrato_atual.data_termino|date:"d/m/Y" }}</p></div>
+                </div>
+                <a href="{% url 'contratos:detalhes' contrato_atual.id %}" class="btn btn-sm btn-outline-secondary mt-3">Abrir contrato</a>
+            {% else %}
+                <p class="text-secondary mb-0">Nenhum contrato ativo para este apartamento.</p>
+            {% endif %}
+        </div>
+    </section>
+
     <section class="card shadow-sm mt-5" aria-labelledby="titulo-historico-leituras">
         <div class="card-header bg-light py-3">
             <h2 id="titulo-historico-leituras" class="h5 mb-1">Histórico de leituras</h2>

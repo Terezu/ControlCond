@@ -173,6 +173,16 @@
 
                 <li class="nav-item">
                     <a
+                        class="nav-link{% if request.resolver_match.namespace == 'contratos' %} active{% endif %}"
+                        href="{% url 'contratos:lista' %}"
+                        {% if request.resolver_match.namespace == 'contratos' %}aria-current="page"{% endif %}
+                    >
+                        Contratos
+                    </a>
+                </li>
+
+                <li class="nav-item">
+                    <a
                         class="nav-link{% if request.resolver_match.namespace == 'configuracoes' %} active{% endif %}"
                         href="{% url 'configuracoes:detalhes' %}"
                         {% if request.resolver_match.namespace == 'configuracoes' %}aria-current="page"{% endif %}

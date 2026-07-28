@@ -228,6 +228,18 @@ def detalhes_apartamento(request, apartamento_id):
         if gerenciador_vinculos is not None
         else []
     )
+    gerenciador_contratos = getattr(apartamento, "contratos", None)
+    contratos = (
+        list(gerenciador_contratos.all())
+        if gerenciador_contratos is not None
+        else []
+    )
+    for contrato in contratos:
+        contrato.situacao = contrato.calcular_situacao()
+    contrato_atual = next(
+        (item for item in contratos if item.situacao == "ativo"),
+        None,
+    )
 
     return render(
         request,
@@ -238,6 +250,8 @@ def detalhes_apartamento(request, apartamento_id):
             "leituras": leituras,
             "faturas": faturas,
             "vinculos_pessoas": vinculos_pessoas,
+            "contratos": contratos,
+            "contrato_atual": contrato_atual,
         },
     )
 
