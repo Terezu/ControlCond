@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.db.models import (
@@ -14,7 +15,8 @@ from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from apartamentos.models import Apartamento
-from faturas.models import Fatura
+from contratos.models import AuditoriaRescisaoContrato, Contrato
+from faturas.models import Fatura, HistoricoFinanceiroFatura
 from leituras.models import Leitura
 
 
@@ -40,6 +42,15 @@ LIMITE_LISTAS = 5
 class ListaResumoDashboard:
     itens: tuple
     tem_mais: bool
+
+
+@dataclass(frozen=True)
+class AtividadeDashboard:
+    tipo: str
+    descricao: str
+    ocorrido_em: object
+    url_name: str
+    objeto_id: int
 
 
 @dataclass(frozen=True)
@@ -74,6 +85,16 @@ class ResumoDashboard:
     lista_sem_leitura: ListaResumoDashboard
     lista_sem_fatura: ListaResumoDashboard
     lista_faturas_pendentes: ListaResumoDashboard
+    contratos_ativos: int
+    contratos_proximos_vencimento: int
+    contratos_vencidos: int
+    contratos_encerrando_breve: int
+    reajustes_futuros: int | None
+    apartamentos_ocupados: int
+    apartamentos_disponiveis: int
+    variacao_receitas_percentual: Decimal | None
+    receitas_mes_anterior: Decimal
+    atividades_recentes: tuple
 
 
 def _percentual(parte, total):
@@ -90,6 +111,52 @@ def _limitar(queryset):
         itens=tuple(itens[:LIMITE_LISTAS]),
         tem_mais=len(itens) > LIMITE_LISTAS,
     )
+
+
+def _competencia_anterior(mes, ano):
+    return (12, ano - 1) if mes == 1 else (mes - 1, ano)
+
+
+def _obter_atividades_recentes(condominio):
+    """Monta a timeline somente com eventos persistidos no domínio."""
+    atividades = []
+    for contrato in Contrato.objects.filter(condominio=condominio).only(
+        "id", "criado_em"
+    ).order_by("-criado_em")[:LIMITE_LISTAS]:
+        atividades.append(AtividadeDashboard(
+            "contrato", "Contrato criado", contrato.criado_em,
+            "contratos:detalhes", contrato.id,
+        ))
+    for rescisao in AuditoriaRescisaoContrato.objects.filter(
+        condominio=condominio
+    ).only("contrato_id", "criado_em").order_by("-criado_em")[:LIMITE_LISTAS]:
+        atividades.append(AtividadeDashboard(
+            "contrato", "Contrato encerrado", rescisao.criado_em,
+            "contratos:detalhes", rescisao.contrato_id,
+        ))
+    for leitura in Leitura.objects.filter(
+        apartamento__condominio=condominio
+    ).only("id", "data_registro").order_by("-data_registro")[:LIMITE_LISTAS]:
+        atividades.append(AtividadeDashboard(
+            "leitura", "Leitura cadastrada", leitura.data_registro,
+            "leituras:lista", leitura.id,
+        ))
+    for historico in HistoricoFinanceiroFatura.objects.filter(
+        fatura__apartamento__condominio=condominio
+    ).only("fatura_id", "acao", "criado_em").order_by(
+        "-criado_em"
+    )[:LIMITE_LISTAS]:
+        tipo = (
+            "pagamento"
+            if historico.acao == historico.Acao.PAGAMENTO_CONFIRMADO
+            else "fatura"
+        )
+        atividades.append(AtividadeDashboard(
+            tipo, historico.get_acao_display(), historico.criado_em,
+            "faturas:detalhes", historico.fatura_id,
+        ))
+    atividades.sort(key=lambda item: item.ocorrido_em, reverse=True)
+    return tuple(atividades[:LIMITE_LISTAS])
 
 
 def obter_resumo_dashboard(condominio, mes, ano, data_referencia=None):
@@ -192,6 +259,43 @@ def obter_resumo_dashboard(condominio, mes, ano, data_referencia=None):
     )
     total_nao_canceladas = faturas["pendentes"] + faturas["pagas"]
 
+    mes_anterior, ano_anterior = _competencia_anterior(mes, ano)
+    receitas_mes_anterior = Fatura.objects.filter(
+        apartamento__condominio=condominio,
+        mes=mes_anterior,
+        ano=ano_anterior,
+        status__in=(Fatura.Status.PENDENTE, Fatura.Status.PAGA),
+    ).aggregate(total=Sum("valor_total", default=Decimal("0.00")))["total"]
+    variacao_receitas = None
+    if receitas_mes_anterior:
+        variacao_receitas = (
+            (faturas["faturado"] - receitas_mes_anterior)
+            * Decimal("100") / receitas_mes_anterior
+        ).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+
+    limite_proximo = data_referencia + timedelta(days=45)
+    limite_breve = data_referencia + timedelta(days=90)
+    sem_rescisao = Q(data_rescisao__isnull=True, rescindido_em__isnull=True)
+    contratos = Contrato.objects.filter(condominio=condominio).aggregate(
+        ativos=Count("id", filter=sem_rescisao & Q(
+            data_inicio__lte=data_referencia, data_termino__gte=data_referencia,
+        )),
+        proximos=Count("id", filter=sem_rescisao & Q(
+            data_inicio__lte=data_referencia,
+            data_termino__range=(data_referencia, limite_proximo),
+        )),
+        vencidos=Count(
+            "id", filter=sem_rescisao & Q(data_termino__lt=data_referencia)
+        ),
+        encerrando=Count("id", filter=sem_rescisao & Q(
+            data_inicio__lte=data_referencia,
+            data_termino__range=(data_referencia, limite_breve),
+        )),
+        ocupados=Count("apartamento_id", distinct=True, filter=sem_rescisao & Q(
+            data_inicio__lte=data_referencia, data_termino__gte=data_referencia,
+        )),
+    )
+
     leitura_periodo = Leitura.objects.filter(
         apartamento_id=OuterRef("pk"),
         mes=mes,
@@ -282,4 +386,17 @@ def obter_resumo_dashboard(condominio, mes, ano, data_referencia=None):
         lista_sem_leitura=_limitar(sem_leitura),
         lista_sem_fatura=_limitar(sem_fatura),
         lista_faturas_pendentes=_limitar(pendentes),
+        contratos_ativos=contratos["ativos"],
+        contratos_proximos_vencimento=contratos["proximos"],
+        contratos_vencidos=contratos["vencidos"],
+        contratos_encerrando_breve=contratos["encerrando"],
+        # Ainda não existe entidade de reajuste no domínio.
+        reajustes_futuros=None,
+        apartamentos_ocupados=contratos["ocupados"],
+        apartamentos_disponiveis=max(
+            total_apartamentos - contratos["ocupados"], 0
+        ),
+        variacao_receitas_percentual=variacao_receitas,
+        receitas_mes_anterior=receitas_mes_anterior,
+        atividades_recentes=_obter_atividades_recentes(condominio),
     )

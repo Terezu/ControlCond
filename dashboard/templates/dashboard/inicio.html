@@ -7,170 +7,104 @@
 <header class="dashboard-executive-header mb-5">
     <div>
         <span class="dashboard-eyebrow">Visão executiva</span>
-        <h1>Dashboard Financeiro</h1>
+        <h1>Dashboard</h1>
         <div class="d-flex flex-wrap align-items-center gap-3 mt-3">
             <span class="dashboard-competence">{{ resumo.competencia }}</span>
             {% if resumo.total_apartamentos == 0 %}
                 <span class="dashboard-health dashboard-health-neutral"><i class="bi bi-dash-circle" aria-hidden="true"></i> Aguardando cadastro</span>
-            {% elif resumo.apartamentos_sem_leitura == 0 and resumo.apartamentos_sem_fatura == 0 and resumo.faturas_pendentes == 0 %}
-                <span class="dashboard-health dashboard-health-success"><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Tudo em dia</span>
-            {% else %}
+            {% elif resumo.apartamentos_sem_leitura or resumo.apartamentos_sem_fatura or resumo.faturas_pendentes or resumo.contratos_proximos_vencimento %}
                 <span class="dashboard-health dashboard-health-warning"><i class="bi bi-exclamation-circle-fill" aria-hidden="true"></i> Existem pendências para resolver</span>
+            {% else %}
+                <span class="dashboard-health dashboard-health-success"><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Tudo em dia</span>
             {% endif %}
         </div>
     </div>
-    <button class="btn btn-outline-secondary dashboard-filter-trigger" type="button"
-            data-bs-toggle="collapse" data-bs-target="#filtroCompetencia"
-            aria-expanded="{% if form_competencia.errors %}true{% else %}false{% endif %}"
-            aria-controls="filtroCompetencia">
-        <i class="bi bi-calendar3 me-2" aria-hidden="true"></i>Alterar mês
-    </button>
+    <button class="btn btn-outline-secondary dashboard-filter-trigger" type="button" data-bs-toggle="collapse" data-bs-target="#filtroCompetencia" aria-expanded="{% if form_competencia.errors %}true{% else %}false{% endif %}" aria-controls="filtroCompetencia"><i class="bi bi-calendar3 me-2" aria-hidden="true"></i>Alterar mês</button>
 </header>
 
 <div id="filtroCompetencia" class="collapse{% if form_competencia.errors %} show{% endif %}">
-    <div class="dashboard-filter-panel mb-5">
-        <form method="get" class="row align-items-end" novalidate>
-            <div class="col-12 col-sm-4">{% include "components/form_field.html" with field=form_competencia.mes %}</div>
-            <div class="col-12 col-sm-4">{% include "components/form_field.html" with field=form_competencia.ano %}</div>
-            <div class="col-12 col-sm-4 mb-3"><button type="submit" class="btn btn-primary w-100">Aplicar mês</button></div>
-        </form>
-    </div>
+    <div class="dashboard-filter-panel mb-5"><form method="get" class="row align-items-end" novalidate>
+        <div class="col-12 col-sm-4">{% include "components/form_field.html" with field=form_competencia.mes %}</div>
+        <div class="col-12 col-sm-4">{% include "components/form_field.html" with field=form_competencia.ano %}</div>
+        <div class="col-12 col-sm-4 mb-3"><button type="submit" class="btn btn-primary w-100">Aplicar mês</button></div>
+    </form></div>
 </div>
 
-<section class="mb-5" aria-labelledby="titulo-visao-principal">
-    <h2 id="titulo-visao-principal" class="visually-hidden">Visão principal</h2>
-    <div class="row g-4">
-        <div class="col-12 col-md-6 col-xl-3">
-            <article class="card shadow-sm dashboard-hero-card dashboard-accent-primary h-100">
-                <div class="card-body">
-                    <span class="dashboard-card-icon"><i class="bi bi-graph-up-arrow" aria-hidden="true"></i></span>
-                    <span class="dashboard-hero-label">Receitas previstas</span>
-                    <p class="dashboard-hero-value">{{ resumo.receitas_previstas|moeda_br }}</p>
-                    <small>Total não cancelado do mês</small>
-                </div>
-            </article>
-        </div>
-        <div class="col-12 col-md-6 col-xl-3">
-            <article class="card shadow-sm dashboard-hero-card dashboard-accent-success h-100">
-                <div class="card-body">
-                    <span class="dashboard-card-icon"><i class="bi bi-check2-circle" aria-hidden="true"></i></span>
-                    <span class="dashboard-hero-label">Receitas recebidas</span>
-                    <p class="dashboard-hero-value">{{ resumo.receitas_recebidas|moeda_br }}</p>
-                    <small>Valores finais confirmados</small>
-                </div>
-            </article>
-        </div>
-        <div class="col-12 col-md-6 col-xl-3">
-            <article class="card shadow-sm dashboard-hero-card dashboard-accent-warning h-100">
-                <div class="card-body">
-                    <span class="dashboard-card-icon"><i class="bi bi-hourglass-split" aria-hidden="true"></i></span>
-                    <span class="dashboard-hero-label">Receitas pendentes</span>
-                    <p class="dashboard-hero-value">{{ resumo.receitas_pendentes|moeda_br }}</p>
-                    <a href="{{ links.faturas_pendentes }}">Ver faturas pendentes <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
-                </div>
-            </article>
-        </div>
-        <div class="col-12 col-md-6 col-xl-3">
-            <article class="card shadow-sm dashboard-hero-card dashboard-accent-warning h-100">
-                <div class="card-body">
-                    <span class="dashboard-card-icon"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i></span>
-                    <span class="dashboard-hero-label">Receitas vencidas</span>
-                    <p class="dashboard-hero-value">{{ resumo.receitas_vencidas|moeda_br }}</p>
-                    <a href="{{ links.faturas_pendentes }}">{{ resumo.faturas_vencidas }} faturas vencidas <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
-                </div>
-            </article>
-        </div>
-    </div>
-</section>
-
-{% if resumo.total_apartamentos == 0 %}
-    <div class="alert alert-info d-flex align-items-center gap-2 mb-5" role="status"><i class="bi bi-info-circle" aria-hidden="true"></i><span>Nenhum apartamento cadastrado. Cadastre uma unidade para iniciar o acompanhamento.</span></div>
-{% elif resumo.apartamentos_com_leitura == 0 and resumo.apartamentos_com_fatura == 0 %}
-    <div class="alert alert-info d-flex align-items-center gap-2 mb-5" role="status"><i class="bi bi-info-circle" aria-hidden="true"></i><span>Este mês ainda não possui leituras nem faturas.</span></div>
-{% endif %}
-
-<section class="row g-4 mb-5" aria-label="Situação e pendências">
-    <div class="col-12 col-lg-7">
-        <article class="card shadow-sm dashboard-panel h-100">
-            <div class="card-body p-4 p-xl-5">
-                <div class="dashboard-section-heading">
-                    <div><span class="dashboard-eyebrow">Visão geral</span><h2>Situação das faturas</h2></div>
-                    <i class="bi bi-pie-chart" aria-hidden="true"></i>
-                </div>
-                {% if resumo.faturas_pagas or resumo.faturas_pendentes or resumo.faturas_canceladas %}
-                    <div class="dashboard-status-bar" aria-label="Distribuição visual das faturas">
-                        {% if resumo.faturas_pagas %}<span class="is-paid" style="--status-weight: {{ resumo.faturas_pagas }}"></span>{% endif %}
-                        {% if resumo.faturas_pendentes %}<span class="is-pending" style="--status-weight: {{ resumo.faturas_pendentes }}"></span>{% endif %}
-                        {% if resumo.faturas_canceladas %}<span class="is-cancelled" style="--status-weight: {{ resumo.faturas_canceladas }}"></span>{% endif %}
-                    </div>
-                {% else %}
-                    <div class="dashboard-status-bar is-empty" aria-label="Nenhuma fatura no mês"></div>
-                {% endif %}
-                <div class="dashboard-status-legend">
-                    <a href="{{ links.faturas_pagas }}"><span><i class="is-paid" aria-hidden="true"></i>Pagas</span><strong>{{ resumo.faturas_pagas }}</strong></a>
-                    <a href="{{ links.faturas_pendentes }}"><span><i class="is-pending" aria-hidden="true"></i>Pendentes</span><strong>{{ resumo.faturas_pendentes }}</strong></a>
-                    <a href="{{ links.faturas_pendentes }}"><span><i class="is-overdue" aria-hidden="true"></i>Vencidas</span><strong>{{ resumo.faturas_vencidas }}</strong></a>
-                    <a href="{{ links.faturas_canceladas }}"><span><i class="is-cancelled" aria-hidden="true"></i>Canceladas</span><strong>{{ resumo.faturas_canceladas }}</strong></a>
-                    <a href="{% url 'faturas:fechamento_mensal' %}"><span><i class="is-missing" aria-hidden="true"></i>Sem fatura</span><strong>{{ resumo.apartamentos_sem_fatura }}</strong></a>
-                </div>
-            </div>
-        </article>
-    </div>
-    <div class="col-12 col-lg-5">
-        <article class="card shadow-sm dashboard-panel h-100">
-            <div class="card-body p-4 p-xl-5">
-                <div class="dashboard-section-heading">
-                    <div><span class="dashboard-eyebrow">Atenção</span><h2>Pendências operacionais</h2></div>
-                    <i class="bi bi-exclamation-diamond" aria-hidden="true"></i>
-                </div>
-                <div class="dashboard-attention-list">
-                    <div><span class="dashboard-attention-icon"><i class="bi bi-droplet" aria-hidden="true"></i></span><span><strong>{{ resumo.apartamentos_sem_leitura }}</strong><small>Apartamentos sem leitura</small></span><button class="btn btn-sm btn-link" type="button" data-bs-toggle="collapse" data-bs-target="#detalhesSemLeitura" aria-expanded="false" aria-controls="detalhesSemLeitura">Resolver <i class="bi bi-arrow-right" aria-hidden="true"></i></button></div>
-                    <div><span class="dashboard-attention-icon"><i class="bi bi-file-earmark-x" aria-hidden="true"></i></span><span><strong>{{ resumo.apartamentos_sem_fatura }}</strong><small>Apartamentos sem fatura</small></span><button class="btn btn-sm btn-link" type="button" data-bs-toggle="collapse" data-bs-target="#detalhesSemFatura" aria-expanded="false" aria-controls="detalhesSemFatura">Resolver <i class="bi bi-arrow-right" aria-hidden="true"></i></button></div>
-                    <div><span class="dashboard-attention-icon"><i class="bi bi-clock" aria-hidden="true"></i></span><span><strong>{{ resumo.faturas_pendentes }}</strong><small>Faturas pendentes</small></span><button class="btn btn-sm btn-link" type="button" data-bs-toggle="collapse" data-bs-target="#detalhesFaturasPendentes" aria-expanded="false" aria-controls="detalhesFaturasPendentes">Ver faturas <i class="bi bi-arrow-right" aria-hidden="true"></i></button></div>
-                </div>
-            </div>
-        </article>
-    </div>
-</section>
-
-<section aria-label="Detalhes das pendências" class="mb-5">
-    <div id="detalhesSemLeitura" class="collapse dashboard-detail-collapse"><div class="card card-body mb-3"><h2 class="h6">Apartamentos sem leitura</h2>{% if resumo.lista_sem_leitura.itens %}<div class="list-group list-group-flush">{% for apartamento in resumo.lista_sem_leitura.itens %}<a class="list-group-item list-group-item-action px-0" href="{% url 'leituras:nova' apartamento.id %}">{{ apartamento }}</a>{% endfor %}</div>{% if resumo.lista_sem_leitura.tem_mais %}<a class="small mt-2" href="{% url 'apartamentos:lista' %}">Ver todos</a>{% endif %}{% else %}<p class="text-secondary mb-0">Nenhum apartamento sem leitura.</p>{% endif %}</div></div>
-    <div id="detalhesSemFatura" class="collapse dashboard-detail-collapse"><div class="card card-body mb-3"><h2 class="h6">Apartamentos sem fatura</h2>{% if resumo.lista_sem_fatura.itens %}<div class="list-group list-group-flush">{% for apartamento in resumo.lista_sem_fatura.itens %}{% if apartamento.leitura_competencia_id %}<a class="list-group-item list-group-item-action px-0" href="{% url 'faturas:gerar' %}?leitura={{ apartamento.leitura_competencia_id }}">{{ apartamento }}</a>{% else %}<a class="list-group-item list-group-item-action px-0" href="{% url 'leituras:nova' apartamento.id %}">{{ apartamento }}</a>{% endif %}{% endfor %}</div>{% if resumo.lista_sem_fatura.tem_mais %}<a class="small mt-2" href="{% url 'faturas:fechamento_mensal' %}">Ver todos</a>{% endif %}{% else %}<p class="text-secondary mb-0">Todos os apartamentos possuem fatura.</p>{% endif %}</div></div>
-    <div id="detalhesFaturasPendentes" class="collapse dashboard-detail-collapse"><div class="card card-body"><h2 class="h6">Faturas pendentes</h2>{% if resumo.lista_faturas_pendentes.itens %}<div class="list-group list-group-flush">{% for fatura in resumo.lista_faturas_pendentes.itens %}<a class="list-group-item list-group-item-action px-0" href="{% url 'faturas:detalhes' fatura.id %}">{{ fatura.apartamento }} — {{ fatura.valor_total|moeda_br }}</a>{% endfor %}</div>{% if resumo.lista_faturas_pendentes.tem_mais %}<a class="small mt-2" href="{{ links.faturas_pendentes }}">Ver todos</a>{% endif %}{% else %}<p class="text-secondary mb-0">Nenhuma fatura pendente.</p>{% endif %}</div></div>
-</section>
-
-<section class="mb-5" aria-labelledby="acoes-rapidas">
-    <div class="dashboard-section-title"><div><span class="dashboard-eyebrow">Navegação</span><h2 id="acoes-rapidas">Ações rápidas</h2></div></div>
+<section class="mb-5" aria-labelledby="indicadores-rapidos">
+    <div class="dashboard-section-title"><div><span class="dashboard-eyebrow">Acompanhamento</span><h2 id="indicadores-rapidos">Indicadores rápidos</h2></div></div>
     <div class="row g-3">
-        <div class="col-12 col-sm-6 col-lg-3"><a class="dashboard-quick-action" href="{% url 'apartamentos:lista' %}"><i class="bi bi-buildings" aria-hidden="true"></i><span>Apartamentos</span><i class="bi bi-arrow-up-right" aria-hidden="true"></i></a></div>
-        <div class="col-12 col-sm-6 col-lg-3"><a class="dashboard-quick-action" href="{% url 'leituras:lista' %}?mes={{ resumo.mes }}&ano={{ resumo.ano }}"><i class="bi bi-droplet" aria-hidden="true"></i><span>Leituras</span><i class="bi bi-arrow-up-right" aria-hidden="true"></i></a></div>
-        <div class="col-12 col-sm-6 col-lg-3"><a class="dashboard-quick-action" href="{% url 'faturas:lista' %}?mes={{ resumo.mes }}&ano={{ resumo.ano }}"><i class="bi bi-receipt" aria-hidden="true"></i><span>Faturas</span><i class="bi bi-arrow-up-right" aria-hidden="true"></i></a></div>
-        <div class="col-12 col-sm-6 col-lg-3"><a class="dashboard-quick-action" href="{% url 'faturas:fechamento_mensal' %}"><i class="bi bi-calendar2-check" aria-hidden="true"></i><span>Fechamento Mensal</span><i class="bi bi-arrow-up-right" aria-hidden="true"></i></a></div>
+        {% include "dashboard/partials/indicador.html" with titulo="Contratos ativos" valor=resumo.contratos_ativos icone="bi-file-earmark-check" acento="primary" link=links.contratos %}
+        {% include "dashboard/partials/indicador.html" with titulo="Próximos do vencimento" valor=resumo.contratos_proximos_vencimento icone="bi-calendar-event" acento="warning" link=links.contratos %}
+        {% include "dashboard/partials/indicador.html" with titulo="Contratos vencidos" valor=resumo.contratos_vencidos icone="bi-file-earmark-x" acento="danger" link=links.contratos %}
+        {% include "dashboard/partials/indicador.html" with titulo="Valor previsto do mês" valor=resumo.receitas_previstas|moeda_br icone="bi-graph-up-arrow" acento="primary" %}
+        {% include "dashboard/partials/indicador.html" with titulo="Valor recebido" valor=resumo.receitas_recebidas|moeda_br icone="bi-check2-circle" acento="success" link=links.faturas_pagas %}
+        {% include "dashboard/partials/indicador.html" with titulo="Valor pendente" valor=resumo.receitas_pendentes|moeda_br icone="bi-hourglass-split" acento="warning" link=links.faturas_pendentes %}
+        {% include "dashboard/partials/indicador.html" with titulo="Faturas em atraso" valor=resumo.faturas_vencidas icone="bi-exclamation-triangle" acento="danger" link=links.faturas_pendentes %}
     </div>
 </section>
 
-<section class="card shadow-sm dashboard-closing-card mb-5">
-    <div class="dashboard-closing-icon"><i class="bi bi-calendar2-check" aria-hidden="true"></i></div>
-    <div class="flex-grow-1"><span class="dashboard-eyebrow">Ação do mês</span><h2>Fechamento mensal</h2><p>{{ resumo.competencia }}</p><div class="dashboard-closing-stats"><span><strong>{{ resumo.apartamentos_sem_leitura }}</strong> sem leitura</span><span><strong>{{ resumo.apartamentos_sem_fatura }}</strong> sem fatura</span></div></div>
-    <a class="btn btn-primary" href="{% url 'faturas:fechamento_mensal' %}">Executar fechamento <i class="bi bi-arrow-right ms-2" aria-hidden="true"></i></a>
+{% if resumo.total_apartamentos == 0 %}<div class="alert alert-info mb-5" role="status"><i class="bi bi-info-circle me-2" aria-hidden="true"></i>Nenhum apartamento cadastrado. Cadastre uma unidade para iniciar o acompanhamento.</div>{% endif %}
+
+<section class="card shadow-sm dashboard-panel mb-5" aria-labelledby="resumo-financeiro">
+    <div class="card-body p-4 p-xl-5">
+        <div class="dashboard-section-heading">
+            <div><span class="dashboard-eyebrow">Visão do mês</span><h2 id="resumo-financeiro">Resumo Financeiro</h2></div>
+            <a class="btn btn-outline-primary btn-sm" href="{% url 'dashboard:financeiro' %}">Ver Dashboard Financeiro <i class="bi bi-arrow-right ms-1" aria-hidden="true"></i></a>
+        </div>
+        <div class="dashboard-details-grid dashboard-summary-grid p-0 border-0">
+            <div><span class="detail-label">Receitas previstas</span><p class="detail-value">{{ resumo.receitas_previstas|moeda_br }}</p></div>
+            <div><span class="detail-label">Receitas recebidas</span><p class="detail-value">{{ resumo.receitas_recebidas|moeda_br }}</p></div>
+            <div><span class="detail-label">Valor pendente</span><p class="detail-value">{{ resumo.valor_pendente|moeda_br }}</p></div>
+            <div><span class="detail-label">Inadimplência</span><p class="detail-value">{{ resumo.taxa_inadimplencia|percentual }}</p></div>
+        </div>
+        <div class="mt-4 pt-3 border-top small text-secondary">
+            {% if resumo.variacao_receitas_percentual is not None %}Receita prevista <strong class="text-body">{{ resumo.variacao_receitas_percentual|percentual }}</strong> em relação ao mês anterior ({{ resumo.receitas_mes_anterior|moeda_br }}).{% else %}Comparação com o mês anterior indisponível por ausência de base financeira.{% endif %}
+        </div>
+    </div>
 </section>
 
-<section class="mb-5 dashboard-details-section">
-    <button class="btn dashboard-details-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#indicadoresDetalhados" aria-expanded="false" aria-controls="indicadoresDetalhados">
-        <span><i class="bi bi-sliders me-2" aria-hidden="true"></i>Indicadores detalhados</span><span class="small">Mostrar indicadores <i class="bi bi-chevron-down ms-1" aria-hidden="true"></i></span>
-    </button>
-    <div id="indicadoresDetalhados" class="collapse"><div class="dashboard-details-grid">
-        <div><span class="detail-label">Total de apartamentos</span><p class="detail-value">{{ resumo.total_apartamentos }}</p></div>
-        <div><span class="detail-label">Com leitura</span><p class="detail-value">{{ resumo.apartamentos_com_leitura }}</p></div>
-        <div><span class="detail-label">Com fatura</span><p class="detail-value">{{ resumo.apartamentos_com_fatura }}</p></div>
-        <div><span class="detail-label">Valor cancelado</span><p class="detail-value">{{ resumo.valor_cancelado|moeda_br }}</p></div>
-        <div><span class="detail-label">Cobertura de leituras</span><p class="detail-value">{{ resumo.cobertura_leituras|percentual }}</p></div>
-        <div><span class="detail-label">Cobertura de faturamento</span><p class="detail-value">{{ resumo.cobertura_faturamento|percentual }}</p></div>
-        <div><span class="detail-label">Taxa de pagamento</span><p class="detail-value">{{ resumo.taxa_pagamento|percentual }}</p></div>
-        <div><span class="detail-label">Inadimplência</span><p class="detail-value">{{ resumo.taxa_inadimplencia|percentual }}</p></div>
-        <div><span class="detail-label">Bonificações concedidas</span><p class="detail-value">{{ resumo.total_bonificacoes_concedidas|moeda_br }}</p></div>
-        <div><span class="detail-label">Multas arrecadadas</span><p class="detail-value">{{ resumo.total_multas_arrecadadas|moeda_br }}</p></div>
-        <div><span class="detail-label">Receita líquida do período</span><p class="detail-value">{{ resumo.receita_liquida|moeda_br }}</p></div>
+<section class="mb-5" aria-labelledby="resumo-contratos">
+    <div class="dashboard-section-title"><div><span class="dashboard-eyebrow">Ocupação e vigência</span><h2 id="resumo-contratos">Contratos</h2></div></div>
+    <div class="card shadow-sm dashboard-panel"><div class="card-body p-4"><div class="dashboard-details-grid dashboard-contract-grid p-0 border-0">
+        <div><span class="detail-label">Contratos ativos</span><p class="detail-value">{{ resumo.contratos_ativos }}</p></div>
+        <div><span class="detail-label">Próximos do vencimento</span><p class="detail-value">{{ resumo.contratos_proximos_vencimento }}</p></div>
+        <div><span class="detail-label">Encerrando em breve</span><p class="detail-value">{{ resumo.contratos_encerrando_breve }}</p></div>
+        <div><span class="detail-label">Reajustes futuros</span><p class="detail-value">{% if resumo.reajustes_futuros is not None %}{{ resumo.reajustes_futuros }}{% else %}<span class="fs-6 text-secondary">Integração futura</span>{% endif %}</p></div>
+        <div><span class="detail-label">Apartamentos ocupados</span><p class="detail-value">{{ resumo.apartamentos_ocupados }}</p></div>
+        <div><span class="detail-label">Apartamentos disponíveis</span><p class="detail-value">{{ resumo.apartamentos_disponiveis }}</p></div>
+    </div></div></div>
+</section>
+
+<section class="mb-5" aria-labelledby="pendencias">
+    <div class="dashboard-section-title"><div><span class="dashboard-eyebrow">Atenção</span><h2 id="pendencias">Pendências</h2></div></div>
+    <div class="card shadow-sm dashboard-panel"><div class="card-body p-4"><div class="dashboard-pendency-grid">
+        <a href="{{ links.contratos }}"><span>Contratos próximos do vencimento</span><span class="badge text-bg-warning">{{ resumo.contratos_proximos_vencimento }}</span></a>
+        <a href="{{ links.contratos }}"><span>Contratos vencidos</span><span class="badge text-bg-danger">{{ resumo.contratos_vencidos }}</span></a>
+        <button type="button" data-bs-toggle="collapse" data-bs-target="#detalhesSemLeitura"><span>Leituras não realizadas</span><span class="badge text-bg-warning">{{ resumo.apartamentos_sem_leitura }}</span></button>
+        <button type="button" data-bs-toggle="collapse" data-bs-target="#detalhesSemFatura"><span>Contratos sem geração de cobrança</span><span class="badge text-bg-secondary">{{ resumo.apartamentos_sem_fatura }}</span></button>
+        <button type="button" data-bs-toggle="collapse" data-bs-target="#detalhesFaturasPendentes"><span>Faturas pendentes</span><span class="badge text-bg-warning">{{ resumo.faturas_pendentes }}</span></button>
+        <a href="{{ links.faturas_pendentes }}"><span>Faturas vencidas</span><span class="badge text-bg-danger">{{ resumo.faturas_vencidas }}</span></a>
+    </div></div></div>
+    <div id="detalhesSemLeitura" class="collapse dashboard-detail-collapse mt-3"><div class="card card-body"><h3 class="h6">Apartamentos sem leitura</h3>{% for apartamento in resumo.lista_sem_leitura.itens %}<a class="list-group-item py-2" href="{% url 'leituras:nova' apartamento.id %}">{{ apartamento }}</a>{% empty %}<p class="text-secondary mb-0">Nenhum apartamento sem leitura.</p>{% endfor %}</div></div>
+    <div id="detalhesSemFatura" class="collapse dashboard-detail-collapse mt-3"><div class="card card-body"><h3 class="h6">Apartamentos sem fatura</h3>{% for apartamento in resumo.lista_sem_fatura.itens %}{% if apartamento.leitura_competencia_id %}<a class="list-group-item py-2" href="{% url 'faturas:gerar' %}?leitura={{ apartamento.leitura_competencia_id }}">{{ apartamento }}</a>{% else %}<a class="list-group-item py-2" href="{% url 'leituras:nova' apartamento.id %}">{{ apartamento }}</a>{% endif %}{% empty %}<p class="text-secondary mb-0">Todos os apartamentos possuem fatura.</p>{% endfor %}</div></div>
+    <div id="detalhesFaturasPendentes" class="collapse dashboard-detail-collapse mt-3"><div class="card card-body"><h3 class="h6">Faturas pendentes</h3>{% for fatura in resumo.lista_faturas_pendentes.itens %}<a class="list-group-item py-2" href="{% url 'faturas:detalhes' fatura.id %}">{{ fatura.apartamento }} — {{ fatura.valor_total|moeda_br }}</a>{% empty %}<p class="text-secondary mb-0">Nenhuma fatura pendente.</p>{% endfor %}</div></div>
+</section>
+
+<section class="mb-5" aria-labelledby="atividades-recentes">
+    <div class="dashboard-section-title"><div><span class="dashboard-eyebrow">Histórico</span><h2 id="atividades-recentes">Atividades Recentes</h2></div></div>
+    <div class="card shadow-sm dashboard-panel"><div class="card-body p-4">
+        {% if resumo.atividades_recentes %}<ol class="dashboard-timeline mb-0">{% for atividade in resumo.atividades_recentes %}<li><span class="dashboard-timeline-icon"><i class="bi {% if atividade.tipo == 'contrato' %}bi-file-earmark-text{% elif atividade.tipo == 'leitura' %}bi-droplet{% elif atividade.tipo == 'pagamento' %}bi-cash-coin{% else %}bi-receipt{% endif %}" aria-hidden="true"></i></span><div><strong>{{ atividade.descricao }}</strong><time datetime="{{ atividade.ocorrido_em|date:'c' }}">{{ atividade.ocorrido_em|date:"d/m/Y H:i" }}</time></div>{% if atividade.tipo == 'leitura' %}<a href="{% url 'leituras:lista' %}">Ver</a>{% elif atividade.tipo == 'contrato' %}<a href="{% url 'contratos:detalhes' atividade.objeto_id %}">Ver</a>{% else %}<a href="{% url 'faturas:detalhes' atividade.objeto_id %}">Ver</a>{% endif %}</li>{% endfor %}</ol>{% else %}<p class="text-secondary mb-0">Nenhuma atividade registrada até o momento.</p>{% endif %}
     </div></div>
 </section>
+
+<section class="mb-5" aria-labelledby="acoes-rapidas"><div class="dashboard-section-title"><div><span class="dashboard-eyebrow">Navegação</span><h2 id="acoes-rapidas">Ações rápidas</h2></div></div><div class="row g-3">
+    <div class="col-12 col-sm-6 col-lg-3"><a class="dashboard-quick-action" href="{% url 'apartamentos:lista' %}"><i class="bi bi-buildings"></i><span>Apartamentos</span><i class="bi bi-arrow-up-right"></i></a></div>
+    <div class="col-12 col-sm-6 col-lg-3"><a class="dashboard-quick-action" href="{% url 'leituras:lista' %}?mes={{ resumo.mes }}&ano={{ resumo.ano }}"><i class="bi bi-droplet"></i><span>Leituras</span><i class="bi bi-arrow-up-right"></i></a></div>
+    <div class="col-12 col-sm-6 col-lg-3"><a class="dashboard-quick-action" href="{% url 'faturas:lista' %}?mes={{ resumo.mes }}&ano={{ resumo.ano }}"><i class="bi bi-receipt"></i><span>Faturas</span><i class="bi bi-arrow-up-right"></i></a></div>
+    <div class="col-12 col-sm-6 col-lg-3"><a class="dashboard-quick-action" href="{% url 'faturas:fechamento_mensal' %}"><i class="bi bi-calendar2-check"></i><span>Fechamento Mensal</span><i class="bi bi-arrow-up-right"></i></a></div>
+</div></section>
+
+<section class="mb-5 dashboard-details-section"><button class="btn dashboard-details-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#indicadoresDetalhados" aria-expanded="false"><span><i class="bi bi-sliders me-2"></i>Indicadores detalhados</span><span class="small">Mostrar indicadores <i class="bi bi-chevron-down ms-1"></i></span></button><div id="indicadoresDetalhados" class="collapse"><div class="dashboard-details-grid">
+    <div><span class="detail-label">Total de apartamentos</span><p class="detail-value">{{ resumo.total_apartamentos }}</p></div><div><span class="detail-label">Com leitura</span><p class="detail-value">{{ resumo.apartamentos_com_leitura }}</p></div><div><span class="detail-label">Com fatura</span><p class="detail-value">{{ resumo.apartamentos_com_fatura }}</p></div><div><span class="detail-label">Valor cancelado</span><p class="detail-value">{{ resumo.valor_cancelado|moeda_br }}</p></div><div><span class="detail-label">Taxa de pagamento</span><p class="detail-value">{{ resumo.taxa_pagamento|percentual }}</p></div><div><span class="detail-label">Bonificações concedidas</span><p class="detail-value">{{ resumo.total_bonificacoes_concedidas|moeda_br }}</p></div><div><span class="detail-label">Multas arrecadadas</span><p class="detail-value">{{ resumo.total_multas_arrecadadas|moeda_br }}</p></div><div><span class="detail-label">Receita líquida do período</span><p class="detail-value">{{ resumo.receita_liquida|moeda_br }}</p></div><div><span class="detail-label">Cobertura de faturamento</span><p class="detail-value">{{ resumo.cobertura_faturamento|percentual }}</p></div>
+</div></div></section>
 {% endblock %}

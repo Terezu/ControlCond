@@ -163,6 +163,17 @@ class DashboardAccessTests(TestCase):
 
 
 class DashboardResumoTests(TestCase):
+    def autenticar_operador(self, usuario):
+        VinculoUsuarioCondominio.objects.update_or_create(
+            usuario=usuario,
+            condominio=Condominio.objects.get(),
+            defaults={
+                "papel": VinculoUsuarioCondominio.Papel.ADMINISTRADOR,
+                "ativo": True,
+            },
+        )
+        self.client.force_login(usuario)
+
     def criar_apartamento(self, numero, *, com_leitura=False):
         apartamento = Apartamento.objects.create(numero=numero)
         if com_leitura:
@@ -387,10 +398,12 @@ class DashboardResumoTests(TestCase):
         self.assertEqual(len(resumo.lista_sem_fatura.itens), 5)
         self.assertTrue(resumo.lista_sem_fatura.tem_mais)
 
-    def test_service_executa_cinco_queries_de_dominio(self):
+    def test_service_executa_consultas_limitadas_de_dominio(self):
         self.criar_apartamento("101", com_leitura=True)
 
-        with self.assertNumQueries(6):
+        # Uma consulta obtém o condomínio e as demais agregam os blocos do
+        # dashboard e as quatro fontes reais da timeline.
+        with self.assertNumQueries(12):
             obter_resumo_dashboard(Condominio.objects.get(), 7, 2026)
 
     def test_interface_exibe_cards_listas_links_e_moeda_brasileira(self):
@@ -399,7 +412,7 @@ class DashboardResumoTests(TestCase):
             password="senha-de-teste",
             is_staff=True,
         )
-        self.client.force_login(usuario)
+        self.autenticar_operador(usuario)
         apartamento = self.criar_apartamento(
             "701",
             com_leitura=True,
@@ -422,13 +435,12 @@ class DashboardResumoTests(TestCase):
             "Com fatura",
             "Apartamentos sem fatura",
             "Faturas pendentes",
-            "Pagas",
-            "Vencidas",
-            "Canceladas",
             "Receitas previstas",
             "Receitas recebidas",
-            "Receitas pendentes",
-            "Receitas vencidas",
+            "Valor pendente",
+            "Contratos ativos",
+            "Contratos vencidos",
+            "Atividades Recentes",
             "Valor cancelado",
             "Taxa de pagamento",
             "Inadimplência",
@@ -451,7 +463,7 @@ class DashboardResumoTests(TestCase):
         self.assertContains(
             resposta,
             'class="dashboard-hero-value"',
-            count=4,
+            count=7,
         )
         self.assertContains(
             resposta,
@@ -464,8 +476,8 @@ class DashboardResumoTests(TestCase):
         self.assertContains(resposta, "Visão executiva")
         self.assertContains(resposta, "Ações rápidas")
         self.assertContains(resposta, 'class="dashboard-quick-action"', count=4)
-        self.assertContains(resposta, 'class="dashboard-status-bar"')
-        self.assertContains(resposta, "Fechamento mensal")
+        self.assertContains(resposta, "Resumo Financeiro")
+        self.assertContains(resposta, "Ver Dashboard Financeiro")
 
     def test_lista_sem_fatura_aponta_para_leitura_quando_existir(self):
         usuario = get_user_model().objects.create_user(
@@ -473,7 +485,7 @@ class DashboardResumoTests(TestCase):
             password="senha-de-teste",
             is_staff=True,
         )
-        self.client.force_login(usuario)
+        self.autenticar_operador(usuario)
         apartamento = self.criar_apartamento(
             "702",
             com_leitura=True,
@@ -496,7 +508,7 @@ class DashboardResumoTests(TestCase):
             password="senha-de-teste",
             is_staff=True,
         )
-        self.client.force_login(usuario)
+        self.autenticar_operador(usuario)
 
         resposta = self.client.get(
             reverse("dashboard:inicio"),
@@ -504,5 +516,5 @@ class DashboardResumoTests(TestCase):
         )
 
         self.assertContains(resposta, "Nenhum apartamento cadastrado")
-        self.assertContains(resposta, "R$ 0,00", count=8)
+        self.assertContains(resposta, "R$ 0,00", count=10)
 

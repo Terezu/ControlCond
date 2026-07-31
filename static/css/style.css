@@ -269,6 +269,7 @@ textarea {
 .dashboard-accent-primary { --dashboard-accent: var(--controlcond-primary); --dashboard-tint: rgb(var(--controlcond-primary-rgb) / 10%); }
 .dashboard-accent-success { --dashboard-accent: #2da771; --dashboard-tint: rgb(45 167 113 / 10%); }
 .dashboard-accent-warning { --dashboard-accent: #d99a25; --dashboard-tint: rgb(217 154 37 / 12%); }
+.dashboard-accent-danger { --dashboard-accent: #b42318; --dashboard-tint: rgb(180 35 24 / 10%); }
 
 .dashboard-hero-card .card-body { padding: 1.75rem; }
 
@@ -426,6 +427,21 @@ textarea {
 .dashboard-details-toggle:hover { background: var(--bs-tertiary-bg); }
 .dashboard-details-grid { border-top: 1px solid var(--bs-border-color); display: grid; gap: 2rem; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 1.75rem; }
 
+.dashboard-summary-grid,
+.dashboard-contract-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.dashboard-contract-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.dashboard-pendency-grid { display: grid; gap: 0.75rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.dashboard-pendency-grid a,
+.dashboard-pendency-grid button { align-items: center; background: var(--bs-tertiary-bg); border: 0; border-radius: 0.75rem; color: var(--bs-body-color); display: flex; justify-content: space-between; padding: 0.85rem 1rem; text-align: left; text-decoration: none; }
+.dashboard-pendency-grid a:hover,
+.dashboard-pendency-grid button:hover { color: var(--controlcond-primary); }
+.dashboard-timeline { list-style: none; padding: 0; }
+.dashboard-timeline li { align-items: center; border-bottom: 1px solid var(--bs-border-color); display: grid; gap: 1rem; grid-template-columns: auto 1fr auto; padding: 0.9rem 0; }
+.dashboard-timeline li:last-child { border-bottom: 0; }
+.dashboard-timeline-icon { align-items: center; background: rgb(var(--controlcond-primary-rgb) / 8%); border-radius: 50%; color: var(--controlcond-primary); display: flex; height: 2.4rem; justify-content: center; width: 2.4rem; }
+.dashboard-timeline time { color: var(--bs-secondary-color); display: block; font-size: 0.78rem; margin-top: 0.2rem; }
+.dashboard-timeline a { font-size: 0.8rem; text-decoration: none; }
+
 .dashboard-details-toggle[aria-expanded="true"] .bi {
     transform: rotate(180deg);
 }
@@ -441,7 +457,10 @@ textarea {
     .dashboard-filter-trigger,
     .dashboard-closing-card .btn { width: 100%; }
     .dashboard-status-legend,
-    .dashboard-details-grid { grid-template-columns: 1fr; }
+    .dashboard-details-grid,
+    .dashboard-summary-grid,
+    .dashboard-contract-grid,
+    .dashboard-pendency-grid { grid-template-columns: 1fr; }
     .dashboard-attention-list > div { grid-template-columns: auto 1fr; }
     .dashboard-attention-list button { grid-column: 2; justify-self: start; }
     .dashboard-details-toggle > span:last-child { font-size: 0; }

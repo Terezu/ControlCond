@@ -47,6 +47,7 @@ def dashboard(request):
     parametros = {"mes": resumo.mes, "ano": resumo.ano}
     links = {
         "apartamentos": reverse("apartamentos:lista"),
+        "contratos": reverse("contratos:lista"),
         "faturas_pendentes": (
             f"{base_faturas}?{urlencode({
                 **parametros,
@@ -75,3 +76,11 @@ def dashboard(request):
             "links": links,
         },
     )
+
+
+@login_required
+@never_cache
+@require_safe
+def dashboard_financeiro(request):
+    """Rota reservada para o futuro módulo de análises financeiras."""
+    return render(request, "dashboard/financeiro_em_breve.html")
