@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Detalhes do usuário | ControlCond{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start gap-3 mb-4">
+    <div><h1 class="h3 mb-1">{{ usuario_detalhe.get_full_name|default:usuario_detalhe.username }}</h1><p class="text-secondary mb-0">{{ usuario_detalhe.username }} · {{ usuario_detalhe.email|default:"Sem e-mail" }}</p></div>
+    {% if pode_editar_acesso %}<a class="btn btn-primary" href="{% url 'usuarios:editar_acesso' vinculo_atual.id %}">Editar acesso</a>{% endif %}
+</div>
+<section class="card shadow-sm mb-4"><div class="card-body"><dl class="row mb-0">
+    <dt class="col-sm-3">Conta</dt><dd class="col-sm-9">{% if usuario_detalhe.is_active %}Ativa{% else %}Inativa{% endif %}</dd>
+    <dt class="col-sm-3">Último acesso</dt><dd class="col-sm-9">{{ usuario_detalhe.last_login|date:"d/m/Y H:i"|default:"Nunca" }}</dd>
+    <dt class="col-sm-3">Data de criação</dt><dd class="col-sm-9">{{ usuario_detalhe.date_joined|date:"d/m/Y H:i" }}</dd>
+</dl></div></section>
+<section class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Condomínios e cargos</h2></div><div class="table-responsive"><table class="table mb-0"><thead><tr><th>Condomínio</th><th>Cargo</th><th>Situação</th></tr></thead><tbody>
+{% for vinculo in vinculos %}<tr><td>{{ vinculo.condominio.nome }}</td><td>{{ vinculo.get_papel_display }}</td><td>{% if vinculo.ativo %}Ativo{% else %}Inativo{% endif %}</td></tr>{% endfor %}
+</tbody></table></div></section>
+{% endblock %}

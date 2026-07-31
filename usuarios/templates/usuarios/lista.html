@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Usuários e acessos | ControlCond{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start gap-3 mb-4">
+    <div><h1 class="h3 mb-1">Usuários e acessos</h1><p class="text-secondary mb-0">Gerencie as contas vinculadas ao condomínio ativo.</p></div>
+    <a class="btn btn-primary" href="{% url 'usuarios:novo' %}">Cadastrar usuário</a>
+</div>
+<form method="get" class="card shadow-sm mb-4"><div class="card-body row g-3">
+    <div class="col-md-5"><label class="form-label" for="busca">Busca</label><input class="form-control" id="busca" name="busca" value="{{ filtros.busca }}" placeholder="Nome, usuário ou e-mail"></div>
+    <div class="col-md-3"><label class="form-label" for="papel">Cargo</label><select class="form-select" id="papel" name="papel"><option value="">Todos</option>{% for valor, rotulo in papeis %}<option value="{{ valor }}" {% if filtros.papel == valor %}selected{% endif %}>{{ rotulo }}</option>{% endfor %}</select></div>
+    <div class="col-md-2"><label class="form-label" for="ativo">Vínculo</label><select class="form-select" id="ativo" name="ativo"><option value="">Todos</option><option value="1" {% if filtros.ativo == "1" %}selected{% endif %}>Ativo</option><option value="0" {% if filtros.ativo == "0" %}selected{% endif %}>Inativo</option></select></div>
+    <div class="col-md-2 d-flex align-items-end"><button class="btn btn-outline-primary w-100" type="submit">Filtrar</button></div>
+</div></form>
+<div class="card shadow-sm"><div class="table-responsive"><table class="table table-hover align-middle mb-0">
+    <thead><tr><th>Nome</th><th>Usuário / e-mail</th><th>Conta</th><th>Vínculo</th><th>Cargo</th><th>Último acesso</th><th>Criado em</th><th><span class="visually-hidden">Ações</span></th></tr></thead>
+    <tbody>{% for vinculo in vinculos %}<tr>
+        <td>{{ vinculo.usuario.get_full_name|default:vinculo.usuario.username }}</td>
+        <td>{{ vinculo.usuario.username }}<br><small class="text-secondary">{{ vinculo.usuario.email|default:"Sem e-mail" }}</small></td>
+        <td><span class="badge {% if vinculo.usuario.is_active %}text-bg-success{% else %}text-bg-secondary{% endif %}">{% if vinculo.usuario.is_active %}Ativa{% else %}Inativa{% endif %}</span></td>
+        <td><span class="badge {% if vinculo.ativo %}text-bg-success{% else %}text-bg-secondary{% endif %}">{% if vinculo.ativo %}Ativo{% else %}Inativo{% endif %}</span></td>
+        <td>{{ vinculo.get_papel_display }}</td><td>{{ vinculo.usuario.last_login|date:"d/m/Y H:i"|default:"Nunca" }}</td><td>{{ vinculo.usuario.date_joined|date:"d/m/Y" }}</td>
+        <td><a class="btn btn-sm btn-outline-primary" aria-label="Ver {{ vinculo.usuario.username }}" href="{% url 'usuarios:detalhes' vinculo.usuario_id %}">Ver</a>{% if vinculo.pode_editar_acesso %} <a class="btn btn-sm btn-outline-secondary" href="{% url 'usuarios:editar_acesso' vinculo.id %}">Editar</a>{% endif %}</td>
+    </tr>{% empty %}<tr><td colspan="8" class="text-center text-secondary py-5">Nenhum usuário encontrado.</td></tr>{% endfor %}</tbody>
+</table></div></div>
+{% endblock %}

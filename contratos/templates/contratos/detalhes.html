@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}{{ contrato }} | ControlCond{% endblock %}
+{% block content %}
+    {% if contrato.situacao != "rescindido" %}{% url "contratos:editar" contrato.id as url_editar %}{% endif %}
+    {% include "components/page_header.html" with titulo=contrato subtitulo="Dados, vigência e auditoria do contrato." url_acao=url_editar texto_acao="Editar contrato" icone_acao="bi-pencil" permitir_acao=pode_gerenciar_contratos %}
+    <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3 mb-4">
+        <a href="{% url 'contratos:lista' %}" class="btn btn-sm btn-outline-secondary">Voltar para contratos</a>
+        {% if pode_rescindir %}
+            <a href="{% url 'contratos:rescindir' contrato.id %}" class="btn btn-sm btn-outline-danger" aria-label="Rescindir contrato do apartamento {{ contrato.apartamento.numero }}">Rescindir contrato</a>
+        {% endif %}
+    </div>
+    <section class="card shadow-sm" aria-labelledby="dados-contrato"><div class="card-header bg-light py-3"><h2 id="dados-contrato" class="h5 mb-0">Dados do contrato</h2></div><div class="card-body">
+        <div class="row g-4">
+            <div class="col-6 col-lg-3"><p class="detail-label">Apartamento</p><p class="detail-value">{{ contrato.apartamento }}</p></div>
+            <div class="col-6 col-lg-3"><p class="detail-label">Situação</p><p class="detail-value">{% if contrato.situacao == "rescindido" %}<span class="badge text-bg-danger">Rescindido</span>{% else %}{{ contrato.get_situacao_display }}{% endif %}</p></div>
+            <div class="col-12 col-lg-3"><p class="detail-label">Contratante</p><p class="detail-value"><a href="{% url 'pessoas:detalhes' contrato.pessoa_contratante_id %}">{{ contrato.pessoa_contratante }}</a></p></div>
+            <div class="col-12 col-lg-3"><p class="detail-label">Responsável financeiro</p><p class="detail-value"><a href="{% url 'pessoas:detalhes' contrato.responsavel_financeiro_id %}">{{ contrato.responsavel_financeiro }}</a></p></div>
+            <div class="col-6"><p class="detail-label">Início</p><p class="detail-value">{{ contrato.data_inicio|date:"d/m/Y" }}</p></div>
+            <div class="col-6"><p class="detail-label">Término</p><p class="detail-value">{{ contrato.data_termino|date:"d/m/Y" }}</p></div>
+        </div>
+        {% if contrato.observacoes %}<hr><p class="detail-label">Observações</p><p>{{ contrato.observacoes|linebreaksbr }}</p>{% endif %}
+    </div></section>
+    {% if contrato.situacao == "rescindido" %}<section class="card shadow-sm mt-4 border-danger"><div class="card-header bg-light py-3"><h2 class="h5 mb-0">Dados da rescisão</h2></div><div class="card-body"><p><strong>Data da rescisão:</strong> {{ contrato.data_rescisao|date:"d/m/Y" }}</p><p><strong>Usuário responsável:</strong> {{ contrato.usuario_rescisao }}</p><p><strong>Data e hora do registro:</strong> {{ contrato.rescindido_em|date:"d/m/Y H:i" }}</p><p class="mb-0"><strong>Justificativa:</strong> {{ contrato.justificativa_rescisao }}</p></div></section>{% endif %}
+{% endblock %}

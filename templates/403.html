@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Acesso negado | ControlCond{% endblock %}
+{% block content %}
+<div class="card shadow-sm"><div class="card-body text-center py-5">
+    <h1 class="h3">Acesso negado</h1>
+    <p class="text-secondary">{{ exception|default:"Você não possui permissão para acessar esta página." }}</p>
+    <a class="btn btn-primary" href="{% url 'dashboard:inicio' %}">Voltar ao início</a>
+</div></div>
+{% endblock %}

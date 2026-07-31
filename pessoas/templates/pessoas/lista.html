@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Pessoas vinculadas | ControlCond{% endblock %}
+
+{% block content %}
+    {% url "pessoas:nova" as url_nova_pessoa %}
+    {% include "components/page_header.html" with titulo="Pessoas vinculadas" subtitulo="Gerencie moradores, proprietários, inquilinos e responsáveis financeiros do condomínio." url_acao=url_nova_pessoa texto_acao="Cadastrar pessoa" icone_acao="bi-person-plus" permitir_acao=pode_gerenciar_vinculos %}
+
+    <section class="card shadow-sm mb-5" aria-labelledby="titulo-filtros-pessoas">
+        <div class="card-header bg-light py-3">
+            <h2 id="titulo-filtros-pessoas" class="h5 mb-1">Filtros</h2>
+            <p class="text-secondary small mb-0">Busque por dados pessoais, situação ou vínculo ativo.</p>
+        </div>
+        <div class="card-body">
+            <form method="get">
+                <div class="row align-items-end">
+                    <div class="col-12 col-lg-6">
+                        {% include "components/form_field.html" with field=form_filtros.busca %}
+                    </div>
+                    <div class="col-12 col-md-6 col-lg-3">
+                        {% include "components/form_field.html" with field=form_filtros.situacao %}
+                    </div>
+                    <div class="col-12 col-md-6 col-lg-3">
+                        {% include "components/form_field.html" with field=form_filtros.tipo_vinculo %}
+                    </div>
+                </div>
+                {% url "pessoas:lista" as url_limpar %}
+                {% include "components/filter_actions.html" with url_limpar=url_limpar %}
+            </form>
+        </div>
+    </section>
+
+    <section class="card shadow-sm" aria-labelledby="titulo-lista-pessoas">
+        <div class="card-header bg-light py-3 d-flex align-items-center justify-content-between gap-3">
+            <div>
+                <h2 id="titulo-lista-pessoas" class="h5 mb-1">Pessoas cadastradas</h2>
+                <p class="text-secondary small mb-0">Acesse os dados e o histórico de vínculos.</p>
+            </div>
+            <span class="badge text-bg-secondary">{{ pagina_pessoas.paginator.count }}</span>
+        </div>
+        <div class="card-body p-0">
+            {% include "components/data_table.html" with template_cabecalho="components/table_headers/pessoa.html" linhas=pessoas template_linha="components/table_rows/pessoa.html" empty_titulo="Nenhuma pessoa encontrada" empty_texto="Cadastre uma pessoa ou ajuste os filtros da consulta." empty_icone="bi-people" empty_url_acao=url_nova_pessoa empty_texto_acao="Cadastrar pessoa" empty_icone_acao="bi-person-plus" %}
+        </div>
+        {% include "components/pagination.html" with pagina=pagina_pessoas parametros_filtros=parametros_filtros aria_label="Paginação de pessoas" %}
+    </section>
+{% endblock %}

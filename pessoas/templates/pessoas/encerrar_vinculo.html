@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block title %}Encerrar vínculo | ControlCond{% endblock %}
+
+{% block content %}
+    {% include "components/page_header.html" with titulo="Encerrar vínculo" subtitulo=pessoa.nome_completo %}
+    <div class="row justify-content-center">
+        <div class="col-12 col-lg-7">
+            <section class="card shadow-sm border-danger">
+                <div class="card-body p-4">
+                    <p>Você está encerrando o vínculo <strong>{{ vinculo.get_tipo_display }}</strong> com {{ vinculo.apartamento }}.</p>
+                    <p class="text-secondary">O registro continuará disponível no histórico.</p>
+                    <form method="post" novalidate>
+                        {% csrf_token %}
+                        {% if form.non_field_errors %}<div class="alert alert-danger" role="alert">{{ form.non_field_errors }}</div>{% endif %}
+                        {% include "components/form_field.html" with field=form.data_fim %}
+                        <div class="d-flex justify-content-end gap-2 mt-4">
+                            <a href="{% url 'pessoas:detalhes' pessoa.id %}" class="btn btn-outline-secondary">Cancelar</a>
+                            <button type="submit" class="btn btn-danger">Encerrar vínculo</button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+        </div>
+    </div>
+{% endblock %}

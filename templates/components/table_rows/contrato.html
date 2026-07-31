@@ -1,0 +1,15 @@
+<tr>
+    <td><span class="fw-semibold">{{ linha.apartamento.numero }}</span><span class="d-block text-secondary small">Bloco {{ linha.apartamento.bloco|default:"—" }}</span></td>
+    <td>{{ linha.pessoa_contratante.nome_completo }}</td>
+    <td>{{ linha.responsavel_financeiro.nome_completo }}</td>
+    <td>{{ linha.data_inicio|date:"d/m/Y" }}<span class="d-block text-secondary small">até {{ linha.data_termino|date:"d/m/Y" }}</span></td>
+    <td>{% if linha.dias_restantes != None %}{{ linha.dias_restantes }} dias{% else %}—{% endif %}</td>
+    <td>
+        {% if linha.situacao == "ativo" %}<span class="badge text-bg-success">Ativo</span>
+        {% elif linha.situacao == "futuro" %}<span class="badge text-bg-info">Futuro</span>
+        {% elif linha.situacao == "rescindido" %}<span class="badge text-bg-danger">Rescindido</span>
+        {% else %}<span class="badge text-bg-secondary">Encerrado</span>{% endif %}
+        {% if linha.proximo_vencimento %}<span class="badge text-bg-warning">Vence em breve</span>{% endif %}
+    </td>
+    <td class="text-end"><a href="{% url 'contratos:detalhes' linha.id %}" class="btn btn-sm btn-outline-primary">Detalhes</a></td>
+</tr>

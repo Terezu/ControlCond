@@ -531,10 +531,13 @@ class DashboardFinanceiroTests(TestCase):
             password="senha-de-teste",
             is_staff=True,
         )
-        VinculoUsuarioCondominio.objects.create(
+        VinculoUsuarioCondominio.objects.update_or_create(
             usuario=self.usuario,
             condominio=self.condominio,
-            papel=VinculoUsuarioCondominio.Papel.ADMINISTRADOR,
+            defaults={
+                "papel": VinculoUsuarioCondominio.Papel.ADMINISTRADOR,
+                "ativo": True,
+            },
         )
         self.apartamento = Apartamento.objects.create(
             condominio=self.condominio, numero="101"

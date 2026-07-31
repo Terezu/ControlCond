@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block title %}Histórico de contratos | ControlCond{% endblock %}
+{% block content %}
+    {% include "components/page_header.html" with titulo="Histórico de contratos" subtitulo="Contratos atuais e anteriores do apartamento." %}
+    <section class="card shadow-sm"><div class="card-body p-0">{% include "components/data_table.html" with template_cabecalho="components/table_headers/contrato.html" linhas=contratos template_linha="components/table_rows/contrato.html" empty_titulo="Nenhum contrato encontrado" empty_texto="Este apartamento ainda não possui contratos." empty_icone="bi-file-earmark-text" %}</div></section>
+{% endblock %}

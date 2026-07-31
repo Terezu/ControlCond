@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Administração Global | ControlCond{% endblock %}
+{% block content %}
+{% url "configuracoes:globais_editar" as editar_url %}
+{% include "components/page_header.html" with titulo="Administração Global" subtitulo="Parâmetros técnicos da plataforma ControlCond, separados dos condomínios." url_acao=editar_url texto_acao="Editar parâmetros globais" icone_acao="bi-gear" permitir_acao=True %}
+<section class="card shadow-sm"><div class="card-body row g-3">
+  <div class="col-md-4"><span class="detail-label">Retenção padrão</span><p class="detail-value">{{ configuracao_global.dias_retencao_padrao }} dias</p></div>
+  <div class="col-md-4"><span class="detail-label">Modo de manutenção</span><p class="detail-value">{{ configuracao_global.modo_manutencao|yesno:"Ativo,Inativo" }}</p></div>
+  <div class="col-12"><span class="detail-label">Mensagem</span><p class="detail-value">{{ configuracao_global.mensagem_manutencao|default:"Não configurada" }}</p></div>
+  <div class="col-12"><div class="alert alert-info mb-0">SMTP, armazenamento e backup continuam definidos pelo ambiente. Segredos não são expostos nem persistidos nesta tela.</div></div>
+</div></section>
+{% endblock %}

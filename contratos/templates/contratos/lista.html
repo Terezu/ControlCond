@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}Contratos | ControlCond{% endblock %}
+
+{% block content %}
+    {% url "contratos:novo" as url_novo %}
+    {% include "components/page_header.html" with titulo="Contratos" subtitulo="Gerencie contratos, responsáveis financeiros e vencimentos dos apartamentos." url_acao=url_novo texto_acao="Cadastrar contrato" icone_acao="bi-file-earmark-plus" permitir_acao=pode_gerenciar_contratos %}
+
+    <div class="row g-3 mb-4" aria-label="Resumo de contratos">
+        <div class="col-6 col-lg-3"><div class="card shadow-sm h-100"><div class="card-body"><p class="detail-label">Contratos ativos</p><p class="h3 mb-0">{{ resumo.ativos }}</p></div></div></div>
+        <div class="col-6 col-lg-3"><div class="card shadow-sm h-100"><div class="card-body"><p class="detail-label">Próximos do vencimento</p><p class="h3 mb-0">{{ resumo.proximos }}</p></div></div></div>
+        <div class="col-6 col-lg-3"><div class="card shadow-sm h-100"><div class="card-body"><p class="detail-label">Contratos futuros</p><p class="h3 mb-0">{{ resumo.futuros }}</p></div></div></div>
+        <div class="col-6 col-lg-3"><div class="card shadow-sm h-100"><div class="card-body"><p class="detail-label">Contratos inativos</p><p class="h3 mb-0">{{ resumo.inativos }}</p></div></div></div>
+    </div>
+
+    <section class="card shadow-sm mb-4" aria-labelledby="titulo-filtros-contratos">
+        <div class="card-header bg-light py-3"><h2 id="titulo-filtros-contratos" class="h5 mb-0">Filtros</h2></div>
+        <div class="card-body">
+            <form method="get">
+                <input type="hidden" name="aba" value="{{ aba_ativa }}">
+                <div class="row">
+                    <div class="col-12 col-lg-6">{% include "components/form_field.html" with field=form_filtros.busca %}</div>
+                    <div class="col-12 col-md-6 col-lg-3">{% include "components/form_field.html" with field=form_filtros.situacao %}</div>
+                    <div class="col-12 col-md-6 col-lg-3">{% include "components/form_field.html" with field=form_filtros.apartamento %}</div>
+                    <div class="col-6 col-lg-3">{% include "components/form_field.html" with field=form_filtros.inicio_de %}</div>
+                    <div class="col-6 col-lg-3">{% include "components/form_field.html" with field=form_filtros.inicio_ate %}</div>
+                    <div class="col-6 col-lg-3">{% include "components/form_field.html" with field=form_filtros.termino_de %}</div>
+                    <div class="col-6 col-lg-3">{% include "components/form_field.html" with field=form_filtros.termino_ate %}</div>
+                    <div class="col-12 d-flex flex-wrap gap-4 mb-3">
+                        <div class="form-check">{{ form_filtros.proximos }} <label class="form-check-label" for="{{ form_filtros.proximos.id_for_label }}">{{ form_filtros.proximos.label }}</label></div>
+                        <div class="form-check">{{ form_filtros.encerrados }} <label class="form-check-label" for="{{ form_filtros.encerrados.id_for_label }}">Encerrados</label></div>
+                        <div class="form-check">{{ form_filtros.rescindidos }} <label class="form-check-label" for="{{ form_filtros.rescindidos.id_for_label }}">Rescindidos</label></div>
+                    </div>
+                </div>
+                {% url "contratos:lista" as url_limpar %}
+                {% include "components/filter_actions.html" with url_limpar=url_limpar %}
+            </form>
+        </div>
+    </section>
+
+    <nav class="nav nav-tabs mb-3" aria-label="Classificação dos contratos">
+        <a class="nav-link{% if aba_ativa == 'ativos' %} active{% endif %}" href="?aba=ativos">Ativos</a>
+        <a class="nav-link{% if aba_ativa == 'proximos' %} active{% endif %}" href="?aba=proximos">Próximos do vencimento</a>
+        <a class="nav-link{% if aba_ativa == 'inativos' %} active{% endif %}" href="?aba=inativos">Inativos</a>
+        <a class="nav-link{% if aba_ativa == 'futuros' %} active{% endif %}" href="?aba=futuros">Futuros</a>
+    </nav>
+
+    <section class="card shadow-sm" aria-labelledby="titulo-lista-contratos">
+        <div class="card-header bg-light py-3"><h2 id="titulo-lista-contratos" class="h5 mb-0">Contratos cadastrados</h2></div>
+        <div class="card-body p-0">
+            {% include "components/data_table.html" with template_cabecalho="components/table_headers/contrato.html" linhas=contratos template_linha="components/table_rows/contrato.html" empty_titulo="Nenhum contrato encontrado" empty_texto="Cadastre um contrato ou ajuste os filtros." empty_icone="bi-file-earmark-text" empty_url_acao=url_novo empty_texto_acao="Cadastrar contrato" %}
+        </div>
+        {% include "components/pagination.html" with pagina=pagina_contratos parametros_filtros=parametros_filtros aria_label="Paginação de contratos" %}
+    </section>
+{% endblock %}

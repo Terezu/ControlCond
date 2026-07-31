@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block title %}Editar Administração Global | ControlCond{% endblock %}
+{% block content %}
+{% include "components/page_header.html" with titulo="Editar Administração Global" subtitulo="Parâmetros técnicos não secretos da plataforma." %}
+<form method="post" novalidate class="card shadow-sm">{% csrf_token %}<div class="card-body">{% for field in form %}{% include "components/form_field.html" with field=field %}{% endfor %}</div><div class="card-footer d-flex justify-content-end gap-2"><a class="btn btn-outline-secondary" href="{% url 'configuracoes:globais' %}">Cancelar</a><button class="btn btn-primary" type="submit">Salvar parâmetros globais</button></div></form>
+{% endblock %}

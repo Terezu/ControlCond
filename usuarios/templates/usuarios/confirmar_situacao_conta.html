@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}{% if reativar %}Reativar{% else %}Desativar{% endif %} conta | ControlCond{% endblock %}
+{% block content %}
+{% include "components/page_header.html" with titulo="Alterar situação global da conta" subtitulo="Esta ação afeta o acesso a toda a plataforma." %}
+<form method="post" class="card shadow-sm" novalidate>{% csrf_token %}<div class="card-body">
+  <p>Usuário: <strong>{{ usuario_alvo.get_full_name|default:usuario_alvo.username }}</strong></p>
+  {% include "components/form_field.html" with field=form.justificativa %}
+</div><div class="card-footer d-flex justify-content-end gap-2"><a class="btn btn-outline-secondary" href="{% url 'usuarios:lista_global' %}">Cancelar</a><button class="btn btn-{% if reativar %}success{% else %}warning{% endif %}" type="submit">{% if reativar %}Reativar conta{% else %}Desativar conta{% endif %}</button></div></form>
+{% endblock %}

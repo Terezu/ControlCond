@@ -1,21 +1,15 @@
-# Banco de dados
-*.db
-
 # Python
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*$py.class
 
 # Ambientes virtuais
 .venv/
 venv/
 env/
 
-# VS Code
+# IDE
 .vscode/
-
-# PyCharm
 .idea/
 
 # Variáveis locais e segredos
@@ -23,14 +17,34 @@ env/
 .env.*
 !.env.example
 
-# macOS
-.DS_Store
+# Bancos de dados e backups locais
+*.db
+*.sqlite3
+*.db-journal
+*.db-shm
+*.db-wal
+*backup*.db
+*_backup.*
+*pre_security*.db
 
 # Logs
 *.log
+logs/
 
-# Documentos gerados localmente (podem conter dados do condomínio)
-/faturas_geradas/
+# Mídia e arquivos gerados
+media/
+faturas_geradas/
+Fatura_exemplo.pdf
+*.zip
 
-# Arquivos enviados pelos usuários
-/media/
+# Arquivos estáticos coletados
+staticfiles/
+
+# Testes e cobertura
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Sistema operacional
+.DS_Store
+Thumbs.db

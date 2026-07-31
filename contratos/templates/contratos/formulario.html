@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}{{ titulo }} | ControlCond{% endblock %}
+{% block content %}
+    {% include "components/page_header.html" with titulo=titulo subtitulo="Defina o apartamento, as pessoas responsáveis e a vigência." %}
+    <div class="row justify-content-center"><div class="col-12 col-lg-8"><section class="card shadow-sm"><div class="card-body p-4">
+        <form method="post" novalidate>{% csrf_token %}
+            {% if form.non_field_errors %}<div class="alert alert-danger" role="alert">{{ form.non_field_errors }}</div>{% endif %}
+            <div class="row">
+                <div class="col-12">{% include "components/form_field.html" with field=form.apartamento %}</div>
+                <div class="col-12 col-md-6">{% include "components/form_field.html" with field=form.pessoa_contratante %}</div>
+                <div class="col-12 col-md-6">{% include "components/form_field.html" with field=form.responsavel_financeiro %}</div>
+                <div class="col-12 col-md-6">{% include "components/form_field.html" with field=form.data_inicio %}</div>
+                <div class="col-12 col-md-6">{% include "components/form_field.html" with field=form.data_termino %}</div>
+                <div class="col-12">{% include "components/form_field.html" with field=form.observacoes %}</div>
+            </div>
+            <div class="d-flex justify-content-end gap-2 mt-4">
+                {% if contrato %}<a href="{% url 'contratos:detalhes' contrato.id %}" class="btn btn-outline-secondary">Cancelar</a>{% else %}<a href="{% url 'contratos:lista' %}" class="btn btn-outline-secondary">Cancelar</a>{% endif %}
+                <button class="btn btn-primary" type="submit">Salvar contrato</button>
+            </div>
+        </form>
+    </div></section></div></div>
+{% endblock %}

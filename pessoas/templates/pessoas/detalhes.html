@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}{{ pessoa.nome_completo }} | ControlCond{% endblock %}
+
+{% block content %}
+    {% if pode_gerenciar_vinculos %}{% url "pessoas:editar" pessoa.id as url_editar %}{% endif %}
+    {% include "components/page_header.html" with titulo=pessoa.nome_completo subtitulo="Dados pessoais e histórico de vínculos com apartamentos." url_acao=url_editar texto_acao="Editar pessoa" icone_acao="bi-pencil" permitir_acao=pode_gerenciar_vinculos %}
+
+    <div class="d-flex mb-4">
+        <a href="{% url 'pessoas:lista' %}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Voltar para pessoas
+        </a>
+    </div>
+
+    <section class="card shadow-sm" aria-labelledby="titulo-dados-pessoa">
+        <div class="card-header bg-light py-3 d-flex align-items-center justify-content-between gap-3">
+            <h2 id="titulo-dados-pessoa" class="h5 mb-0">Dados pessoais</h2>
+            {% if pessoa.situacao == "ativa" %}
+                <span class="badge text-bg-success">Ativa</span>
+            {% else %}
+                <span class="badge text-bg-secondary">Inativa</span>
+            {% endif %}
+        </div>
+        <div class="card-body">
+            <div class="row g-4">
+                <div class="col-12 col-sm-6 col-lg-3"><p class="detail-label">CPF</p><p class="detail-value">{% if pode_visualizar_dados_sensiveis %}{{ pessoa.cpf_formatado }}{% else %}Informação restrita{% endif %}</p></div>
+                <div class="col-12 col-sm-6 col-lg-3"><p class="detail-label">RG</p><p class="detail-value">{% if pode_visualizar_dados_sensiveis %}{{ pessoa.rg|default:"Não informado" }}{% else %}Informação restrita{% endif %}</p></div>
+                <div class="col-12 col-sm-6 col-lg-3"><p class="detail-label">Data de nascimento</p><p class="detail-value">{{ pessoa.data_nascimento|date:"d/m/Y"|default:"Não informada" }}</p></div>
+                <div class="col-12 col-sm-6 col-lg-3"><p class="detail-label">Telefone</p><p class="detail-value">{{ pessoa.telefone }}</p></div>
+                <div class="col-12"><p class="detail-label">E-mail</p><p class="detail-value">{{ pessoa.email }}</p></div>
+            </div>
+            {% if pessoa.observacoes %}
+                <hr>
+                <p class="detail-label">Observações</p>
+                <p class="mb-0">{{ pessoa.observacoes|linebreaksbr }}</p>
+            {% endif %}
+        </div>
+    </section>
+
+    <section class="card shadow-sm mt-5" aria-labelledby="titulo-vinculos-apartamentos">
+        <div class="card-header bg-light py-3 d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-2">
+            <div>
+                <h2 id="titulo-vinculos-apartamentos" class="h5 mb-1">Vínculos com apartamentos</h2>
+                <p class="text-secondary small mb-0">Relações atuais e históricas da pessoa com unidades do condomínio.</p>
+            </div>
+            {% if pessoa.situacao == "ativa" and pode_gerenciar_vinculos %}
+                <a href="{% url 'pessoas:novo_vinculo' pessoa.id %}" class="btn btn-primary btn-sm">
+                    <i class="bi bi-link-45deg me-1" aria-hidden="true"></i>Adicionar vínculo
+                </a>
+            {% endif %}
+        </div>
+        <div class="card-body p-0">
+            {% include "pessoas/partials/tabela_vinculos.html" with vinculos=vinculos %}
+        </div>
+    </section>
+
+    <section class="card shadow-sm mt-5" aria-labelledby="titulo-contratos-pessoa">
+        <div class="card-header bg-light py-3"><h2 id="titulo-contratos-pessoa" class="h5 mb-1">Contratos</h2><p class="text-secondary small mb-0">Contratos em que a pessoa é contratante ou responsável financeiro.</p></div>
+        <div class="card-body p-0">
+            {% include "components/data_table.html" with template_cabecalho="components/table_headers/contrato.html" linhas=contratos template_linha="components/table_rows/contrato.html" empty_titulo="Nenhum contrato vinculado" empty_texto="Os contratos desta pessoa aparecerão aqui." empty_icone="bi-file-earmark-text" %}
+        </div>
+    </section>
+{% endblock %}

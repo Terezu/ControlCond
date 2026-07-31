@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block title %}{{ titulo|default:"Adicionar vínculo" }} | ControlCond{% endblock %}
+
+{% block content %}
+    {% include "components/page_header.html" with titulo=titulo|default:"Adicionar vínculo" subtitulo=pessoa.nome_completo %}
+    <div class="row justify-content-center">
+        <div class="col-12 col-lg-7">
+            <section class="card shadow-sm">
+                <div class="card-body p-4">
+                    <form method="post" novalidate>
+                        {% csrf_token %}
+                        {% if form.non_field_errors %}<div class="alert alert-danger" role="alert">{{ form.non_field_errors }}</div>{% endif %}
+                        {% include "components/form_field.html" with field=form.apartamento %}
+                        {% include "components/form_field.html" with field=form.tipo %}
+                        {% include "components/form_field.html" with field=form.data_inicio %}
+                        <div class="d-flex justify-content-end gap-2 mt-4">
+                            <a href="{% url 'pessoas:detalhes' pessoa.id %}" class="btn btn-outline-secondary">Cancelar</a>
+                            <button type="submit" class="btn btn-primary">Salvar vínculo</button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+        </div>
+    </div>
+{% endblock %}

@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}{{ titulo }} | ControlCond{% endblock %}
+{% block content %}
+<div class="mb-4"><h1 class="h3 mb-1">{{ titulo }}</h1><a href="{% url 'usuarios:lista' %}">Voltar para usuários e acessos</a></div>
+<form method="post" class="card shadow-sm" novalidate><div class="card-body">
+    {% csrf_token %}
+    {% if form.non_field_errors %}<div class="alert alert-danger" role="alert">{{ form.non_field_errors }}</div>{% endif %}
+    <div class="row g-3">{% for field in form %}<div class="{% if field.field.widget.input_type == 'checkbox' %}col-12 form-check ms-2{% else %}col-md-6{% endif %}">
+        {% if field.field.widget.input_type == 'checkbox' %}{{ field }} <label class="form-check-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{% else %}<label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% endif %}
+        {% for error in field.errors %}<div class="text-danger small" role="alert">{{ error }}</div>{% endfor %}
+    </div>{% endfor %}</div>
+    <div class="mt-4"><button class="btn btn-primary" type="submit">Salvar</button> <a class="btn btn-outline-secondary" href="{% url 'usuarios:lista' %}">Cancelar</a></div>
+</div></form>
+{% endblock %}

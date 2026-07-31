@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Editar configurações institucionais | ControlCond{% endblock %}
+{% block content %}
+{% include "components/page_header.html" with titulo="Editar configurações institucionais" subtitulo="Estas informações pertencem ao condomínio e são compartilhadas por todos os seus usuários." %}
+<form method="post" enctype="multipart/form-data" novalidate class="card shadow-sm">
+  {% csrf_token %}
+  <div class="card-body">
+    {% if form.non_field_errors %}<div class="alert alert-danger" role="alert">{{ form.non_field_errors }}</div>{% endif %}
+    <div class="row">{% for field in form %}<div class="{% if field.name == 'mensagem_institucional_rodape' %}col-12{% else %}col-12 col-md-6{% endif %}">{% include "components/form_field.html" with field=field %}</div>{% endfor %}</div>
+    <div class="d-flex flex-wrap justify-content-between gap-2"><p id="orientacao-cores-tema" class="small text-secondary mb-0">As cores são persistidas no condomínio e aplicadas após salvar. A prévia nesta página não altera o navegador permanentemente.</p><button type="button" class="btn btn-sm btn-outline-secondary" id="restaurar-cores-padrao" data-cor-primaria="{{ cor_primaria_padrao }}" data-cor-secundaria="{{ cor_secundaria_padrao }}" data-cor-destaque="{{ cor_destaque_padrao }}" aria-describedby="orientacao-cores-tema">Restaurar cores padrão</button></div>
+  </div>
+  <div class="card-footer d-flex justify-content-end gap-2"><a class="btn btn-outline-secondary" href="{% url 'configuracoes:institucionais' %}">Cancelar</a><button class="btn btn-primary" type="submit">Salvar identidade</button></div>
+</form>
+{% endblock %}

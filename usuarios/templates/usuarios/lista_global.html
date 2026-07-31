@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Usuários da plataforma | ControlCond{% endblock %}
+{% block content %}
+{% include "components/page_header.html" with titulo="Usuários da plataforma" subtitulo="Gestão global de contas, desativação e privacidade." %}
+<form method="get" class="card card-body shadow-sm mb-4" role="search">
+  <label class="form-label" for="busca-global">Buscar por nome, usuário ou e-mail</label>
+  <div class="input-group"><input class="form-control" id="busca-global" name="busca" value="{{ busca }}"><button class="btn btn-primary" type="submit">Buscar</button></div>
+</form>
+<div class="card shadow-sm"><div class="table-responsive"><table class="table table-hover align-middle mb-0">
+  <thead><tr><th>Usuário</th><th>Conta</th><th>Global</th><th>Vínculos</th><th class="text-end">Ações</th></tr></thead>
+  <tbody>{% for usuario in usuarios_globais %}<tr>
+    <td><span class="fw-semibold">{{ usuario.get_full_name|default:usuario.username }}</span><br><small class="text-secondary">{{ usuario.username }}</small></td>
+    <td><span class="badge text-bg-{% if usuario.is_active %}success{% else %}secondary{% endif %}">{{ usuario.is_active|yesno:"Ativa,Inativa" }}</span></td>
+    <td>{{ usuario.is_superuser|yesno:"Administrador Global,Não" }}</td>
+    <td>{{ usuario.vinculos_condominios.count }}</td>
+    <td class="text-end">
+      {% if usuario.pk != request.user.pk %}
+      {% if usuario.is_active %}<a class="btn btn-sm btn-outline-warning" href="{% url 'usuarios:desativar_conta' usuario.id %}" aria-label="Desativar conta de {{ usuario.username }}">Desativar conta</a>
+      {% else %}<a class="btn btn-sm btn-outline-success" href="{% url 'usuarios:reativar_conta' usuario.id %}" aria-label="Reativar conta de {{ usuario.username }}">Reativar conta</a>{% endif %}
+      <a class="btn btn-sm btn-outline-danger" href="{% url 'usuarios:analisar_remocao' usuario.id %}" aria-label="Analisar exclusão de {{ usuario.username }}">Analisar exclusão</a>
+      {% else %}<span class="text-secondary small">Conta atual protegida</span>{% endif %}
+    </td>
+  </tr>{% empty %}<tr><td colspan="5" class="text-center text-secondary py-4">Nenhum usuário encontrado.</td></tr>{% endfor %}</tbody>
+</table></div></div>
+{% endblock %}

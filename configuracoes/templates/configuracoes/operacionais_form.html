@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Editar configurações operacionais | ControlCond{% endblock %}
+{% block content %}
+{% include "components/page_header.html" with titulo="Editar configurações operacionais" subtitulo="Parâmetros administrativos do condomínio." %}
+<form method="post" novalidate class="card shadow-sm">{% csrf_token %}
+  <div class="card-body">{% if form.non_field_errors %}<div class="alert alert-danger" role="alert">{{ form.non_field_errors }}</div>{% endif %}<div class="row">{% for field in form %}<div class="{% if field.field.widget.input_type == 'checkbox' %}col-12{% else %}col-12 col-md-6{% endif %}">{% include "components/form_field.html" with field=field %}</div>{% endfor %}</div></div>
+  <div class="card-footer d-flex justify-content-end gap-2"><a class="btn btn-outline-secondary" href="{% url 'configuracoes:operacionais' %}">Cancelar</a><button class="btn btn-primary" type="submit">Salvar parâmetros</button></div>
+</form>
+{% endblock %}

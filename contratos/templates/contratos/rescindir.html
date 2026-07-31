@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Rescindir contrato | ControlCond{% endblock %}
+{% block content %}
+    {% include "components/page_header.html" with titulo="Rescindir contrato" subtitulo=contrato %}
+    <div class="row justify-content-center"><div class="col-12 col-lg-7"><section class="card shadow-sm border-danger"><div class="card-body p-4">
+        <p>Esta ação preservará o contrato no histórico e registrará sua autoria.</p>
+        <dl class="row small border rounded p-3 mx-0 mb-4">
+            <dt class="col-sm-5">Apartamento</dt><dd class="col-sm-7">{{ contrato.apartamento.numero }}</dd>
+            <dt class="col-sm-5">Bloco</dt><dd class="col-sm-7">{{ contrato.apartamento.bloco|default:"—" }}</dd>
+            <dt class="col-sm-5">Condomínio</dt><dd class="col-sm-7">{{ contrato.condominio.nome }}</dd>
+            <dt class="col-sm-5">Pessoa contratante</dt><dd class="col-sm-7">{{ contrato.pessoa_contratante }}</dd>
+            <dt class="col-sm-5">Responsável financeiro</dt><dd class="col-sm-7">{{ contrato.responsavel_financeiro }}</dd>
+            <dt class="col-sm-5">Início do contrato</dt><dd class="col-sm-7">{{ contrato.data_inicio|date:"d/m/Y" }}</dd>
+            <dt class="col-sm-5">Término previsto</dt><dd class="col-sm-7">{{ contrato.data_termino|date:"d/m/Y" }}</dd>
+            <dt class="col-sm-5">Situação atual</dt><dd class="col-sm-7">{{ contrato.get_situacao_display }}</dd>
+        </dl>
+        <form method="post" novalidate>{% csrf_token %}
+            {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+            {% include "components/form_field.html" with field=form.data_rescisao %}
+            {% include "components/form_field.html" with field=form.justificativa %}
+            <div class="d-flex flex-column-reverse flex-sm-row justify-content-end gap-2"><a href="{% url 'contratos:detalhes' contrato.id %}" class="btn btn-outline-secondary">Cancelar</a><button class="btn btn-danger" type="submit">Confirmar rescisão</button></div>
+        </form>
+    </div></section></div></div>
+{% endblock %}

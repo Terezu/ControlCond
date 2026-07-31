@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Meu perfil | ControlCond{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start gap-3 mb-4">
+    <div><h1 class="h3 mb-1">Meu perfil</h1><p class="text-secondary mb-0">Dados da conta e acessos aos condomínios.</p></div>
+    <a class="btn btn-outline-primary" href="{% url 'password_change' %}">Alterar senha</a>
+</div>
+<section class="card shadow-sm mb-4"><div class="card-body">
+    <dl class="row mb-0">
+        <dt class="col-sm-3">Nome</dt><dd class="col-sm-9">{{ request.user.get_full_name|default:"Não informado" }}</dd>
+        <dt class="col-sm-3">Usuário</dt><dd class="col-sm-9">{{ request.user.username }}</dd>
+        <dt class="col-sm-3">E-mail</dt><dd class="col-sm-9">{{ request.user.email|default:"Não informado" }}</dd>
+        <dt class="col-sm-3">Último acesso</dt><dd class="col-sm-9">{{ request.user.last_login|date:"d/m/Y H:i"|default:"Primeiro acesso" }}</dd>
+        {% if request.user.is_superuser %}<dt class="col-sm-3">Nível da plataforma</dt><dd class="col-sm-9"><span class="badge text-bg-danger">Administrador Global</span></dd>{% endif %}
+    </dl>
+</div></section>
+<section class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Condomínios acessíveis</h2></div><div class="table-responsive">
+    <table class="table align-middle mb-0"><thead><tr><th>Condomínio</th><th>Cargo</th></tr></thead><tbody>
+        {% for vinculo in vinculos %}<tr><td>{{ vinculo.condominio.nome }}</td><td><span class="badge text-bg-secondary">{{ vinculo.get_papel_display }}</span></td></tr>
+        {% empty %}<tr><td colspan="2" class="text-center text-secondary py-4">Nenhum condomínio disponível.</td></tr>{% endfor %}
+    </tbody></table>
+</div></section>
+{% endblock %}

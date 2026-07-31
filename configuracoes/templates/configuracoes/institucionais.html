@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Configurações Institucionais | ControlCond{% endblock %}
+{% block content %}
+{% url "configuracoes:institucionais_editar" as editar_url %}
+{% include "components/page_header.html" with titulo="Configurações Institucionais" subtitulo="Identidade e informações públicas do condomínio." url_acao=editar_url texto_acao="Editar identidade" icone_acao="bi-pencil" permitir_acao=pode_alterar_configuracoes_institucionais %}
+<div class="row g-4">
+  <div class="col-12 col-lg-8"><section class="card shadow-sm h-100" aria-labelledby="institucional-dados">
+    <div class="card-header bg-light"><h2 id="institucional-dados" class="h5 mb-0">Dados do condomínio</h2></div>
+    <div class="card-body"><div class="row g-3">
+      <div class="col-md-8"><span class="detail-label">Nome</span><p class="detail-value">{{ configuracao.nome }}</p></div>
+      <div class="col-md-4"><span class="detail-label">CNPJ</span><p class="detail-value">{{ configuracao.cnpj|default:"Não informado" }}</p></div>
+      <div class="col-12"><span class="detail-label">Endereço</span><p class="detail-value">{{ configuracao.endereco|default:"Não informado" }} {{ configuracao.numero }} {{ configuracao.complemento }}</p></div>
+      <div class="col-md-6"><span class="detail-label">Telefone</span><p class="detail-value">{{ configuracao.telefone|default:"Não informado" }}</p></div>
+      <div class="col-md-6"><span class="detail-label">E-mail</span><p class="detail-value">{{ configuracao.email|default:"Não informado" }}</p></div>
+    </div></div>
+  </section></div>
+  <div class="col-12 col-lg-4"><section class="card shadow-sm h-100" aria-labelledby="institucional-identidade">
+    <div class="card-header bg-light"><h2 id="institucional-identidade" class="h5 mb-0">Identidade visual</h2></div>
+    <div class="card-body text-center">
+      {% if configuracao.logo %}<img src="{{ configuracao.logo.url }}" alt="Logo de {{ configuracao.nome }}" class="img-fluid mb-3" style="max-height:140px">{% else %}<p class="text-secondary">Nenhum logo configurado.</p>{% endif %}
+      <div class="d-flex justify-content-center gap-3" aria-label="Cores institucionais">
+        <span class="rounded border" style="width:40px;height:40px;background:{{ configuracao.cor_primaria }}" title="Cor primária"></span>
+        <span class="rounded border" style="width:40px;height:40px;background:{{ configuracao.cor_secundaria }}" title="Cor secundária"></span>
+        <span class="rounded border" style="width:40px;height:40px;background:{{ configuracao.cor_destaque }}" title="Cor de destaque"></span>
+      </div>
+    </div>
+  </section></div>
+</div>
+{% if pode_visualizar_configuracoes_operacionais %}<a class="btn btn-outline-secondary mt-4" href="{% url 'configuracoes:operacionais' %}">Ver configurações operacionais</a>{% endif %}
+{% endblock %}

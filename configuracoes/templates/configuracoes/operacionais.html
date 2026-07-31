@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Configurações Operacionais | ControlCond{% endblock %}
+{% block content %}
+{% url "configuracoes:operacionais_editar" as editar_url %}
+{% include "components/page_header.html" with titulo="Configurações Operacionais" subtitulo="Parâmetros financeiros, de cobrança, leituras e documentos." url_acao=editar_url texto_acao="Editar parâmetros" icone_acao="bi-pencil" permitir_acao=pode_alterar_configuracoes_operacionais %}
+<div class="row g-4">
+  <div class="col-12 col-lg-6"><section class="card shadow-sm h-100"><div class="card-header bg-light"><h2 class="h5 mb-0">Cobranças</h2></div><div class="card-body">
+    <p><span class="detail-label">Vencimento padrão</span><br>Dia {{ configuracao.dia_vencimento_padrao }}</p>
+    <p><span class="detail-label">Tolerância</span><br>{{ configuracao.dias_tolerancia_pagamento }} dias</p>
+    <p class="mb-0"><span class="detail-label">Multa e juros</span><br>{{ configuracao.percentual_multa_padrao }}% / {{ configuracao.percentual_juros_padrao }}%</p>
+  </div></section></div>
+  <div class="col-12 col-lg-6"><section class="card shadow-sm h-100"><div class="card-header bg-light"><h2 class="h5 mb-0">Tarifas</h2></div><div class="card-body">
+    <p>{% if tabela_agua_vigente %}Água: {{ tabela_agua_vigente.nome }}{% else %}Nenhuma tabela de água vigente.{% endif %}</p>
+    <p>{% if tarifa_gas_vigente %}Gás: R$ {{ tarifa_gas_vigente.valor_por_m3|floatformat:2 }}/m³{% else %}Nenhuma tarifa de gás vigente.{% endif %}</p>
+    <div class="d-flex flex-wrap gap-2"><a class="btn btn-outline-primary" href="{% url 'configuracoes:tabelas_agua' %}">Tabelas de água</a><a class="btn btn-outline-primary" href="{% url 'configuracoes:tarifas_gas' %}">Tarifas de gás</a></div>
+  </div></section></div>
+</div>
+{% endblock %}

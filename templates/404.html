@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Página não encontrada | ControlCond{% endblock %}
+{% block content %}
+<div class="card shadow-sm"><div class="card-body text-center py-5">
+    <h1 class="h3">Página não encontrada</h1>
+    <p class="text-secondary">O conteúdo solicitado não existe ou não está disponível neste condomínio.</p>
+    <a class="btn btn-primary" href="{% url 'dashboard:inicio' %}">Voltar ao início</a>
+</div></div>
+{% endblock %}

@@ -1,0 +1,43 @@
+{% if vinculos %}
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th scope="col">Apartamento</th>
+                    <th scope="col">Condomínio</th>
+                    <th scope="col">Tipo</th>
+                    <th scope="col">Início</th>
+                    <th scope="col">Término</th>
+                    <th scope="col">Situação</th>
+                    <th scope="col"><span class="visually-hidden">Ações</span></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for vinculo in vinculos %}
+                    <tr>
+                        <td><a href="{% url 'apartamentos:detalhes' vinculo.apartamento_id %}">{{ vinculo.apartamento }}</a></td>
+                        <td>{{ vinculo.apartamento.condominio.nome }}</td>
+                        <td>{{ vinculo.get_tipo_display }}</td>
+                        <td>{{ vinculo.data_inicio|date:"d/m/Y" }}</td>
+                        <td>{{ vinculo.data_fim|date:"d/m/Y"|default:"—" }}</td>
+                        <td>
+                            {% if vinculo.ativo %}
+                                <span class="badge text-bg-success">Ativo</span>
+                            {% else %}
+                                <span class="badge text-bg-secondary">Encerrado</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end text-nowrap">
+                            {% if pode_editar %}<a href="{% url 'pessoas:editar_vinculo' pessoa.id vinculo.id %}" class="btn btn-sm btn-outline-primary">Editar</a>{% endif %}
+                            {% if vinculo.ativo %}
+                                <a href="{% url 'pessoas:encerrar_vinculo' pessoa.id vinculo.id %}" class="btn btn-sm btn-outline-danger">Encerrar</a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% else %}
+    {% include "components/empty_state.html" with titulo="Nenhum vínculo encontrado" texto="Adicione um vínculo para relacionar esta pessoa a um apartamento." icone="bi-link-45deg" embutido=True %}
+{% endif %}

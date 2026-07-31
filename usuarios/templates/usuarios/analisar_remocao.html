@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Analisar remoção de usuário | ControlCond{% endblock %}
+{% block content %}
+{% include "components/page_header.html" with titulo="Analisar remoção de usuário" subtitulo="Validação de integridade e preservação histórica." %}
+<div class="alert alert-danger" role="alert"><h2 class="h5">Esta ação é irreversível.</h2><p class="mb-0">Revise o resultado calculado antes de confirmar.</p></div>
+<section class="card shadow-sm mb-4" aria-labelledby="resumo-remocao"><div class="card-header bg-light"><h2 id="resumo-remocao" class="h5 mb-0">{{ usuario_alvo.get_full_name|default:usuario_alvo.username }}</h2></div><div class="card-body">
+  <dl class="row mb-0"><dt class="col-sm-4">Situação</dt><dd class="col-sm-8">{{ usuario_alvo.is_active|yesno:"Ativa,Inativa" }}</dd><dt class="col-sm-4">Vínculos</dt><dd class="col-sm-8">{{ usuario_alvo.vinculos_condominios.count }}</dd><dt class="col-sm-4">Resultado</dt><dd class="col-sm-8"><strong>{% if analise.anonimizacao_obrigatoria %}Anonimização obrigatória{% else %}Exclusão física permitida{% endif %}</strong></dd></dl>
+</div></section>
+<section class="card shadow-sm mb-4" aria-labelledby="referencias-remocao"><div class="card-header bg-light"><h2 id="referencias-remocao" class="h5 mb-0">Referências encontradas</h2></div><div class="card-body">
+  {% if analise.referencias %}<ul class="mb-0">{% for chave, item in analise.referencias.items %}<li>{{ item.tipo }} — {{ item.quantidade }}</li>{% endfor %}</ul>{% else %}<p class="mb-0 text-secondary">Nenhuma referência histórica encontrada.</p>{% endif %}
+</div></section>
+<form method="post" action="{% url 'usuarios:executar_remocao' usuario_alvo.id %}" class="card shadow-sm" novalidate>{% csrf_token %}<div class="card-body">
+  {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+  {% include "components/form_field.html" with field=form.justificativa %}
+  {% include "components/form_field.html" with field=form.confirmacao %}
+  {% include "components/form_field.html" with field=form.ciente %}
+</div><div class="card-footer d-flex justify-content-end gap-2"><a class="btn btn-outline-secondary" href="{% url 'usuarios:lista_global' %}">Cancelar</a><button class="btn btn-danger" type="submit">{% if analise.anonimizacao_obrigatoria %}Anonimizar usuário{% else %}Excluir permanentemente{% endif %}</button></div></form>
+{% endblock %}
