@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 import os
 from pathlib import Path
 
+import dj_database_url
 from django.core.exceptions import ImproperlyConfigured
 from django.utils.csp import CSP
 
@@ -22,9 +23,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
-
-from django.utils.csp import CSP
-
 
 def _env_bool(nome, padrao=False):
     valor = os.environ.get(nome)
@@ -62,6 +60,11 @@ def _env_int(nome, padrao, *, minimo=None):
     return numero
 
 
+def _env_list(nome, padrao=""):
+    valor = os.environ.get(nome, padrao)
+    return [item.strip() for item in valor.split(",") if item.strip()]
+
+
 # O modo de desenvolvimento permanece como padrão para facilitar a execução
 # local. Em produção, defina DJANGO_DEBUG=False e forneça DJANGO_SECRET_KEY.
 DEBUG = _env_bool("DJANGO_DEBUG", True)
@@ -74,20 +77,11 @@ if not SECRET_KEY or not SECRET_KEY.strip():
         )
     SECRET_KEY = "controlcond-chave-exclusiva-para-desenvolvimento-local-2026"
 
-ALLOWED_HOSTS = [
-    host.strip()
-    for host in os.environ.get(
-        "DJANGO_ALLOWED_HOSTS",
-        "localhost,127.0.0.1,[::1]",
-    ).split(",")
-    if host.strip()
-]
-
-CSRF_TRUSTED_ORIGINS = [
-    origem.strip()
-    for origem in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",")
-    if origem.strip()
-]
+ALLOWED_HOSTS = _env_list(
+    "DJANGO_ALLOWED_HOSTS",
+    "localhost,127.0.0.1,[::1]",
+)
+CSRF_TRUSTED_ORIGINS = _env_list("DJANGO_CSRF_TRUSTED_ORIGINS")
 
 
 # Application definition
@@ -112,6 +106,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.middleware.csp.ContentSecurityPolicyMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -147,25 +142,39 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-caminho_banco_configurado = os.environ.get("DJANGO_DATABASE_PATH")
-CAMINHO_BANCO = Path(
-    caminho_banco_configurado
-    if caminho_banco_configurado and caminho_banco_configurado.strip()
-    else BASE_DIR / "controlcond.db"
-)
-if not CAMINHO_BANCO.is_absolute():
-    CAMINHO_BANCO = BASE_DIR / CAMINHO_BANCO
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': CAMINHO_BANCO,
-        'OPTIONS': {
-            'timeout': _env_int("DJANGO_SQLITE_TIMEOUT", 20, minimo=1),
-            'transaction_mode': 'IMMEDIATE',
-        },
+if DATABASE_URL:
+    banco_padrao = dj_database_url.config(
+        env="DATABASE_URL",
+        conn_max_age=_env_int("DJANGO_DB_CONN_MAX_AGE", 60, minimo=0),
+        conn_health_checks=True,
+    )
+    if banco_padrao.get("ENGINE") != "django.db.backends.postgresql":
+        raise ImproperlyConfigured(
+            "DATABASE_URL deve apontar para um banco PostgreSQL."
+        )
+    DATABASES = {"default": banco_padrao}
+else:
+    caminho_banco_configurado = os.environ.get("DJANGO_DATABASE_PATH")
+    CAMINHO_BANCO = Path(
+        caminho_banco_configurado
+        if caminho_banco_configurado and caminho_banco_configurado.strip()
+        else BASE_DIR / "controlcond.db"
+    )
+    if not CAMINHO_BANCO.is_absolute():
+        CAMINHO_BANCO = BASE_DIR / CAMINHO_BANCO
+
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": CAMINHO_BANCO,
+            "OPTIONS": {
+                "timeout": _env_int("DJANGO_SQLITE_TIMEOUT", 20, minimo=1),
+                "transaction_mode": "IMMEDIATE",
+            },
+        }
     }
-}
 
 
 # Password validation
@@ -207,6 +216,20 @@ STATIC_URL = 'static/'
 STATICFILES_DIRS = [
     BASE_DIR / "static",
 ]
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": (
+            "django.contrib.staticfiles.storage.StaticFilesStorage"
+            if DEBUG
+            else "whitenoise.storage.CompressedManifestStaticFilesStorage"
+        ),
+    },
+}
 
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
@@ -236,14 +259,14 @@ SESSION_COOKIE_SECURE = _env_bool("DJANGO_SESSION_COOKIE_SECURE", not DEBUG)
 CSRF_COOKIE_SECURE = _env_bool("DJANGO_CSRF_COOKIE_SECURE", not DEBUG)
 SECURE_HSTS_SECONDS = _env_int(
     "DJANGO_SECURE_HSTS_SECONDS",
-    0 if DEBUG else 31536000,
+    0,
     minimo=0,
 )
 SECURE_HSTS_INCLUDE_SUBDOMAINS = _env_bool(
     "DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS",
-    not DEBUG,
+    False,
 )
-SECURE_HSTS_PRELOAD = _env_bool("DJANGO_SECURE_HSTS_PRELOAD", not DEBUG)
+SECURE_HSTS_PRELOAD = _env_bool("DJANGO_SECURE_HSTS_PRELOAD", False)
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"
 
