@@ -893,7 +893,7 @@ def _consultar_fatura_para_atualizacao(fatura_id):
     try:
         return (
             Fatura.objects
-            .select_for_update()
+            .select_for_update(of=("self",))
             .select_related("apartamento", "leitura")
             .get(pk=fatura_id)
         )
@@ -1344,7 +1344,7 @@ def excluir_fatura(fatura_id):
     try:
         fatura = (
             Fatura.objects
-            .select_for_update()
+            .select_for_update(of=("self",))
             .select_related("apartamento", "leitura")
             .get(pk=fatura_id)
         )

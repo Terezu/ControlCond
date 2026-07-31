@@ -9,11 +9,12 @@ from .settings import _env_bool, _env_int
 
 
 class VariaveisDeAmbienteTests(SimpleTestCase):
-    def test_sqlite_usa_transacoes_imediatas(self):
-        self.assertEqual(
-            settings.DATABASES["default"]["OPTIONS"]["transaction_mode"],
-            "IMMEDIATE",
-        )
+    def test_opcoes_do_banco_respeitam_o_backend(self):
+        banco = settings.DATABASES["default"]
+        if banco["ENGINE"] == "django.db.backends.sqlite3":
+            self.assertEqual(banco["OPTIONS"]["transaction_mode"], "IMMEDIATE")
+        else:
+            self.assertNotIn("transaction_mode", banco.get("OPTIONS", {}))
 
     def test_booleano_invalido_falha_explicitamente(self):
         with patch.dict(os.environ, {"CONTROLCOND_TESTE_BOOL": "talvez"}):
