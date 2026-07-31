@@ -10,7 +10,8 @@ from .services import obter_condominio_ativo
 
 class CondominioAtivoMiddleware:
     CAMINHOS_LIVRES = (
-        "/admin/", "/condominios/", "/conta/", "/static/", "/media/",
+        "/admin/", "/condominios/", "/conta/", "/healthz/", "/static/",
+        "/media/",
     )
 
     def __init__(self, get_response):

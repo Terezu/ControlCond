@@ -1,0 +1,13 @@
+{% extends "base_public.html" %}
+{% block title %}Erro interno | ControlCond{% endblock %}
+{% block content %}
+<section class="card shadow-sm" aria-labelledby="titulo-erro-interno" role="alert">
+    <div class="card-body text-center py-5">
+        <h1 id="titulo-erro-interno" class="h3">Não foi possível concluir esta solicitação</h1>
+        <p class="text-secondary mb-4">
+            Ocorreu um erro inesperado. Tente novamente em alguns instantes.
+        </p>
+        <a class="btn btn-primary" href="/">Voltar ao início</a>
+    </div>
+</section>
+{% endblock %}

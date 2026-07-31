@@ -65,6 +65,17 @@ def _env_list(nome, padrao=""):
     return [item.strip() for item in valor.split(",") if item.strip()]
 
 
+def _env_log_level(nome="DJANGO_LOG_LEVEL", padrao="INFO"):
+    nivel = os.environ.get(nome, padrao).strip().upper()
+    niveis_validos = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+    if nivel not in niveis_validos:
+        raise ImproperlyConfigured(
+            f"{nome} deve ser um nível de log válido: "
+            "DEBUG, INFO, WARNING, ERROR ou CRITICAL."
+        )
+    return nivel
+
+
 # O modo de desenvolvimento permanece como padrão para facilitar a execução
 # local. Em produção, defina DJANGO_DEBUG=False e forneça DJANGO_SECRET_KEY.
 DEBUG = _env_bool("DJANGO_DEBUG", True)
@@ -304,4 +315,33 @@ SECURE_CSP = {
         CSP.SELF,
         "https://cdn.jsdelivr.net",
     ],
+}
+
+LOG_LEVEL = _env_log_level()
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "console": {
+            "format": "{asctime} {levelname} {name}: {message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "console",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": LOG_LEVEL,
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console"],
+            "level": LOG_LEVEL,
+            "propagate": False,
+        },
+    },
 }
