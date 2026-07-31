@@ -11,6 +11,7 @@ from condominios.models import Condominio, VinculoUsuarioCondominio
 from faturas.models import Fatura
 from leituras.models import Leitura
 
+from .financial_services import obter_dashboard_financeiro
 from .services import obter_resumo_dashboard
 
 
@@ -517,4 +518,187 @@ class DashboardResumoTests(TestCase):
 
         self.assertContains(resposta, "Nenhum apartamento cadastrado")
         self.assertContains(resposta, "R$ 0,00", count=10)
+
+
+class DashboardFinanceiroTests(TestCase):
+    def setUp(self):
+        self.condominio = Condominio.objects.get()
+        self.outro_condominio = Condominio.objects.create(
+            nome="Condomínio Isolado"
+        )
+        self.usuario = get_user_model().objects.create_user(
+            username="financeiro-dashboard",
+            password="senha-de-teste",
+            is_staff=True,
+        )
+        VinculoUsuarioCondominio.objects.create(
+            usuario=self.usuario,
+            condominio=self.condominio,
+            papel=VinculoUsuarioCondominio.Papel.ADMINISTRADOR,
+        )
+        self.apartamento = Apartamento.objects.create(
+            condominio=self.condominio, numero="101"
+        )
+        self.outro_apartamento = Apartamento.objects.create(
+            condominio=self.outro_condominio, numero="201"
+        )
+
+    def criar_fatura(
+        self, apartamento, *, status=Fatura.Status.PENDENTE,
+        valor_aluguel=Decimal("100.00"), vencimento=date(2026, 7, 10)
+    ):
+        return Fatura.objects.create(
+            apartamento=apartamento,
+            mes=7,
+            ano=2026,
+            consumo_agua=0,
+            consumo_gas=0,
+            valor_agua=Decimal("10.00"),
+            valor_gas=Decimal("5.00"),
+            valor_aluguel=valor_aluguel,
+            valor_condominio=Decimal("20.00"),
+            valor_iptu=Decimal("15.00"),
+            valor_outros=Decimal("5.00"),
+            observacao_outros="Taxa adicional",
+            desconto=Decimal("5.00"),
+            valor_total=valor_aluguel + Decimal("50.00"),
+            status=status,
+            data_vencimento=vencimento,
+            apartamento_numero_emissao=apartamento.numero,
+        )
+
+    def test_calculos_e_consistencia_com_dashboard_geral(self):
+        vencida = self.criar_fatura(self.apartamento)
+        paga_apartamento = Apartamento.objects.create(
+            condominio=self.condominio, numero="102"
+        )
+        paga = self.criar_fatura(
+            paga_apartamento,
+            status=Fatura.Status.PAGA,
+            valor_aluguel=Decimal("200.00"),
+        )
+        Fatura.objects.filter(pk=paga.pk).update(
+            valor_pago=Decimal("240.00"),
+            valor_final=Decimal("240.00"),
+            data_pagamento=date(2026, 7, 8),
+            forma_pagamento=Fatura.FormaPagamento.PIX,
+        )
+
+        financeiro = obter_dashboard_financeiro(
+            self.condominio, 7, 2026,
+            data_referencia=date(2026, 7, 20),
+        )
+        geral = obter_resumo_dashboard(
+            self.condominio, 7, 2026,
+            data_referencia=date(2026, 7, 20),
+        )
+
+        self.assertEqual(financeiro.receita_prevista, Decimal("400.00"))
+        self.assertEqual(financeiro.receita_recebida, Decimal("240.00"))
+        self.assertEqual(financeiro.valor_pendente, Decimal("150.00"))
+        self.assertEqual(financeiro.valor_vencido, Decimal("150.00"))
+        self.assertEqual(financeiro.faturas_vencidas, 1)
+        self.assertEqual(financeiro.apartamentos_inadimplentes, 1)
+        self.assertEqual(financeiro.fatura_vencida_mais_antiga, vencida)
+        self.assertEqual(financeiro.receita_prevista, geral.receitas_previstas)
+        self.assertEqual(financeiro.receita_recebida, geral.receitas_recebidas)
+        self.assertEqual(financeiro.valor_pendente, geral.valor_pendente)
+        self.assertEqual(financeiro.faturas_vencidas, geral.faturas_vencidas)
+
+    def test_isola_condominio_e_retorna_zero_sem_dados(self):
+        self.criar_fatura(
+            self.outro_apartamento,
+            valor_aluguel=Decimal("900.00"),
+        )
+
+        resumo = obter_dashboard_financeiro(
+            self.condominio, 7, 2026,
+            data_referencia=date(2026, 7, 20),
+        )
+
+        self.assertEqual(resumo.receita_prevista, Decimal("0.00"))
+        self.assertEqual(resumo.receita_recebida, Decimal("0.00"))
+        self.assertEqual(resumo.faturas_emitidas, 0)
+        self.assertEqual(resumo.maiores_inadimplentes, ())
+
+    def test_filtros_de_apartamento_e_status(self):
+        self.criar_fatura(self.apartamento)
+        outro = Apartamento.objects.create(
+            condominio=self.condominio, numero="103"
+        )
+        self.criar_fatura(
+            outro,
+            status=Fatura.Status.PAGA,
+            valor_aluguel=Decimal("300.00"),
+        )
+
+        resumo = obter_dashboard_financeiro(
+            self.condominio, 7, 2026,
+            apartamento=outro,
+            status=Fatura.Status.PAGA,
+            data_referencia=date(2026, 7, 20),
+        )
+
+        self.assertEqual(resumo.faturas_emitidas, 1)
+        self.assertEqual(resumo.faturas_pagas, 1)
+        self.assertEqual(resumo.faturas_pendentes, 0)
+        self.assertEqual(resumo.receita_prevista, Decimal("350.00"))
+
+    def test_rota_renderiza_filtros_links_e_condominio_ativo(self):
+        self.criar_fatura(self.apartamento)
+        self.client.force_login(self.usuario)
+
+        resposta = self.client.get(
+            reverse("dashboard:financeiro"),
+            {"mes": 7, "ano": 2026, "apartamento": self.apartamento.pk},
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Dashboard Financeiro")
+        self.assertContains(resposta, self.condominio.nome)
+        self.assertContains(resposta, "Voltar ao Dashboard Geral")
+        self.assertContains(resposta, "Receita prevista")
+        self.assertContains(resposta, "R$ 150,00")
+        self.assertContains(
+            resposta,
+            f"mes=7&amp;ano=2026&amp;apartamento={self.apartamento.pk}",
+        )
+
+    def test_rota_exige_autenticacao(self):
+        url = reverse("dashboard:financeiro")
+        resposta = self.client.get(url)
+        self.assertRedirects(resposta, f"{reverse('login')}?next={url}")
+
+    def test_usuario_sem_condominio_nao_acessa_dashboard_financeiro(self):
+        usuario = get_user_model().objects.create_user(
+            username="financeiro-sem-acesso",
+            password="senha-de-teste",
+        )
+        self.client.force_login(usuario)
+        url = reverse("dashboard:financeiro")
+
+        resposta = self.client.get(url)
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertIn(reverse("condominios:selecionar"), resposta.url)
+
+    def test_get_nao_aceita_apartamento_de_outro_condominio(self):
+        self.criar_fatura(
+            self.outro_apartamento,
+            valor_aluguel=Decimal("900.00"),
+        )
+        self.client.force_login(self.usuario)
+
+        resposta = self.client.get(
+            reverse("dashboard:financeiro"),
+            {
+                "mes": 7,
+                "ano": 2026,
+                "apartamento": self.outro_apartamento.pk,
+            },
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertFalse(resposta.context["form_filtros"].is_valid())
+        self.assertNotContains(resposta, "R$ 950,00")
 

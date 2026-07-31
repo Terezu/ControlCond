@@ -441,6 +441,11 @@ textarea {
 .dashboard-timeline-icon { align-items: center; background: rgb(var(--controlcond-primary-rgb) / 8%); border-radius: 50%; color: var(--controlcond-primary); display: flex; height: 2.4rem; justify-content: center; width: 2.4rem; }
 .dashboard-timeline time { color: var(--bs-secondary-color); display: block; font-size: 0.78rem; margin-top: 0.2rem; }
 .dashboard-timeline a { font-size: 0.8rem; text-decoration: none; }
+.financial-comparison { display: grid; gap: 0.75rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.financial-comparison > div { background: var(--bs-tertiary-bg); border-radius: 0.75rem; padding: 1rem; }
+.financial-comparison span { color: var(--bs-secondary-color); display: block; font-size: 0.78rem; margin-bottom: 0.25rem; }
+.financial-comparison strong { font-size: 1.05rem; }
+.financial-progress { accent-color: var(--controlcond-primary); height: 0.75rem; width: 100%; }
 
 .dashboard-details-toggle[aria-expanded="true"] .bi {
     transform: rotate(180deg);
@@ -461,6 +466,7 @@ textarea {
     .dashboard-summary-grid,
     .dashboard-contract-grid,
     .dashboard-pendency-grid { grid-template-columns: 1fr; }
+    .financial-comparison { grid-template-columns: 1fr; }
     .dashboard-attention-list > div { grid-template-columns: auto 1fr; }
     .dashboard-attention-list button { grid-column: 2; justify-self: start; }
     .dashboard-details-toggle > span:last-child { font-size: 0; }

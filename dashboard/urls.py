@@ -7,7 +7,7 @@ app_name = "dashboard"
 urlpatterns = [
     path("", views.dashboard, name="inicio"),
     path(
-        "dashboard-financeiro/",
+        "dashboard/financeiro/",
         views.dashboard_financeiro,
         name="financeiro",
     ),
