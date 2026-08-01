@@ -167,6 +167,10 @@ if DATABASE_URL:
         )
     DATABASES = {"default": banco_padrao}
 else:
+    if not DEBUG:
+        raise ImproperlyConfigured(
+            "DATABASE_URL é obrigatória em produção."
+        )
     caminho_banco_configurado = os.environ.get("DJANGO_DATABASE_PATH")
     CAMINHO_BANCO = Path(
         caminho_banco_configurado
