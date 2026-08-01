@@ -8,7 +8,7 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{% static 'css/style.css' %}">
 </head>
-<body class="bg-light">
+<body class="bg-light {% block body_class %}{% endblock %}">
 <main class="container min-vh-100 d-flex align-items-center justify-content-center py-4">
     <div class="w-100" style="max-width: 480px">
         {% block content %}{% endblock %}

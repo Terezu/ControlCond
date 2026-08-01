@@ -1,5 +1,6 @@
 {% extends "base_public.html" %}
 {% block title %}Entrar | ControlCond{% endblock %}
+{% block body_class %}login-page{% endblock %}
 {% block content %}
 <div class="card border-0 shadow-sm">
     <div class="card-body p-4 p-md-5">
@@ -26,7 +27,7 @@
             <input type="hidden" name="next" value="{{ next }}">
             <button class="btn btn-primary w-100" type="submit">Entrar</button>
         </form>
-        <a class="d-block text-center mt-3" href="{% url 'password_reset' %}">Esqueci minha senha</a>
+        <a class="login-password-reset d-block text-center mt-3" href="{% url 'password_reset' %}">Esqueci minha senha</a>
     </div>
 </div>
 {% endblock %}

@@ -22,6 +22,20 @@ body {
     background-color: var(--controlcond-background);
 }
 
+.login-page {
+    background-color: #243b5a !important;
+}
+
+.login-page .btn-primary {
+    --bs-btn-bg: #243b5a;
+    --bs-btn-border-color: #243b5a;
+    --bs-btn-color: #ffffff;
+}
+
+.login-page .login-password-reset {
+    color: #243b5a;
+}
+
 .controlcond-navbar {
     background-color: var(--controlcond-primary);
     --bs-navbar-active-color: var(--controlcond-primary-contrast);
