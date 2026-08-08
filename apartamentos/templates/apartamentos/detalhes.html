@@ -26,6 +26,8 @@
         </div>
         <div class="card-body">
             <div class="row g-4">
+                <div class="col-6 col-md-3"><p class="detail-label">Unidade Consumidora</p><p class="detail-value">{{ apartamento.unidade_consumidora|default:"Não informada" }}</p></div>
+                <div class="col-6 col-md-3"><p class="detail-label">Matrícula</p><p class="detail-value">{{ apartamento.matricula|default:"Não informada" }}</p></div>
                 <div class="col-6 col-md-3"><p class="detail-label">Leitura-base de água</p><p class="detail-value">{{ apartamento.leitura_base_agua|default_if_none:"Não informada" }}</p></div>
                 <div class="col-6 col-md-3"><p class="detail-label">Leitura-base de gás</p><p class="detail-value">{{ apartamento.leitura_base_gas|default_if_none:"Não informada" }}</p></div>
                 <div class="col-6 col-md-2"><p class="detail-label">Aluguel padrão</p><p class="detail-value">R$ {{ apartamento.valor_aluguel|floatformat:2 }}</p></div>

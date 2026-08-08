@@ -276,6 +276,12 @@ class FluxoApartamentoTests(TestCase):
             password="senha-de-teste",
             is_staff=True,
         )
+        condominio = Condominio.objects.order_by("id").first()
+        VinculoUsuarioCondominio.objects.create(
+            usuario=usuario,
+            condominio=condominio,
+            papel=VinculoUsuarioCondominio.Papel.ADMINISTRADOR,
+        )
         self.client.force_login(usuario)
 
     def test_cadastra_apartamento_com_leituras_base(self):
@@ -297,6 +303,52 @@ class FluxoApartamentoTests(TestCase):
         )
         self.assertEqual(apartamento.leitura_base_agua, Decimal("100.50"))
         self.assertEqual(apartamento.leitura_base_gas, Decimal("20.25"))
+
+    def test_cadastra_identificadores_opcionais_por_apartamento(self):
+        resposta = self.client.post(
+            reverse("apartamentos:novo"),
+            {
+                "numero": "203",
+                "bloco": "B",
+                "unidade_consumidora": " UC-203 ",
+                "matricula": " MAT-203 ",
+                "leitura_base_agua": "0",
+                "leitura_base_gas": "0",
+            },
+        )
+
+        apartamento = Apartamento.objects.get(numero="203")
+        self.assertEqual(apartamento.unidade_consumidora, "UC-203")
+        self.assertEqual(apartamento.matricula, "MAT-203")
+        self.assertRedirects(
+            resposta,
+            reverse("apartamentos:detalhes", args=[apartamento.id]),
+        )
+
+    def test_identificadores_informados_sao_unicos_no_condominio(self):
+        cadastrar_apartamento(
+            numero="204",
+            unidade_consumidora="UC-UNICA",
+            matricula="MAT-UNICA",
+            leitura_base_agua=0,
+            leitura_base_gas=0,
+        )
+
+        with self.assertRaisesRegex(ValueError, "Unidade Consumidora"):
+            cadastrar_apartamento(
+                numero="205",
+                unidade_consumidora="UC-UNICA",
+                leitura_base_agua=0,
+                leitura_base_gas=0,
+            )
+
+        with self.assertRaisesRegex(ValueError, "Matrícula"):
+            cadastrar_apartamento(
+                numero="206",
+                matricula="MAT-UNICA",
+                leitura_base_agua=0,
+                leitura_base_gas=0,
+            )
 
     def test_edita_as_leituras_base(self):
         apartamento = cadastrar_apartamento(

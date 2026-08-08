@@ -26,6 +26,18 @@ class Apartamento(models.Model):
     )
     numero = models.CharField(max_length=20)
     bloco = models.CharField(max_length=50, blank=True, null=True)
+    unidade_consumidora = models.CharField(
+        "Unidade Consumidora",
+        max_length=100,
+        blank=True,
+        null=True,
+    )
+    matricula = models.CharField(
+        "Matrícula",
+        max_length=100,
+        blank=True,
+        null=True,
+    )
     observacoes = models.TextField(blank=True, null=True)
     ativo = models.BooleanField(default=True)
     arquivado = models.BooleanField(default=False)
@@ -130,6 +142,22 @@ class Apartamento(models.Model):
                 name="apartamento_ativo_unico_por_condominio",
                 violation_error_message=(
                     "Já existe um apartamento com este número e bloco."
+                ),
+            ),
+            models.UniqueConstraint(
+                fields=("condominio", "unidade_consumidora"),
+                condition=models.Q(unidade_consumidora__isnull=False),
+                name="apartamento_uc_unica_por_condominio",
+                violation_error_message=(
+                    "Esta Unidade Consumidora já pertence a outro apartamento."
+                ),
+            ),
+            models.UniqueConstraint(
+                fields=("condominio", "matricula"),
+                condition=models.Q(matricula__isnull=False),
+                name="apartamento_matricula_unica_por_condominio",
+                violation_error_message=(
+                    "Esta Matrícula já pertence a outro apartamento."
                 ),
             ),
             models.CheckConstraint(
@@ -244,6 +272,10 @@ class Apartamento(models.Model):
             self.numero = self.numero.strip()
         if isinstance(self.bloco, str):
             self.bloco = self.bloco.strip() or None
+        if isinstance(self.unidade_consumidora, str):
+            self.unidade_consumidora = self.unidade_consumidora.strip() or None
+        if isinstance(self.matricula, str):
+            self.matricula = self.matricula.strip() or None
         if isinstance(self.observacoes, str):
             self.observacoes = self.observacoes.strip() or None
         if self.arquivado and self.ativo:

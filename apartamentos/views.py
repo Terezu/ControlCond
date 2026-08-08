@@ -71,6 +71,8 @@ def _salvar_formulario(form, apartamento_id=None, condominio=None):
     argumentos = {
         "numero": dados["numero"],
         "bloco": dados["bloco"],
+        "unidade_consumidora": dados["unidade_consumidora"],
+        "matricula": dados["matricula"],
         "observacoes": dados["observacoes"],
         "valor_aluguel": dados["valor_aluguel"],
         "valor_condominio": dados["valor_condominio"],

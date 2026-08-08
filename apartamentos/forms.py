@@ -16,6 +16,8 @@ class ApartamentoForm(forms.ModelForm):
         fields = (
             "numero",
             "bloco",
+            "unidade_consumidora",
+            "matricula",
             "valor_aluguel",
             "valor_condominio",
             "valor_iptu",
@@ -28,6 +30,8 @@ class ApartamentoForm(forms.ModelForm):
         labels = {
             "numero": "Número",
             "bloco": "Bloco",
+            "unidade_consumidora": "Unidade Consumidora",
+            "matricula": "Matrícula",
             "valor_aluguel": "Valor padrão do aluguel",
             "valor_condominio": "Valor padrão do condomínio",
             "valor_iptu": "Valor padrão do IPTU",

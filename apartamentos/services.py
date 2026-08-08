@@ -25,6 +25,8 @@ def cadastrar_apartamento(
     leitura_base_agua,
     leitura_base_gas,
     bloco=None,
+    unidade_consumidora=None,
+    matricula=None,
     observacoes=None,
     valor_aluguel=Decimal("0.00"),
     valor_condominio=Decimal("0.00"),
@@ -36,6 +38,8 @@ def cadastrar_apartamento(
     """Cria e retorna um apartamento."""
     numero = _normalizar_numero(numero)
     bloco = _normalizar_texto_opcional(bloco)
+    unidade_consumidora = _normalizar_texto_opcional(unidade_consumidora)
+    matricula = _normalizar_texto_opcional(matricula)
     observacoes = _normalizar_texto_opcional(observacoes)
     valor_aluguel = _normalizar_valor_aluguel(valor_aluguel)
     valores_recorrentes = _normalizar_valores_recorrentes(
@@ -52,6 +56,8 @@ def cadastrar_apartamento(
     dados_apartamento = dict(
         numero=numero,
         bloco=bloco,
+        unidade_consumidora=unidade_consumidora,
+        matricula=matricula,
         observacoes=observacoes,
         valor_aluguel=valor_aluguel,
         **valores_recorrentes,
@@ -73,6 +79,8 @@ def editar_apartamento(
     leitura_base_agua,
     leitura_base_gas,
     bloco=None,
+    unidade_consumidora=None,
+    matricula=None,
     observacoes=None,
     valor_aluguel=Decimal("0.00"),
     valor_condominio=Decimal("0.00"),
@@ -90,6 +98,8 @@ def editar_apartamento(
         raise ValueError("Apartamento não encontrado.") from exc
     numero = _normalizar_numero(numero)
     bloco = _normalizar_texto_opcional(bloco)
+    unidade_consumidora = _normalizar_texto_opcional(unidade_consumidora)
+    matricula = _normalizar_texto_opcional(matricula)
     observacoes = _normalizar_texto_opcional(observacoes)
     valor_aluguel = _normalizar_valor_aluguel(valor_aluguel)
     valores_recorrentes = _normalizar_valores_recorrentes(
@@ -105,6 +115,8 @@ def editar_apartamento(
 
     apartamento.numero = numero
     apartamento.bloco = bloco
+    apartamento.unidade_consumidora = unidade_consumidora
+    apartamento.matricula = matricula
     apartamento.observacoes = observacoes
     apartamento.valor_aluguel = valor_aluguel
     for campo, valor in valores_recorrentes.items():
@@ -115,7 +127,8 @@ def editar_apartamento(
     _salvar_apartamento(
         apartamento,
         update_fields=[
-            "numero", "bloco", "observacoes", "valor_aluguel",
+            "numero", "bloco", "unidade_consumidora", "matricula",
+            "observacoes", "valor_aluguel",
             "valor_condominio", "valor_iptu", "valor_bonificacao",
             "dia_limite_bonificacao",
             "leitura_base_agua", "leitura_base_gas",
