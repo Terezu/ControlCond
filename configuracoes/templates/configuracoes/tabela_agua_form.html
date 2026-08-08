@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}Tabela de água | ControlCond{% endblock %}
 {% block content %}
 {% include "components/page_header.html" with titulo="Tabela de água" subtitulo="Defina a vigência e as faixas contínuas de consumo." %}
@@ -8,10 +9,14 @@
 {{ form.non_field_errors }}</div></div></div>
 <div class="card shadow-sm"><div class="card-header"><h2 class="h5 mb-0">Faixas</h2></div><div class="card-body">
 {{ formset.management_form }}{{ formset.non_form_errors }}
-<div class="table-responsive"><table class="table align-middle"><thead><tr><th>Inicial</th><th>Final</th><th>Valor</th><th>Ordem</th><th>Ativa</th><th>Descrição</th><th>Remover</th></tr></thead><tbody>
+<div class="table-responsive"><table class="table align-middle"><thead><tr><th>Inicial</th><th>Final</th><th>Valor</th><th>Ordem</th><th>Ativa</th><th>Descrição</th><th>Remover</th></tr></thead><tbody id="faixas-formset">
 {% for faixa_form in formset %}<tr>{{ faixa_form.id }}<td>{{ faixa_form.consumo_inicial }}{{ faixa_form.consumo_inicial.errors }}</td><td>{{ faixa_form.consumo_final }}{{ faixa_form.consumo_final.errors }}</td><td>{{ faixa_form.valor }}{{ faixa_form.valor.errors }}</td><td>{{ faixa_form.ordem }}</td><td>{{ faixa_form.ativa }}</td><td>{{ faixa_form.descricao }}</td><td>{{ faixa_form.DELETE }}</td></tr>{% endfor %}
 </tbody></table></div>
+<template id="faixa-empty-form"><tr>{{ formset.empty_form.id }}<td>{{ formset.empty_form.consumo_inicial }}</td><td>{{ formset.empty_form.consumo_final }}</td><td>{{ formset.empty_form.valor }}</td><td>{{ formset.empty_form.ordem }}</td><td>{{ formset.empty_form.ativa }}</td><td>{{ formset.empty_form.descricao }}</td><td>{{ formset.empty_form.DELETE }}</td></tr></template>
+<button class="btn btn-outline-primary mb-3" id="adicionar-faixa" type="button"><i class="bi bi-plus-lg" aria-hidden="true"></i> Adicionar faixa</button>
+<div>
 <button class="btn btn-primary" type="submit">Salvar tabela</button>
 <a class="btn btn-outline-secondary" href="{% url 'configuracoes:tabelas_agua' %}">Cancelar</a>
-</div></div></form>
+</div></div></div></form>
 {% endblock %}
+{% block extra_scripts %}<script src="{% static 'configuracoes/js/tabela_agua_formset.js' %}"></script>{% endblock %}

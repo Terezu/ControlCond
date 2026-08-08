@@ -182,6 +182,11 @@ class TarifasConsumoTests(TestCase):
                 self.assertEqual(resposta.status_code, 200)
                 self.assertContains(resposta, "Tabela de água")
                 self.assertContains(resposta, 'name="faixas-TOTAL_FORMS"')
+                self.assertContains(resposta, "Adicionar faixa")
+                self.assertContains(resposta, "faixa-empty-form")
+                self.assertContains(
+                    resposta, "configuracoes/js/tabela_agua_formset.js"
+                )
                 self.client.logout()
 
     def test_cargos_administrativos_salvam_nova_tabela_agua(self):
