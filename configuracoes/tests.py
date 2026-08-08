@@ -156,6 +156,34 @@ class TarifasConsumoTests(TestCase):
         self.assertContains(resposta, self.tabela_inicial.nome)
         self.assertNotContains(resposta, "Nenhuma tabela de água vigente")
 
+    def test_nova_tabela_agua_abre_para_cargos_administrativos(self):
+        papeis = (
+            VinculoUsuarioCondominio.Papel.PROPRIETARIO_ADMINISTRATIVO,
+            VinculoUsuarioCondominio.Papel.ADMINISTRADOR,
+        )
+        for papel in papeis:
+            with self.subTest(papel=papel):
+                usuario = get_user_model().objects.create_user(
+                    username=f"usuario-{papel}",
+                    password="senha",
+                    is_staff=True,
+                )
+                VinculoUsuarioCondominio.objects.create(
+                    usuario=usuario,
+                    condominio=Condominio.objects.get(),
+                    papel=papel,
+                )
+                self.client.force_login(usuario)
+
+                resposta = self.client.get(
+                    reverse("configuracoes:tabela_agua_nova")
+                )
+
+                self.assertEqual(resposta.status_code, 200)
+                self.assertContains(resposta, "Tabela de água")
+                self.assertContains(resposta, 'name="faixas-TOTAL_FORMS"')
+                self.client.logout()
+
     def test_nova_vigencia_de_agua_altera_so_competencias_futuras(self):
         from calculos.services import calcular_valor_agua
         valor_antigo = calcular_valor_agua(5, 12, 2026)

@@ -215,9 +215,6 @@ class FaixaTarifaAguaForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["percentual_bonificacao_padrao"].label = (
-            "Bonificação padrão"
-        )
         for field in self.fields.values():
             if isinstance(field.widget, forms.CheckboxInput):
                 field.widget.attrs["class"] = "form-check-input"
