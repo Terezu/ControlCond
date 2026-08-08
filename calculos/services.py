@@ -167,7 +167,25 @@ def calcular_agua(
 
 
 def calcular_consumo_gas(leitura_anterior, leitura_atual):
-    return _calcular_consumo(leitura_anterior, leitura_atual, "gás")
+    if leitura_anterior is None:
+        raise ValueError(
+            "Informe a leitura anterior de gás, inclusive para a primeira "
+            "medição do apartamento."
+        )
+    if leitura_atual is None:
+        raise ValueError("Informe a leitura atual de gás.")
+    consumo = (
+        _decimal_finito(leitura_atual, "A leitura atual de gás")
+        - _decimal_finito(leitura_anterior, "A leitura anterior de gás")
+    )
+    if consumo < 0:
+        raise ValueError(
+            "A leitura atual de gás não pode ser menor que a anterior."
+        )
+    try:
+        return consumo.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    except InvalidOperation as exc:
+        raise ValueError("O consumo de gás excede o limite calculável.") from exc
 
 
 def calcular_valor_gas(

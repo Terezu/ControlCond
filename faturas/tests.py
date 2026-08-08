@@ -966,9 +966,9 @@ class GerarFaturaMensalTests(TestCase):
 
         # Água: 108,20 - 100,50 = 7,70
         # Gás: 23,99 - 20,25 = 3,74
-        # As casas decimais do consumo são descartadas.
+        # A água usa somente a parte inteira; o gás preserva os decimais.
         self.assertEqual(fatura.consumo_agua, 7)
-        self.assertEqual(fatura.consumo_gas, 3)
+        self.assertEqual(fatura.consumo_gas, Decimal("3.74"))
 
         self.assertEqual(
             fatura.valor_agua,
@@ -976,11 +976,11 @@ class GerarFaturaMensalTests(TestCase):
         )
         self.assertEqual(
             fatura.valor_gas,
-            Decimal("63.06"),
+            Decimal("78.61"),
         )
         self.assertEqual(
             fatura.valor_total,
-            Decimal("171.27"),
+            Decimal("186.82"),
         )
 
     def test_usa_a_leitura_anterior_mais_recente(self):
@@ -1009,7 +1009,7 @@ class GerarFaturaMensalTests(TestCase):
 
         # Deve comparar março com fevereiro, não com janeiro.
         self.assertEqual(fatura.consumo_agua, 6)
-        self.assertEqual(fatura.consumo_gas, 3)
+        self.assertEqual(fatura.consumo_gas, Decimal("3.80"))
 
     def test_ignora_leituras_futuras_ao_buscar_anterior(self):
         self.configurar_leituras_base(
@@ -1035,7 +1035,7 @@ class GerarFaturaMensalTests(TestCase):
 
         # Deve ignorar julho e comparar junho com as leituras-base.
         self.assertEqual(fatura.consumo_agua, 8)
-        self.assertEqual(fatura.consumo_gas, 3)
+        self.assertEqual(fatura.consumo_gas, Decimal("3.00"))
 
     def test_impede_gerar_fatura_duplicada(self):
         self.configurar_leituras_base(
@@ -1292,7 +1292,7 @@ class GerarFaturaMensalTests(TestCase):
         fatura = gerar_fatura_mensal(leitura.id)
 
         self.assertEqual(fatura.consumo_agua, 7)
-        self.assertEqual(fatura.consumo_gas, 3)
+        self.assertEqual(fatura.consumo_gas, Decimal("3.74"))
 
         self.assertEqual(
             fatura.valor_agua,
@@ -1300,11 +1300,11 @@ class GerarFaturaMensalTests(TestCase):
         )
         self.assertEqual(
             fatura.valor_gas,
-            Decimal("63.06"),
+            Decimal("78.61"),
         )
         self.assertEqual(
             fatura.valor_total,
-            Decimal("171.27"),
+            Decimal("186.82"),
         )
 
     def test_primeira_fatura_pode_usar_leituras_base_zero(self):
@@ -1320,7 +1320,7 @@ class GerarFaturaMensalTests(TestCase):
         fatura = gerar_fatura_mensal(leitura.id)
 
         self.assertEqual(fatura.consumo_agua, 7)
-        self.assertEqual(fatura.consumo_gas, 3)
+        self.assertEqual(fatura.consumo_gas, Decimal("3.40"))
 
         self.assertEqual(
             fatura.valor_agua,
@@ -1328,11 +1328,11 @@ class GerarFaturaMensalTests(TestCase):
         )
         self.assertEqual(
             fatura.valor_gas,
-            Decimal("63.06"),
+            Decimal("71.47"),
         )
         self.assertEqual(
             fatura.valor_total,
-            Decimal("171.27"),
+            Decimal("179.68"),
         )
 
     def test_impede_primeira_fatura_sem_leituras_base(self):

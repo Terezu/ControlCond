@@ -340,6 +340,16 @@ def _normalizar_consumo(consumo, recurso, *, permitir_ausente=False):
     return consumo
 
 
+def _normalizar_consumo_gas(consumo, *, permitir_ausente=False):
+    if consumo is None and permitir_ausente:
+        return None
+    consumo = _normalizar_decimal(consumo, "O consumo de gás")
+    try:
+        return consumo.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    except InvalidOperation as exc:
+        raise ValueError("O consumo de gás excede o limite permitido.") from exc
+
+
 def _normalizar_decimal(
     valor,
     descricao,
@@ -615,9 +625,8 @@ def cadastrar_fatura(
         "água",
         permitir_ausente=permite_dados_ausentes,
     )
-    consumo_gas = _normalizar_consumo(
+    consumo_gas = _normalizar_consumo_gas(
         consumo_gas,
-        "gás",
         permitir_ausente=permite_dados_ausentes,
     )
     valor_agua = _normalizar_decimal(
