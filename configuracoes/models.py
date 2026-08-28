@@ -634,16 +634,10 @@ class FaixaTarifaAgua(models.Model):
             raise ValidationError(
                 {"consumo_final": "O consumo final não pode ser menor que o inicial."}
             )
-        # No cadastro, o inline formset valida as faixas antes de salvar a
-        # tabela-pai. Nesse momento ainda não existe uma chave pela qual
-        # procurar faixas persistidas; a continuidade entre os formulários é
-        # validada por BaseFaixaTarifaAguaFormSet.clean().
-        if self.tabela_id is None:
-            return
         limite = self.consumo_final or 2**31 - 1
         sobreposta = (
             FaixaTarifaAgua.objects
-            .filter(tabela_id=self.tabela_id)
+            .filter(tabela=self.tabela)
             .exclude(pk=self.pk)
             .filter(consumo_inicial__lte=limite)
             .filter(

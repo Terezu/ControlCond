@@ -156,117 +156,6 @@ class TarifasConsumoTests(TestCase):
         self.assertContains(resposta, self.tabela_inicial.nome)
         self.assertNotContains(resposta, "Nenhuma tabela de água vigente")
 
-    def test_nova_tabela_agua_abre_para_cargos_administrativos(self):
-        papeis = (
-            VinculoUsuarioCondominio.Papel.PROPRIETARIO_ADMINISTRATIVO,
-            VinculoUsuarioCondominio.Papel.ADMINISTRADOR,
-        )
-        for papel in papeis:
-            with self.subTest(papel=papel):
-                usuario = get_user_model().objects.create_user(
-                    username=f"usuario-{papel}",
-                    password="senha",
-                    is_staff=True,
-                )
-                VinculoUsuarioCondominio.objects.create(
-                    usuario=usuario,
-                    condominio=Condominio.objects.get(),
-                    papel=papel,
-                )
-                self.client.force_login(usuario)
-
-                resposta = self.client.get(
-                    reverse("configuracoes:tabela_agua_nova")
-                )
-
-                self.assertEqual(resposta.status_code, 200)
-                self.assertContains(resposta, "Tabela de água")
-                self.assertContains(resposta, 'name="faixas-TOTAL_FORMS"')
-                self.assertContains(resposta, "Adicionar faixa")
-                self.assertContains(resposta, "faixa-empty-form")
-                self.assertContains(
-                    resposta, "configuracoes/js/tabela_agua_formset.js"
-                )
-                self.client.logout()
-
-    def test_cargos_administrativos_salvam_nova_tabela_agua(self):
-        usuario = get_user_model().objects.create_user(
-            username="admin-salva-tabela", password="senha", is_staff=True
-        )
-        condominio = Condominio.objects.get()
-        VinculoUsuarioCondominio.objects.create(
-            usuario=usuario,
-            condominio=condominio,
-            papel=VinculoUsuarioCondominio.Papel.ADMINISTRADOR,
-        )
-        self.tabela_inicial.data_fim_vigencia = date(2026, 12, 31)
-        self.tabela_inicial.save(update_fields=["data_fim_vigencia"])
-        self.client.force_login(usuario)
-
-        dados = {
-                "nome": "Tabela 2027",
-                "data_inicio_vigencia": "2027-01-01",
-                "data_fim_vigencia": "",
-                "ativa": "on",
-                "observacoes": "",
-                "faixas-TOTAL_FORMS": "2",
-                "faixas-INITIAL_FORMS": "0",
-                "faixas-MIN_NUM_FORMS": "0",
-                "faixas-MAX_NUM_FORMS": "1000",
-                "faixas-0-consumo_inicial": "0",
-                "faixas-0-consumo_final": "10",
-                "faixas-0-valor": "100.00",
-                "faixas-0-ordem": "1",
-                "faixas-0-ativa": "on",
-                "faixas-0-descricao": "Faixa inicial",
-                "faixas-1-consumo_inicial": "11",
-                "faixas-1-consumo_final": "",
-                "faixas-1-valor": "12.50",
-                "faixas-1-ordem": "2",
-                "faixas-1-ativa": "on",
-                "faixas-1-descricao": "Excedente",
-            }
-        resposta = self.client.post(
-            reverse("configuracoes:tabela_agua_nova"),
-            dados,
-        )
-
-        tabela = TabelaTarifariaAgua.objects.get(nome="Tabela 2027")
-        self.assertRedirects(
-            resposta,
-            reverse(
-                "configuracoes:tabela_agua_detalhe",
-                kwargs={"tabela_id": tabela.pk},
-            ),
-        )
-        self.assertEqual(tabela.faixas.count(), 2)
-
-        tabela.data_fim_vigencia = date(2027, 12, 31)
-        tabela.save(update_fields=["data_fim_vigencia"])
-        vinculo = usuario.vinculos_condominios.get(condominio=condominio)
-        vinculo.papel = (
-            VinculoUsuarioCondominio.Papel.PROPRIETARIO_ADMINISTRATIVO
-        )
-        vinculo.save(update_fields=["papel"])
-        dados["nome"] = "Tabela 2028"
-        dados["data_inicio_vigencia"] = "2028-01-01"
-
-        resposta = self.client.post(
-            reverse("configuracoes:tabela_agua_nova"), dados
-        )
-
-        tabela_proprietario = TabelaTarifariaAgua.objects.get(
-            nome="Tabela 2028"
-        )
-        self.assertRedirects(
-            resposta,
-            reverse(
-                "configuracoes:tabela_agua_detalhe",
-                kwargs={"tabela_id": tabela_proprietario.pk},
-            ),
-        )
-        self.assertEqual(tabela_proprietario.faixas.count(), 2)
-
     def test_nova_vigencia_de_agua_altera_so_competencias_futuras(self):
         from calculos.services import calcular_valor_agua
         valor_antigo = calcular_valor_agua(5, 12, 2026)
@@ -565,6 +454,19 @@ class ConfiguracaoCondominioViewTests(TestCase):
             formulario,
             'enctype="multipart/form-data"',
         )
+
+    def test_proprietario_administrativo_abre_nova_tabela_de_agua(self):
+        self.client.force_login(self.usuario)
+
+        resposta = self.client.get(
+            reverse("configuracoes:tabela_agua_nova")
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTemplateUsed(
+            resposta, "configuracoes/tabela_agua_form.html"
+        )
+        self.assertContains(resposta, "Salvar tabela")
 
     def test_edicao_atualiza_sem_criar_novo_registro(self):
         self.client.force_login(self.usuario)

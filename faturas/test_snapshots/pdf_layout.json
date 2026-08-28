@@ -4,11 +4,11 @@
   "cenarios": {
     "pendente": {
       "comandos": 175,
-      "sha256": "dca4973e8e47d26591b3afd9aaef81227425abbf5093b25a1567e4dee25aee0b"
+      "sha256": "cabb2206ec10779d6eaa8efb5e83ad482159fa68825d9061030e4a7c053a30d2"
     },
     "paga": {
       "comandos": 205,
-      "sha256": "00b6c192c9d2f8b758849106e685f883f0781e8527fa42835aff12382623ee5d"
+      "sha256": "d33bd3961cb83c55668937cdf39d0a7ca1f1b26dec84c0ddc4d9db894600a447"
     }
   }
 }

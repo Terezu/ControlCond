@@ -966,9 +966,9 @@ class GerarFaturaMensalTests(TestCase):
 
         # Água: 108,20 - 100,50 = 7,70
         # Gás: 23,99 - 20,25 = 3,74
-        # A água usa somente a parte inteira; o gás preserva os decimais.
+        # As casas decimais do consumo são descartadas.
         self.assertEqual(fatura.consumo_agua, 7)
-        self.assertEqual(fatura.consumo_gas, Decimal("3.74"))
+        self.assertEqual(fatura.consumo_gas, 3)
 
         self.assertEqual(
             fatura.valor_agua,
@@ -976,11 +976,11 @@ class GerarFaturaMensalTests(TestCase):
         )
         self.assertEqual(
             fatura.valor_gas,
-            Decimal("78.61"),
+            Decimal("63.06"),
         )
         self.assertEqual(
             fatura.valor_total,
-            Decimal("186.82"),
+            Decimal("171.27"),
         )
 
     def test_usa_a_leitura_anterior_mais_recente(self):
@@ -1009,7 +1009,7 @@ class GerarFaturaMensalTests(TestCase):
 
         # Deve comparar março com fevereiro, não com janeiro.
         self.assertEqual(fatura.consumo_agua, 6)
-        self.assertEqual(fatura.consumo_gas, Decimal("3.80"))
+        self.assertEqual(fatura.consumo_gas, 3)
 
     def test_ignora_leituras_futuras_ao_buscar_anterior(self):
         self.configurar_leituras_base(
@@ -1035,7 +1035,7 @@ class GerarFaturaMensalTests(TestCase):
 
         # Deve ignorar julho e comparar junho com as leituras-base.
         self.assertEqual(fatura.consumo_agua, 8)
-        self.assertEqual(fatura.consumo_gas, Decimal("3.00"))
+        self.assertEqual(fatura.consumo_gas, 3)
 
     def test_impede_gerar_fatura_duplicada(self):
         self.configurar_leituras_base(
@@ -1292,7 +1292,7 @@ class GerarFaturaMensalTests(TestCase):
         fatura = gerar_fatura_mensal(leitura.id)
 
         self.assertEqual(fatura.consumo_agua, 7)
-        self.assertEqual(fatura.consumo_gas, Decimal("3.74"))
+        self.assertEqual(fatura.consumo_gas, 3)
 
         self.assertEqual(
             fatura.valor_agua,
@@ -1300,11 +1300,11 @@ class GerarFaturaMensalTests(TestCase):
         )
         self.assertEqual(
             fatura.valor_gas,
-            Decimal("78.61"),
+            Decimal("63.06"),
         )
         self.assertEqual(
             fatura.valor_total,
-            Decimal("186.82"),
+            Decimal("171.27"),
         )
 
     def test_primeira_fatura_pode_usar_leituras_base_zero(self):
@@ -1320,7 +1320,7 @@ class GerarFaturaMensalTests(TestCase):
         fatura = gerar_fatura_mensal(leitura.id)
 
         self.assertEqual(fatura.consumo_agua, 7)
-        self.assertEqual(fatura.consumo_gas, Decimal("3.40"))
+        self.assertEqual(fatura.consumo_gas, 3)
 
         self.assertEqual(
             fatura.valor_agua,
@@ -1328,11 +1328,11 @@ class GerarFaturaMensalTests(TestCase):
         )
         self.assertEqual(
             fatura.valor_gas,
-            Decimal("71.47"),
+            Decimal("63.06"),
         )
         self.assertEqual(
             fatura.valor_total,
-            Decimal("179.68"),
+            Decimal("171.27"),
         )
 
     def test_impede_primeira_fatura_sem_leituras_base(self):
@@ -1538,6 +1538,8 @@ class GerarFaturaMensalTests(TestCase):
         conteudo = destino.read()
 
         self.assertTrue(conteudo.startswith(b"%PDF"))
+        self.assertIn(b"/Count 1", conteudo)
+        self.assertIn(b"/MediaBox [ 0 0 595.2756 841.8898 ]", conteudo)
 
     def test_pdf_funciona_com_configuracao_incompleta_e_sem_logo(self):
         fatura = Fatura.objects.create(
@@ -1695,9 +1697,13 @@ class GerarFaturaMensalTests(TestCase):
                 + pdf_mock.drawRightString.call_args_list
             )
         )
+        self.assertIn("VALOR COM BONIFICAÇÃO", textos)
+        self.assertIn("Pagamento até 10/01/2026", textos)
+        self.assertIn("Valor normal após o prazo:", textos)
         self.assertIn("Bonificação Específica da fatura:", textos)
-        self.assertIn("R$ 10,00 até 10/01/2026", textos)
+        self.assertIn("R$ 10,00", textos)
         self.assertIn("R$ 90,00", textos)
+        pdf_mock.setFont.assert_any_call("Helvetica-Bold", 24)
 
     def test_pdf_usa_dados_configurados(self):
         configuracao = atualizar_configuracao(
@@ -1770,9 +1776,18 @@ class GerarFaturaMensalTests(TestCase):
             "Documento sem valor fiscal.",
             "João",
             "Síndico",
+            "FORMA DE PAGAMENTO",
+            "PIX",
+            "CHAVE PIX",
+            "financeiro@example.com",
         ):
             with self.subTest(esperado=esperado):
                 self.assertIn(esperado, conteudo)
+
+        # Uma única chamada encerra a primeira página; chamadas adicionais
+        # indicariam que algum bloco complementar foi deslocado para outra.
+        self.assertEqual(pdf_mock.showPage.call_count, 1)
+        pdf_mock.setFont.assert_any_call("Helvetica-Bold", 15)
 
     def test_pdf_ignora_logo_ausente_ou_invalida(self):
         configuracao = obter_configuracao()

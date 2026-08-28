@@ -91,11 +91,7 @@ class Fatura(models.Model):
     )
 
     consumo_agua = models.PositiveIntegerField()
-    consumo_gas = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        validators=[MinValueValidator(Decimal("0"))],
-    )
+    consumo_gas = models.PositiveIntegerField()
 
     valor_agua = models.DecimalField(
         max_digits=10,

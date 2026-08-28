@@ -11,16 +11,16 @@ from configuracoes.services import obter_configuracao
 
 
 # Geometria geral
-MARGEM_HORIZONTAL = 50
-MARGEM_SUPERIOR = 42
-MARGEM_INFERIOR = 42
-ESPACO_SECAO = 18
+MARGEM_HORIZONTAL = 42
+MARGEM_SUPERIOR = 24
+MARGEM_INFERIOR = 28
+ESPACO_SECAO = 6
 RAIO_CARD = 6
 
 # Identidade visual
 LARGURA_MAXIMA_LOGO = 247.5
-ALTURA_MAXIMA_LOGO = 123.75
-ESPACO_ENTRE_LOGO_E_CABECALHO = 20
+ALTURA_MAXIMA_LOGO = 90
+ESPACO_ENTRE_LOGO_E_CABECALHO = 16
 
 # Paleta e tipografia
 COR_PRIMARIA = colors.HexColor("#1F4E5F")
@@ -41,14 +41,14 @@ ENTRELINHA_FINANCEIRA = 21
 ESPACO_ANTES_VALOR_FINANCEIRO = 10
 
 # Alturas dos blocos
-ALTURA_CABECALHO = 132
-ALTURA_DADOS_FATURA = 72
-ALTURA_CARD_CONSUMO = 150
-ALTURA_COMPOSICAO = 124
-ALTURA_TOTAL = 100
-ALTURA_TOTAL_PAGO = 142
-ALTURA_TOTAL_PAGO_COM_BONIFICACAO = 160
-ALTURA_RODAPE = 58
+ALTURA_CABECALHO = 96
+ALTURA_DADOS_FATURA = 54
+ALTURA_CARD_CONSUMO = 112
+ALTURA_COMPOSICAO = 104
+ALTURA_TOTAL = 88
+ALTURA_TOTAL_PAGO = 134
+ALTURA_TOTAL_PAGO_COM_BONIFICACAO = 158
+ALTURA_RODAPE = 44
 
 
 def formatar_decimal(valor):
@@ -292,7 +292,7 @@ def desenhar_dados_apartamento(pdf, fatura, largura, y):
     larguras = (0.20, 0.13, 0.16, 0.17, 0.18, 0.16)
     x = MARGEM_HORIZONTAL + 14
     for (rotulo, valor), proporcao in zip(campos, larguras, strict=True):
-        _desenhar_campo_resumo(pdf, rotulo, valor, x, y - 24)
+        _desenhar_campo_resumo(pdf, rotulo, valor, x, y - 21)
         x += largura_util * proporcao
 
     return base - ESPACO_SECAO
@@ -385,7 +385,7 @@ def _desenhar_card_consumo(
         "Leitura anterior",
         formatar_decimal(leitura_anterior),
         x + 14,
-        topo - 50,
+        topo - 44,
         largura_linha,
     )
     _desenhar_linha_valor(
@@ -393,30 +393,30 @@ def _desenhar_card_consumo(
         "Leitura atual",
         formatar_decimal(leitura_atual),
         x + 14,
-        topo - 70,
+        topo - 62,
         largura_linha,
     )
 
     pdf.setStrokeColor(COR_BORDA)
-    pdf.line(x + 14, topo - 84, x + largura - 14, topo - 84)
+    pdf.line(x + 14, topo - 69, x + largura - 14, topo - 69)
 
     pdf.setFillColor(COR_SECUNDARIA)
     pdf.setFont(FONTE_REGULAR, 8)
-    pdf.drawString(x + 14, topo - 104, "CONSUMO")
-    pdf.drawRightString(x + largura - 14, topo - 104, "VALOR")
+    pdf.drawString(x + 14, topo - 83, "CONSUMO")
+    pdf.drawRightString(x + largura - 14, topo - 83, "VALOR")
 
     pdf.setFillColor(COR_TEXTO)
     pdf.setFont(FONTE_DESTAQUE, 12)
     pdf.drawString(
         x + 14,
-        topo - 126,
+        topo - 102,
         f"{formatar_decimal(consumo)} m³",
     )
     pdf.setFillColor(COR_PRIMARIA)
     pdf.setFont(FONTE_VALOR_FINANCEIRO, TAMANHO_VALOR_FINANCEIRO)
     pdf.drawRightString(
         x + largura - 14,
-        topo - 126,
+        topo - 102,
         f"R$ {formatar_valor_monetario(valor)}",
     )
 
@@ -513,7 +513,7 @@ def desenhar_composicao_financeira(pdf, fatura, largura, y):
             rotulo,
             valor,
             x_esquerda,
-            y - 22 - (indice * ENTRELINHA_FINANCEIRA),
+            y - 18 - (indice * 19),
             largura_coluna,
             fonte_rotulo=FONTE_DESTAQUE,
             fonte_valor=FONTE_REGULAR,
@@ -524,7 +524,7 @@ def desenhar_composicao_financeira(pdf, fatura, largura, y):
             rotulo,
             valor,
             x_direita,
-            y - 22 - (indice * ENTRELINHA_FINANCEIRA),
+            y - 18 - (indice * 19),
             largura_coluna,
             fonte_rotulo=FONTE_DESTAQUE,
             tamanho_rotulo=(
@@ -656,21 +656,10 @@ def desenhar_total(pdf, fatura, largura, y):
         stroke=1,
         fill=1,
     )
-    pdf.setFillColor(COR_PRIMARIA)
-    pdf.setFont(FONTE_DESTAQUE, 11)
-    pdf.drawString(
-        MARGEM_HORIZONTAL + 16,
-        y - 28,
-        "TOTAL NORMAL",
+    bonificacao_valida = bool(
+        fatura.possui_bonificacao and fatura.data_limite_bonificacao
     )
-    pdf.setFont(FONTE_REGULAR, 20)
-    pdf.drawRightString(
-        largura - MARGEM_HORIZONTAL - 16,
-        y - 34,
-        f"R$ {formatar_valor_monetario(fatura.valor_total)}",
-    )
-    linha_y = y - 58
-    if fatura.possui_bonificacao:
+    if bonificacao_valida:
         data_limite = fatura.data_limite_bonificacao.strftime("%d/%m/%Y")
         if (
             fatura.tipo_bonificacao_emissao
@@ -686,33 +675,142 @@ def desenhar_total(pdf, fatura, largura, y):
                     fatura.valor_bonificacao_fixa_emissao
                 )}"
             )
+        pdf.setFillColor(COR_PRIMARIA)
+        pdf.setFont(FONTE_DESTAQUE, 10)
+        pdf.drawString(
+            MARGEM_HORIZONTAL + 16, y - 20, "VALOR COM BONIFICAÇÃO"
+        )
+        pdf.setFont(FONTE_DESTAQUE, 24)
+        pdf.drawString(
+            MARGEM_HORIZONTAL + 16,
+            y - 46,
+            f"R$ {formatar_valor_monetario(fatura.valor_com_bonificacao)}",
+        )
+        pdf.setFont(FONTE_DESTAQUE, 9)
+        pdf.drawString(
+            MARGEM_HORIZONTAL + 16,
+            y - 63,
+            f"Pagamento até {data_limite}",
+        )
+        _desenhar_texto_com_rotulo(
+            pdf,
+            "Valor normal após o prazo: ",
+            f"R$ {formatar_valor_monetario(fatura.valor_total)}",
+            largura - MARGEM_HORIZONTAL - 16,
+            y - 42,
+            tamanho=9.5,
+            alinhado_a_direita=True,
+        )
         _desenhar_texto_com_rotulo(
             pdf,
             f"Bonificação {fatura.descricao_origem_bonificacao}: ",
-            f"{bonus_configurado} até {data_limite}",
-            MARGEM_HORIZONTAL + 16,
-            linha_y,
-            tamanho=8,
-        )
-        _desenhar_texto_com_rotulo(
-            pdf,
-            f"Valor até {data_limite}: ",
-            f"R$ {formatar_valor_monetario(fatura.valor_com_bonificacao)}",
+            bonus_configurado,
             largura - MARGEM_HORIZONTAL - 16,
-            linha_y,
-            tamanho=10,
+            y - 61,
+            tamanho=7.5,
             alinhado_a_direita=True,
         )
-        linha_y -= 18
+        linha_y = y - 86
+    else:
+        pdf.setFillColor(COR_PRIMARIA)
+        pdf.setFont(FONTE_DESTAQUE, 11)
+        pdf.drawString(MARGEM_HORIZONTAL + 16, y - 27, "TOTAL NORMAL")
+        pdf.setFont(FONTE_DESTAQUE, 20)
+        pdf.drawRightString(
+            largura - MARGEM_HORIZONTAL - 16,
+            y - 33,
+            f"R$ {formatar_valor_monetario(fatura.valor_total)}",
+        )
+        linha_y = y - 55
     if pagamento_confirmado:
         _desenhar_detalhes_pagamento(pdf, fatura, largura, linha_y)
     return base - ESPACO_SECAO
 
 
+def _desenhar_pagamento_pix(pdf, configuracao, largura, y):
+    """Destaca a chave PIX sem alterar os dados configurados."""
+    largura_util = largura - (2 * MARGEM_HORIZONTAL)
+    pdf.setFillColor(COR_PRIMARIA)
+    pdf.setFont(FONTE_DESTAQUE, 9)
+    pdf.drawString(MARGEM_HORIZONTAL, y, "FORMA DE PAGAMENTO")
+    pdf.setFont(FONTE_DESTAQUE, 12)
+    pdf.drawString(MARGEM_HORIZONTAL, y - 15, "PIX")
+
+    topo_box = y - 22
+    altura_box = 46
+    pdf.setFillColor(COR_FUNDO_SUAVE)
+    pdf.setStrokeColor(COR_BORDA)
+    pdf.roundRect(
+        MARGEM_HORIZONTAL,
+        topo_box - altura_box,
+        largura_util,
+        altura_box,
+        RAIO_CARD,
+        stroke=1,
+        fill=1,
+    )
+    pdf.setFillColor(COR_PRIMARIA)
+    pdf.setFont(FONTE_DESTAQUE, 7.5)
+    pdf.drawString(
+        MARGEM_HORIZONTAL + 12,
+        topo_box - 14,
+        "CHAVE PIX",
+    )
+    tamanho_chave = 15
+    largura_chave = largura_util - 24
+    while (
+        tamanho_chave > 10
+        and pdf.stringWidth(
+            configuracao.pix, FONTE_DESTAQUE, tamanho_chave
+        ) > largura_chave
+    ):
+        tamanho_chave -= 1
+    pdf.setFillColor(COR_TEXTO)
+    pdf.setFont(FONTE_DESTAQUE, tamanho_chave)
+    pdf.drawString(MARGEM_HORIZONTAL + 12, topo_box - 34, configuracao.pix)
+
+    dados_favorecido = _juntar_partes(
+        f"Favorecido: {configuracao.favorecido_nome}"
+        if configuracao.favorecido_nome
+        else "",
+        configuracao.favorecido_documento,
+    )
+    dados_bancarios = _juntar_partes(
+        configuracao.banco,
+        f"Agência {configuracao.agencia}" if configuracao.agencia else "",
+        f"Conta {configuracao.conta}" if configuracao.conta else "",
+        configuracao.tipo_conta,
+    )
+    linhas = [
+        linha
+        for texto in (
+            dados_favorecido,
+            dados_bancarios,
+            configuracao.instrucoes_pagamento,
+            (
+                f"Código de barras: {configuracao.codigo_barras_padrao}"
+                if configuracao.codigo_barras_padrao
+                else ""
+            ),
+        )
+        if texto
+        for linha in _quebrar_texto(
+            pdf, texto, largura_util, FONTE_REGULAR, 8
+        )
+    ]
+    return _desenhar_linhas(
+        pdf,
+        linhas,
+        MARGEM_HORIZONTAL,
+        topo_box - altura_box - 12,
+        tamanho=8,
+        entrelinha=10,
+    ) - 4
+
+
 def desenhar_informacoes_complementares(pdf, configuracao, largura, altura, y):
     largura_texto = largura - (2 * MARGEM_HORIZONTAL)
-    pagamento = _juntar_partes(
-        f"PIX: {configuracao.pix}" if configuracao.pix else "",
+    pagamento_sem_pix = _juntar_partes(
         (
             f"Favorecido: {configuracao.favorecido_nome}"
             if configuracao.favorecido_nome
@@ -747,37 +845,51 @@ def desenhar_informacoes_complementares(pdf, configuracao, largura, altura, y):
             "PAGAMENTO ANTECIPADO",
             configuracao.mensagem_pagamento_antecipado,
         ),
-        ("PAGAMENTO", pagamento),
+        ("PAGAMENTO", pagamento_sem_pix if not configuracao.pix else ""),
         ("OBSERVAÇÕES", configuracao.observacoes_padrao),
         ("INFORMAÇÕES LEGAIS", configuracao.texto_juridico),
         ("RESPONSÁVEL PELA EMISSÃO", assinatura),
     )
     limite_rodape = MARGEM_INFERIOR + ALTURA_RODAPE
-    for titulo, texto in blocos:
-        if not texto:
-            continue
-        linhas = _quebrar_texto(
-            pdf,
-            texto,
-            largura_texto,
-            FONTE_REGULAR,
-            8,
-        )
-        altura_necessaria = 23 + (len(linhas) * 11)
-        if y - altura_necessaria < limite_rodape:
-            pdf.showPage()
-            y = altura - MARGEM_SUPERIOR
-        pdf.setFillColor(COR_SECUNDARIA)
-        pdf.setFont(FONTE_DESTAQUE, 8)
-        pdf.drawString(MARGEM_HORIZONTAL, y, titulo)
-        y = _desenhar_linhas(
-            pdf,
-            linhas,
-            MARGEM_HORIZONTAL,
-            y - 15,
-            tamanho=8,
-            entrelinha=11,
-        ) - 8
+    if configuracao.pix:
+        y = _desenhar_pagamento_pix(pdf, configuracao, largura, y)
+
+    # Os textos auxiliares ocupam duas colunas. Isso aproveita o espaço
+    # horizontal disponível e evita que itens curtos abram uma segunda página.
+    blocos_ativos = [(titulo, texto) for titulo, texto in blocos if texto]
+    espaco_colunas = 16
+    largura_coluna = (largura_texto - espaco_colunas) / 2
+    for indice in range(0, len(blocos_ativos), 2):
+        linha_blocos = blocos_ativos[indice:indice + 2]
+        preparados = []
+        for titulo, texto in linha_blocos:
+            linhas = _quebrar_texto(
+                pdf, texto, largura_coluna, FONTE_REGULAR, 7
+            )
+            preparados.append((titulo, linhas))
+
+        maior_numero_linhas = max(len(linhas) for _, linhas in preparados)
+        altura_linha = 17 + (maior_numero_linhas * 9)
+        for coluna, (titulo, linhas) in enumerate(preparados):
+            x = MARGEM_HORIZONTAL + coluna * (
+                largura_coluna + espaco_colunas
+            )
+            pdf.setFillColor(COR_SECUNDARIA)
+            pdf.setFont(FONTE_DESTAQUE, 7.5)
+            pdf.drawString(x, y, titulo)
+            _desenhar_linhas(
+                pdf,
+                linhas,
+                x,
+                y - 12,
+                tamanho=7,
+                entrelinha=9,
+            )
+        y -= altura_linha
+
+    # O conteúdo configurável tem limites de campo; esta guarda mantém o
+    # retorno coerente sem autorizar desenho dentro da área fixa do rodapé.
+    y = max(y, limite_rodape)
     return y
 
 
