@@ -15,6 +15,7 @@ MARGEM_HORIZONTAL = 42
 MARGEM_SUPERIOR = 24
 MARGEM_INFERIOR = 28
 ESPACO_SECAO = 6
+ESPACO_APOS_TOTAL = 14
 RAIO_CARD = 6
 
 # Identidade visual
@@ -47,7 +48,7 @@ ALTURA_CARD_CONSUMO = 112
 ALTURA_COMPOSICAO = 104
 ALTURA_TOTAL = 88
 ALTURA_TOTAL_PAGO = 134
-ALTURA_TOTAL_PAGO_COM_BONIFICACAO = 158
+ALTURA_TOTAL_PAGO_COM_BONIFICACAO = 165
 ALTURA_RODAPE = 44
 
 
@@ -724,7 +725,9 @@ def desenhar_total(pdf, fatura, largura, y):
         linha_y = y - 55
     if pagamento_confirmado:
         _desenhar_detalhes_pagamento(pdf, fatura, largura, linha_y)
-    return base - ESPACO_SECAO
+    # O titulo da forma de pagamento usa fonte de 9 pt. Uma entrelinha
+    # completa evita que as letras avancem sobre a borda inferior do card.
+    return base - ESPACO_APOS_TOTAL
 
 
 def _desenhar_pagamento_pix(pdf, configuracao, largura, y):

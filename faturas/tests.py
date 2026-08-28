@@ -1662,6 +1662,61 @@ class GerarFaturaMensalTests(TestCase):
             with self.subTest(esperado=esperado):
                 self.assertIn(esperado, conteudo)
 
+    def test_pdf_separa_total_pago_com_bonificacao_do_pagamento(self):
+        fatura = Fatura.objects.create(
+            apartamento=self.apartamento,
+            mes=1,
+            ano=2026,
+            consumo_agua=0,
+            consumo_gas=0,
+            valor_aluguel=Decimal("1000.00"),
+            valor_total=Decimal("1000.00"),
+            origem_bonificacao_emissao=(
+                Fatura.OrigemBonificacao.ESPECIFICA
+            ),
+            tipo_bonificacao_emissao=Fatura.TipoBonificacao.VALOR_FIXO,
+            valor_bonificacao_fixa_emissao=Decimal("100.00"),
+            apartamento_numero_emissao=self.apartamento.numero,
+        )
+        Fatura.objects.filter(pk=fatura.pk).update(
+            status=Fatura.Status.PAGA,
+            data_pagamento=date(2026, 1, 20),
+            valor_final=Decimal("1000.00"),
+            forma_pagamento=Fatura.FormaPagamento.PIX,
+        )
+        fatura.refresh_from_db()
+        configuracao = atualizar_configuracao({"pix": "79371116900"})
+
+        with patch("faturas.pdf.canvas.Canvas") as canvas_mock:
+            pdf_mock = canvas_mock.return_value
+            pdf_mock.stringWidth.return_value = 0
+            gerar_pdf_fatura(
+                fatura,
+                BytesIO(),
+                configuracao=configuracao,
+            )
+
+        card_total = next(
+            chamada
+            for chamada in pdf_mock.roundRect.call_args_list
+            if chamada.args[3] == 165
+        )
+        base_card = card_total.args[1]
+        y_valor_pago = min(
+            chamada.args[1]
+            for chamada in pdf_mock.drawRightString.call_args_list
+            if chamada.args[2] == "R$ 1.000,00"
+            and chamada.args[1] > base_card
+        )
+        y_forma_pagamento = next(
+            chamada.args[1]
+            for chamada in pdf_mock.drawString.call_args_list
+            if chamada.args[2] == "FORMA DE PAGAMENTO"
+        )
+
+        self.assertGreaterEqual(y_valor_pago - base_card, 14)
+        self.assertGreaterEqual(base_card - y_forma_pagamento, 14)
+
     def test_pdf_informa_origem_e_valor_da_bonificacao(self):
         fatura = Fatura.objects.create(
             apartamento=self.apartamento,
