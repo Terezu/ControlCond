@@ -200,13 +200,13 @@ class CalculosGasTests(TestCase):
         self.assertEqual(resultado["consumo"], 3)
         self.assertEqual(resultado["valor"], Decimal("63.06"))
 
-    def test_consumo_gas_decimal_ignora_casas_decimais(self):
+    def test_consumo_gas_decimal_preserva_casas_decimais(self):
         consumo = calcular_consumo_gas(
             leitura_anterior=Decimal("20.10"),
             leitura_atual=Decimal("23.99"),
         )
 
-        self.assertEqual(consumo, 3)
+        self.assertEqual(consumo, Decimal("3.89"))
 
     def test_valor_gas_rejeita_consumo_negativo_ou_nao_finito(self):
         with self.assertRaisesRegex(ValueError, "não pode ser negativo"):

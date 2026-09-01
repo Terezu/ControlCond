@@ -26,7 +26,13 @@ def _decimal_finito(valor, descricao):
     return decimal
 
 
-def _calcular_consumo(leitura_anterior, leitura_atual, nome_recurso):
+def _calcular_consumo(
+    leitura_anterior,
+    leitura_atual,
+    nome_recurso,
+    *,
+    preservar_fracao=False,
+):
     if leitura_anterior is None:
         raise ValueError(
             f"Informe a leitura anterior de {nome_recurso}, inclusive para "
@@ -50,6 +56,9 @@ def _calcular_consumo(leitura_anterior, leitura_atual, nome_recurso):
         raise ValueError(
             f"A leitura atual de {nome_recurso} não pode ser menor que a anterior."
         )
+
+    if preservar_fracao:
+        return consumo
 
     try:
         return int(
@@ -167,7 +176,12 @@ def calcular_agua(
 
 
 def calcular_consumo_gas(leitura_anterior, leitura_atual):
-    return _calcular_consumo(leitura_anterior, leitura_atual, "gás")
+    return _calcular_consumo(
+        leitura_anterior,
+        leitura_atual,
+        "gás",
+        preservar_fracao=True,
+    )
 
 
 def calcular_valor_gas(

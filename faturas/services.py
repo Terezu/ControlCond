@@ -326,14 +326,24 @@ def _consultar_contexto_leitura_para_atualizacao(leitura_id):
     return leitura
 
 
-def _normalizar_consumo(consumo, recurso, *, permitir_ausente=False):
+def _normalizar_consumo(
+    consumo,
+    recurso,
+    *,
+    permitir_ausente=False,
+    permitir_fracionado=False,
+):
     if consumo is None and permitir_ausente:
         return None
-    if (
-        isinstance(consumo, bool)
-        or not isinstance(consumo, int)
-        or consumo < 0
-    ):
+    if permitir_fracionado:
+        try:
+            consumo = _normalizar_decimal(consumo, f"O consumo de {recurso}")
+        except ValueError as exc:
+            raise ValueError(
+                f"O consumo de {recurso} deve ser um número não negativo."
+            ) from exc
+        return consumo
+    if isinstance(consumo, bool) or not isinstance(consumo, int) or consumo < 0:
         raise ValueError(
             f"O consumo de {recurso} deve ser um número inteiro não negativo."
         )
@@ -619,6 +629,7 @@ def cadastrar_fatura(
         consumo_gas,
         "gás",
         permitir_ausente=permite_dados_ausentes,
+        permitir_fracionado=True,
     )
     valor_agua = _normalizar_decimal(
         0 if leitura is None and valor_agua is None else valor_agua,
