@@ -19,13 +19,14 @@ from django.utils.csp import CSP
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+DESKTOP_MODE = os.environ.get("DJANGO_SETTINGS_MODULE") == "config.settings_desktop"
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 def _env_bool(nome, padrao=False):
-    valor = os.environ.get(nome)
+    valor = None if DESKTOP_MODE else os.environ.get(nome)
     if valor is None:
         return padrao
 
@@ -42,7 +43,7 @@ def _env_bool(nome, padrao=False):
 
 
 def _env_int(nome, padrao, *, minimo=None):
-    valor = os.environ.get(nome)
+    valor = None if DESKTOP_MODE else os.environ.get(nome)
     if valor is None:
         numero = padrao
     else:
@@ -61,12 +62,12 @@ def _env_int(nome, padrao, *, minimo=None):
 
 
 def _env_list(nome, padrao=""):
-    valor = os.environ.get(nome, padrao)
+    valor = padrao if DESKTOP_MODE else os.environ.get(nome, padrao)
     return [item.strip() for item in valor.split(",") if item.strip()]
 
 
 def _env_log_level(nome="DJANGO_LOG_LEVEL", padrao="INFO"):
-    nivel = os.environ.get(nome, padrao).strip().upper()
+    nivel = (padrao if DESKTOP_MODE else os.environ.get(nome, padrao)).strip().upper()
     niveis_validos = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
     if nivel not in niveis_validos:
         raise ImproperlyConfigured(
@@ -78,9 +79,12 @@ def _env_log_level(nome="DJANGO_LOG_LEVEL", padrao="INFO"):
 
 # O modo de desenvolvimento permanece como padrão para facilitar a execução
 # local. Em produção, defina DJANGO_DEBUG=False e forneça DJANGO_SECRET_KEY.
-DEBUG = _env_bool("DJANGO_DEBUG", True)
+DEBUG = False if DESKTOP_MODE else _env_bool("DJANGO_DEBUG", True)
 
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
+if DESKTOP_MODE:
+    from desktop.paths import prepare_paths, persistent_secret
+    SECRET_KEY = persistent_secret(prepare_paths())
 if not SECRET_KEY or not SECRET_KEY.strip():
     if not DEBUG:
         raise ImproperlyConfigured(
@@ -153,7 +157,7 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+DATABASE_URL = "" if DESKTOP_MODE else os.environ.get("DATABASE_URL", "").strip()
 
 if DATABASE_URL:
     banco_padrao = dj_database_url.config(
@@ -167,11 +171,14 @@ if DATABASE_URL:
         )
     DATABASES = {"default": banco_padrao}
 else:
-    if not DEBUG:
+    if not DEBUG and not DESKTOP_MODE:
         raise ImproperlyConfigured(
             "DATABASE_URL é obrigatória em produção."
         )
-    caminho_banco_configurado = os.environ.get("DJANGO_DATABASE_PATH")
+    caminho_banco_configurado = (
+        str(prepare_paths() / "data" / "db.sqlite3")
+        if DESKTOP_MODE else os.environ.get("DJANGO_DATABASE_PATH")
+    )
     CAMINHO_BANCO = Path(
         caminho_banco_configurado
         if caminho_banco_configurado and caminho_banco_configurado.strip()
